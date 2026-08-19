@@ -13,9 +13,31 @@ const WS_URL = "ws://127.0.0.1:41573/";
 const RECONNECT_ALARM = "tabflick-reconnect";
 const STORAGE_KEY = "mru";
 
+/// 用户可在扩展选项页调整。默认按窗口隔离：多窗口时把所有标签混在一张列表里，
+/// 列表会长得没法用，切换还会把你甩到另一个窗口去。
+const DEFAULT_SETTINGS = {
+  scopeToWindow: true,
+};
+
 let ws = null;
-let mru = [];          // tabId 数组，最近使用的在前
+let mru = [];          // tabId 数组，最近使用的在前，跨窗口全局维护
 let mruLoaded = false;
+let settings = { ...DEFAULT_SETTINGS };
+let settingsLoaded = false;
+
+async function loadSettings() {
+  if (settingsLoaded) return;
+  settings = { ...DEFAULT_SETTINGS, ...(await chrome.storage.sync.get(DEFAULT_SETTINGS)) };
+  settingsLoaded = true;
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "sync") return;
+  for (const [key, { newValue }] of Object.entries(changes)) {
+    settings[key] = newValue;
+  }
+  pushMRU();
+});
 
 // ── MRU 维护 ────────────────────────────────────────────────────────────
 
@@ -52,27 +74,41 @@ async function forgetTab(tabId) {
 }
 
 /// 把 MRU 顺序连同展示所需的元信息推给 helper。
-/// 顺带剔除已经不存在的 tabId（标签页可能在 SW 休眠期间被关掉）。
 async function pushMRU() {
   if (ws?.readyState !== WebSocket.OPEN) return;
   await loadMRU();
+  await loadSettings();
 
-  const all = await chrome.tabs.query({});
-  const byId = new Map(all.map((t) => [t.id, t]));
+  const allTabs = await chrome.tabs.query({});
 
-  // 已知顺序优先；从没被激活过的标签页（比如后台打开的）排在末尾
-  const known = mru.filter((id) => byId.has(id));
-  const unknown = all.filter((t) => !known.includes(t.id)).map((t) => t.id);
-  const ordered = [...known, ...unknown];
-
-  if (known.length !== mru.length) {
-    mru = known;
+  // 清理已关闭的标签页（SW 休眠期间关掉的不会走 onRemoved）。
+  // 注意这一步必须对**全部窗口**做：按窗口过滤是展示层的事，
+  // 拿过滤后的结果回写 mru 会把其他窗口的历史整段抹掉。
+  const aliveIds = new Set(allTabs.map((t) => t.id));
+  const cleaned = mru.filter((id) => aliveIds.has(id));
+  if (cleaned.length !== mru.length) {
+    mru = cleaned;
     await persistMRU();
   }
 
+  let visible = allTabs;
+  if (settings.scopeToWindow) {
+    const windowId = await currentWindowId();
+    if (windowId === undefined) return;
+    visible = allTabs.filter((t) => t.windowId === windowId);
+  }
+  if (visible.length === 0) return;
+
+  const byId = new Map(visible.map((t) => [t.id, t]));
+
+  // 已知顺序优先；从没被激活过的标签页（后台打开的、恢复会话带回来的）排在末尾
+  const known = mru.filter((id) => byId.has(id));
+  const knownSet = new Set(known);
+  const unknown = visible.filter((t) => !knownSet.has(t.id)).map((t) => t.id);
+
   send({
     type: "mru",
-    tabs: ordered.map((id) => {
+    tabs: [...known, ...unknown].map((id) => {
       const t = byId.get(id);
       return {
         id: t.id,
@@ -83,6 +119,29 @@ async function pushMRU() {
       };
     }),
   });
+}
+
+/// 节流版 pushMRU，给高频事件用。
+///
+/// onUpdated 会为一个页面加载过程中 title / favicon 的每次变化各触发一遍，
+/// SPA 站点实测能在同一秒内打十几次。关键路径（激活、关闭、跨窗口移动）
+/// 仍然直接调 pushMRU，不走这里。
+let pushTimer = null;
+function schedulePush() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    pushTimer = null;
+    pushMRU();
+  }, 80);
+}
+
+/// 最后聚焦的普通窗口的 id。
+///
+/// 不用 `windows.getLastFocused` —— 它的 `windowTypes` 过滤已废弃，
+/// 焦点落在开发者工具窗口时会返回那个窗口。从活动标签页反查更稳。
+async function currentWindowId() {
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  return tab?.windowId;
 }
 
 // ── 缩略图 ──────────────────────────────────────────────────────────────
@@ -243,10 +302,19 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   scheduleThumbnail(tab.id, windowId);
 });
 
-// 标题 / favicon 变了要让 overlay 显示最新的
+// 标题 / favicon 变了要让 overlay 显示最新的。走节流版：这是全场最吵的事件。
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
-  if (changeInfo.title || changeInfo.favIconUrl) pushMRU();
+  if (changeInfo.title || changeInfo.favIconUrl) schedulePush();
 });
+
+// 标签页被拖到别的窗口 —— 按窗口过滤时列表内容会变。
+// tabId 不变，所以 mru 里的历史position 自动跟着走，不用特殊处理。
+chrome.tabs.onAttached.addListener(() => pushMRU());
+chrome.tabs.onDetached.addListener(() => pushMRU());
+
+// 工具栏图标点击直接开设置页。options_ui 的入口埋在 chrome://extensions
+// 的详情页里，太深了没人找得到。
+chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(() => {

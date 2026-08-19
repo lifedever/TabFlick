@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- 两张叠放的标签卡片 + 前进箭头，对应「在标签之间跳转」 -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#2C6BED"/>
+
+  <!-- 后一张卡片 -->
+  <rect x="26" y="30" width="62" height="46" rx="8"
+        fill="#ffffff" opacity="0.38"/>
+
+  <!-- 前一张卡片（当前选中） -->
+  <rect x="40" y="46" width="62" height="46" rx="8" fill="#ffffff"/>
+  <rect x="49" y="57" width="30" height="6" rx="3" fill="#2C6BED" opacity="0.55"/>
+  <rect x="49" y="70" width="44" height="6" rx="3" fill="#2C6BED" opacity="0.28"/>
+</svg>

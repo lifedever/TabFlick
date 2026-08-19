@@ -142,6 +142,16 @@ The last line confirms the extension reached the helper.
 
 The overlay appears when you press ⇥ and closes when you release ⌃. A single quick tap flashes it briefly, matching the behaviour of ⌘⇥.
 
+### Settings
+
+Click the TabFlick icon in the Chrome toolbar to open the settings page. Changes take effect immediately — the helper does not need to restart.
+
+| Setting | Default | Effect |
+|---|---|---|
+| Limit switching to the current window | On | The switcher lists only the tabs of the Chrome window in use. Turn it off to cycle through every window's tabs in one list. |
+
+Each window keeps its own history either way. Switching the setting off merges the lists for display; it does not discard anything.
+
 ### Tab ordering
 
 The list has two sections:
