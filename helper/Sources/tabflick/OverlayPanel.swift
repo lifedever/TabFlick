@@ -12,7 +12,7 @@ enum CursorSource {
 final class SwitcherModel: ObservableObject {
     @Published var tabs: [TabInfo] = []
     @Published private(set) var cursor: Int = 0
-    @Published var icons: [Int: NSImage] = [:]
+    @Published var icons: [Int: IconInfo] = [:]
     @Published var thumbs: [Int: NSImage] = [:]
 
     /// 游标这次是被谁移动的。决定要不要自动滚动 —— 见 SwitcherView 里的说明。
@@ -76,11 +76,12 @@ private struct SwitcherView: View {
                 }
             }
         }
-        // 在 vibrancy 材质之上再叠一层色。纯材质在浅色外观下渲染出来是灰的，
-        // 跟 Arc 那种通透的白差一大截；深色下反过来需要压深才有层次。
-        // 两种外观的取值规律不同，所以这里按 colorScheme 分开给，不用语义色。
+        // 浅色:纯材质渲染出来发灰,叠白才有 Arc 那种通透的白。
+        // 深色:**什么都不叠**——玻璃的「透」全靠材质本身,之前无论叠黑
+        // (0.26)还是叠白(0.07)都在把模糊后的背景色盖掉,面板立刻变成
+        // 一块不透明铁板。深色的透感由 .hudWindow 材质负责(见 presentNow)。
         .background {
-            (scheme == .dark ? Color.black.opacity(0.26) : Color.white.opacity(0.74))
+            scheme == .dark ? Color.clear : Color.white.opacity(0.74)
         }
         // 浮层边缘的 hairline。同样要按外观分开给：浅色下需要的是极淡的
         // 黑描边(用 primary 0.12 会明显发黑)，深色下需要的是较亮的白高光边。
@@ -95,11 +96,13 @@ private struct SwitcherView: View {
 
 private struct TabCard: View {
     let tab: TabInfo
-    let icon: NSImage?
+    let icon: IconInfo?
     let thumb: NSImage?
     let selected: Bool
     let onHover: () -> Void
     let onPick: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
 
     /// 上一次的鼠标**屏幕**坐标。
     ///
@@ -112,12 +115,16 @@ private struct TabCard: View {
             thumbnail
                 .frame(width: kThumbWidth, height: kThumbHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                // 描边只是兜底(纯白网页贴纯白背景时的最后一道分界),
-                // 真正把缩略图和背景分开的是下面的投影 —— Arc 就是这个路子,
-                // 描边一重就显得糙。
+                // 未选中:极淡 hairline 兜底(纯白网页贴纯白背景时的最后一道分界),
+                // 真正把缩略图和背景分开的是下面的投影 —— Arc 就是这个路子。
+                // 选中:accent 描边,Arc 的选中指示就是这圈蓝框 —— 深色下
+                // 灰底高亮几乎不可见,描边是唯一在两种外观下都够醒目的指示。
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
+                        .strokeBorder(selected ? Color.accentColor
+                                               : (scheme == .dark ? Color.white.opacity(0.16)
+                                                                  : Color.primary.opacity(0.07)),
+                                      lineWidth: selected ? 2 : (scheme == .dark ? 1 : 0.5))
                 }
                 // 层次感的主要来源。Arc 的投影比常规 UI 重得多:大半径、低透明,
                 // 糊开一大片而不是勾一条硬边。
@@ -128,13 +135,17 @@ private struct TabCard: View {
             HStack(spacing: 5) {
                 Group {
                     if let icon {
-                        Image(nsImage: icon).resizable().interpolation(.high)
+                        Image(nsImage: icon.image).resizable().interpolation(.high)
                     } else {
                         Image(systemName: "globe").resizable().foregroundStyle(.secondary)
                     }
                 }
                 .scaledToFit()
                 .frame(width: 13, height: 13)
+                .padding(icon == nil ? 0 : 1.5)
+                .background {
+                    if let icon { faviconBacking(isLight: icon.isLight, radius: 3) }
+                }
 
                 Text(tab.title.isEmpty ? tab.url : tab.title)
                     .font(.system(size: 11, weight: selected ? .semibold : .regular))
@@ -178,27 +189,50 @@ private struct TabCard: View {
         }
     }
 
+    /// favicon 的反差底板。
+    ///
+    /// 亮图标（GitHub 深色模式那只白猫）垫深底，暗图标（多数品牌 logo）垫浅底。
+    /// 不跟随系统外观 —— 决定可见性的是图标自己的颜色，不是界面的明暗。
+    @ViewBuilder
+    private func faviconBacking(isLight: Bool, radius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(isLight ? Color(white: 0.16) : Color(white: 0.99))
+    }
+
     /// 缩略图 → favicon 放大 → globe，三级降级。
     /// chrome:// 这类页面截不了图，永远只有后两级。
     @ViewBuilder
     private var thumbnail: some View {
         ZStack {
-            // 截不到图的卡片(chrome:// 页面等)底色必须和有截图的卡片一致 ——
-            // 之前用半透明灰,在灰背景上和浮层糊成一片,卡片边界整个消失了。
-            // textBackgroundColor 就是网页本身的底色:浅色近白、深色近黑。
-            Rectangle().fill(Color(nsColor: .textBackgroundColor))
+            // 截不到图的卡片(chrome:// 页面等)的底色。浅色下用
+            // textBackgroundColor(近白,和真截图的网页白底一致);深色下它
+            // 近黑,黑卡片贴深色面板整个糊成一片 —— 改用中性灰,让卡片
+            // 在面板上立得起来(Arc 深色下的空卡片也是这种亮一档的灰)。
+            // 深色下用**半透明**白 —— 不透明灰块(0.22/0.30 都试过)在玻璃
+            // 面板上就是一块铁板,怎么调灰度都糊;半透明让玻璃的模糊背景
+            // 透上来,卡片才轻(Arc 的空卡片就是这种「玻璃上的亮一层」)。
+            Rectangle().fill(scheme == .dark ? Color.white.opacity(0.14)
+                                             : Color(nsColor: .textBackgroundColor))
 
             if let thumb {
                 Image(nsImage: thumb)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else if let icon {
-                Image(nsImage: icon)
+                // 截不到图时 favicon 是整张卡片唯一的信息，必须看得清。
+                // 底色按图标自身的亮度取反差 —— favicon 来源不可控，
+                // 任何固定颜色都会在某一类图标上失效。
+                Image(nsImage: icon.image)
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .frame(width: 34, height: 34)
-                    .opacity(0.8)
+                    .frame(width: 32, height: 32)
+                    .padding(11)
+                    .background {
+                        faviconBacking(isLight: icon.isLight, radius: 11)
+                            .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.14),
+                                    radius: 5, y: 2)
+                    }
             } else {
                 Image(systemName: "globe")
                     .font(.system(size: 26))
@@ -279,9 +313,11 @@ final class OverlayPanel {
         let hosting = NSHostingView(rootView: SwitcherView(model: model))
 
         let effect = NSVisualEffectView()
-        // .popover 在浅色外观下接近白、深色下是深灰半透明,两边都干净;
-        // .hudWindow 在浅色下发灰,和 Arc 那种通透感差得远
-        effect.material = .popover
+        // 浅色用 .popover(接近白、干净;.hudWindow 在浅色下发灰)。
+        // 深色用 .hudWindow —— HUD 浮层专用材质,模糊重、透感强,背景色能
+        // 透进面板(系统 ⌘⇥ 切换器就是这个观感);.popover 在深色下太闷。
+        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        effect.material = isDark ? .hudWindow : .popover
         effect.blendingMode = .behindWindow
         effect.state = .active
         // 圆角必须走 maskImage,不能用 layer.cornerRadius —— 后者裁不住
