@@ -86,6 +86,9 @@
     padding: 6px 10px; border-radius: 7px;
   }
   .header-link:hover { color: var(--text-heading); background: var(--bg-alt); }
+  /* 赞助是唯一一个「请求读者做点什么」的入口，给点颜色和其余导航区分开 */
+  .header-link.sponsor { color: #E0245E; }
+  .header-link.sponsor:hover { color: #E0245E; background: rgba(224, 36, 94, 0.10); }
 
   #langToggle {
     font: inherit; font-size: 13px; cursor: pointer;
@@ -254,6 +257,7 @@
     <a class="header-link" href="#features" data-zh="功能" data-en="Features">功能</a>
     <a class="header-link" href="#install" data-zh="安装" data-en="Install">安装</a>
     <a class="header-link" href="https://github.com/lifedever/TabFlick" target="_blank" rel="noreferrer">GitHub</a>
+    <a class="header-link sponsor" href="https://www.lifedever.com/sponsor/" target="_blank" rel="noreferrer" data-zh="赞助" data-en="Sponsor">赞助</a>
     <button id="langToggle" type="button">EN</button>
   </div>
 </header>
