@@ -5,39 +5,26 @@
 //   2. 通过本地 WebSocket 把 MRU 列表推给 Swift helper
 //   3. 执行 helper 下发的切换指令
 //
-// MV3 的 service worker 会在 30s 空闲后被回收。Chrome 116+ 起，WebSocket 上的
-// 收发活动会重置这个空闲计时器 —— 所以保活由 helper 端定时 ping 驱动，
-// 我们只负责回 pong。alarms 只是断线后的兜底唤醒源。
+// 连接本身不在这里：MV3 的 service worker 空闲 30s 就被回收，被回收后无法
+// 主动重连，只能等浏览器事件唤醒 —— 那正是「开完 app 第一次按 ⌃⇥ 不生效」
+// 的原因。WebSocket 交给 offscreen document 常驻持有（offscreen.js），
+// 这边只通过 runtime 消息收发；消息到达时 SW 会被自动唤醒。
 
-const WS_URL = "ws://127.0.0.1:41573/";
+const OFFSCREEN_PATH = "offscreen.html";
 const RECONNECT_ALARM = "tabflick-reconnect";
 const STORAGE_KEY = "mru";
 
-/// 用户可在扩展选项页调整。默认按窗口隔离：多窗口时把所有标签混在一张列表里，
-/// 列表会长得没法用，切换还会把你甩到另一个窗口去。
+/// 配置的事实源在 macOS app 那边（它有原生设置窗口，且进程一直活着）。
+/// 这里的值只是内存里的一份副本：每次连上 helper 都会重新要一份，
+/// 所以 service worker 被回收也不会导致两边不一致。
 const DEFAULT_SETTINGS = {
   scopeToWindow: true,
 };
 
-let ws = null;
+let connected = false;   // offscreen 报上来的连接状态
 let mru = [];          // tabId 数组，最近使用的在前，跨窗口全局维护
 let mruLoaded = false;
 let settings = { ...DEFAULT_SETTINGS };
-let settingsLoaded = false;
-
-async function loadSettings() {
-  if (settingsLoaded) return;
-  settings = { ...DEFAULT_SETTINGS, ...(await chrome.storage.sync.get(DEFAULT_SETTINGS)) };
-  settingsLoaded = true;
-}
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "sync") return;
-  for (const [key, { newValue }] of Object.entries(changes)) {
-    settings[key] = newValue;
-  }
-  pushMRU();
-});
 
 // ── MRU 维护 ────────────────────────────────────────────────────────────
 
@@ -75,9 +62,8 @@ async function forgetTab(tabId) {
 
 /// 把 MRU 顺序连同展示所需的元信息推给 helper。
 async function pushMRU() {
-  if (ws?.readyState !== WebSocket.OPEN) return;
+  if (!connected) return;
   await loadMRU();
-  await loadSettings();
 
   const allTabs = await chrome.tabs.query({});
 
@@ -165,7 +151,7 @@ function scheduleThumbnail(tabId, windowId) {
 }
 
 async function captureThumbnail(tabId, windowId) {
-  if (ws?.readyState !== WebSocket.OPEN) return;
+  if (!connected) return;
   try {
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
       format: "jpeg",
@@ -175,16 +161,25 @@ async function captureThumbnail(tabId, windowId) {
     const [current] = await chrome.tabs.query({ active: true, windowId });
     if (current?.id !== tabId) return;
 
-    send({ type: "thumb", tabId, data: await downscale(dataUrl) });
-  } catch {
-    // chrome:// 页面、窗口被遮挡、超过频率限制 —— 都不是错误，跳过就好
+    // 带上 url：helper 按 URL 持久化缓存，tabId 浏览器一重启就全变了
+    send({ type: "thumb", tabId, url: current.url ?? "", data: await downscale(dataUrl) });
+  } catch (e) {
+    // chrome:// 页面、窗口被遮挡、超过频率限制 —— 都是正常跳过。
+    // 但错误必须让 helper 日志看得见：之前这里静默吞错，把「SW 的 fetch
+    // 不支持 data: URL」这种 100% 失败也吞了，缩略图从来没发出去过一张。
+    send({ type: "log", message: `thumb capture failed: ${e}` });
   }
 }
 
 /// 原图是整个视口，直接传太大。按目标比例居中裁剪后缩到 400×250。
 async function downscale(dataUrl) {
-  const blob = await (await fetch(dataUrl)).blob();
-  const bitmap = await createImageBitmap(blob);
+  // 不能用 fetch(dataUrl)：MV3 service worker 的 fetch 只认 http/https，
+  // 对 data: URL 直接抛异常。手动 atob 解 base64 是 SW 里的标准做法。
+  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
 
   const canvas = new OffscreenCanvas(THUMB_WIDTH, THUMB_HEIGHT);
   const ctx = canvas.getContext("2d");
@@ -227,59 +222,92 @@ async function activateTab(tabId) {
 // ── WebSocket ───────────────────────────────────────────────────────────
 
 function send(obj) {
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+  if (!connected) return;
+  chrome.runtime
+    .sendMessage({ target: "offscreen", type: "ws-send", data: JSON.stringify(obj) })
+    .catch(() => {});
 }
 
-function connect() {
-  if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) return;
-
+/// 确保 offscreen document 存在。它一旦创建就常驻，重复调用是安全的。
+async function ensureOffscreen() {
+  if (await chrome.offscreen.hasDocument()) return;
   try {
-    ws = new WebSocket(WS_URL);
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_PATH,
+      // 没有哪个 reason 是为「保持 WebSocket」定义的，WORKERS 是最贴近的一项：
+      // 我们确实需要一个独立于 service worker 生命周期的执行环境。
+      reasons: ["WORKERS"],
+      justification: "Maintain a persistent local WebSocket connection to the TabFlick helper.",
+    });
   } catch (e) {
-    console.warn("[TabFlick] WebSocket 构造失败:", e);
-    return;
+    // 并发调用时可能已经被另一次创建抢先，这不是错误
+    if (!String(e).includes("Only a single offscreen")) {
+      console.warn("[TabFlick] offscreen 创建失败:", e);
+    }
   }
-
-  ws.onopen = async () => {
-    console.log("[TabFlick] 已连接 helper");
-    pushMRU();
-    // helper 刚起来时它的缩略图缓存是空的，先补上当前这张，
-    // 剩下的靠用户后续切换自然攒。
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (tab) scheduleThumbnail(tab.id, tab.windowId);
-  };
-
-  ws.onmessage = async (event) => {
-    let msg;
-    try {
-      msg = JSON.parse(event.data);
-    } catch {
-      return;   // 不是我们的协议，忽略
-    }
-    switch (msg.type) {
-      case "switch":
-        if (typeof msg.tabId === "number") await activateTab(msg.tabId);
-        break;
-      case "ping":
-        // 回 pong 本身就是「活动」，同时重置了 SW 的空闲计时器
-        send({ type: "pong" });
-        break;
-      case "requestMRU":
-        await pushMRU();
-        break;
-    }
-  };
-
-  ws.onclose = () => {
-    console.log("[TabFlick] 连接断开");
-    ws = null;
-  };
-
-  ws.onerror = () => {
-    // helper 没启动时每次重连都会走到这里，不刷日志
-    ws = null;
-  };
 }
+
+async function connect() {
+  await ensureOffscreen();
+  // 让 offscreen 汇报当前状态；没连上的话它会自己重连
+  chrome.runtime
+    .sendMessage({ target: "offscreen", type: "ws-poke" })
+    .catch(() => {});
+}
+
+/// 处理 helper 发来的一条消息（由 offscreen 转发）。
+async function handleHelperMessage(raw) {
+  let msg;
+  try {
+    msg = JSON.parse(raw);
+  } catch {
+    return;   // 不是我们的协议，忽略
+  }
+  switch (msg.type) {
+    case "switch":
+      if (typeof msg.tabId === "number") await activateTab(msg.tabId);
+      break;
+    case "ping":
+      send({ type: "pong" });
+      break;
+    case "requestMRU":
+      await pushMRU();
+      break;
+    case "settings":
+      // app 推来的配置。收下即用，不落盘 —— 事实源在 app。
+      if (typeof msg.scopeToWindow === "boolean") {
+        settings.scopeToWindow = msg.scopeToWindow;
+        pushMRU();
+      }
+      break;
+  }
+}
+
+// offscreen 转发上来的连接事件与数据
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.target !== "sw") return;
+
+  switch (message.type) {
+    case "ws-open":
+      if (!connected) {
+        connected = true;
+        console.log("[TabFlick] 已连接 helper");
+        send({ type: "requestSettings" });
+        pushMRU();
+        chrome.tabs
+          .query({ active: true, lastFocusedWindow: true })
+          .then(([tab]) => { if (tab) scheduleThumbnail(tab.id, tab.windowId); });
+      }
+      break;
+    case "ws-close":
+      connected = false;
+      console.log("[TabFlick] 连接断开");
+      break;
+    case "ws-message":
+      handleHelperMessage(message.data);
+      break;
+  }
+});
 
 // ── 事件挂载 ────────────────────────────────────────────────────────────
 
@@ -312,9 +340,12 @@ chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
 chrome.tabs.onAttached.addListener(() => pushMRU());
 chrome.tabs.onDetached.addListener(() => pushMRU());
 
-// 工具栏图标点击直接开设置页。options_ui 的入口埋在 chrome://extensions
-// 的详情页里，太深了没人找得到。
-chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
+// 工具栏图标点击 → 让 app 打开它的原生设置窗口。
+// 设置只有一个入口，浏览器这边不再单开一个页面。
+chrome.action.onClicked.addListener(() => {
+  connect();
+  send({ type: "openSettings" });
+});
 
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(() => {
