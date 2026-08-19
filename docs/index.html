@@ -273,15 +273,15 @@
        data-en="Chrome cycles tabs in tab-strip order. TabFlick makes ⌃⇥ cycle them by recent use and shows a switcher with page thumbnails while you hold the key, the same way ⌘⇥ works for applications.">Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你实际使用的顺序走，并在按住按键时显示带网页缩略图的切换器 —— 和 ⌘⇥ 切换应用一样。</p>
 
     <div class="badges">
-      <span class="badge">macOS 13+</span>
+      <span class="badge">macOS 14+</span>
       <span class="badge">Chrome 116+</span>
       <span class="badge" data-zh="开源 · MIT" data-en="Open Source · MIT">开源 · MIT</span>
       <span class="badge" data-zh="免费" data-en="Free">免费</span>
     </div>
 
     <div class="cta">
-      <a class="btn btn-primary" href="#install" data-zh="开始使用" data-en="Get Started">开始使用</a>
-      <a class="btn btn-secondary" href="https://github.com/lifedever/TabFlick" target="_blank" rel="noreferrer">GitHub</a>
+      <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="免费下载" data-en="Download">免费下载</a>
+      <a class="btn btn-secondary" href="#install" data-zh="安装指南" data-en="Install Guide">安装指南</a>
     </div>
   </div>
 
@@ -369,15 +369,15 @@
   <div class="wrap">
     <h2 data-zh="安装" data-en="Installation">安装</h2>
     <p class="lead"
-       data-zh="需要 macOS 13+、Chrome 116+，以及 Xcode 命令行工具（xcode-select --install）。"
-       data-en="Requires macOS 13+, Chrome 116+, and the Xcode Command Line Tools (xcode-select --install).">需要 macOS 13+、Chrome 116+，以及 Xcode 命令行工具（xcode-select --install）。</p>
+       data-zh="需要 macOS 14+ 和 Chrome 116+。"
+       data-en="Requires macOS 14+ and Chrome 116+.">需要 macOS 14+ 和 Chrome 116+。</p>
 
     <ol class="steps">
       <li>
-        <h3 data-zh="克隆并编译" data-en="Clone and build">克隆并编译</h3>
-        <code class="cmd">git clone https://github.com/lifedever/TabFlick.git
-cd TabFlick/helper
-swift build -c release</code>
+        <h3 data-zh="下载安装" data-en="Download and install">下载安装</h3>
+        <p data-zh="从 Releases 下载 DMG，把 TabFlick.app 拖进「应用程序」。首次打开如提示「无法验证开发者」，在「应用程序」里右键 TabFlick →「打开」即可 —— 应用没有付费开发者签名，DMG 内的说明文件有详细步骤。也可以按仓库 README 从源码编译。"
+           data-en="Download the DMG from Releases and drag TabFlick.app into Applications. If the first launch says the developer cannot be verified, right-click TabFlick in Applications and choose Open — the app carries no paid Apple signature; the read-me inside the DMG covers the details. Building from source is documented in the repository README.">从 Releases 下载 DMG，把 TabFlick.app 拖进「应用程序」。首次打开如提示「无法验证开发者」，在「应用程序」里右键 TabFlick →「打开」即可 —— 应用没有付费开发者签名，DMG 内的说明文件有详细步骤。也可以按仓库 README 从源码编译。</p>
+        <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="下载 TabFlick" data-en="Download TabFlick">下载 TabFlick</a>
       </li>
       <li>
         <h3 data-zh="加载扩展" data-en="Load the extension">加载扩展</h3>
@@ -386,17 +386,14 @@ swift build -c release</code>
       </li>
       <li>
         <h3 data-zh="授予辅助功能权限" data-en="Grant Accessibility permission">授予辅助功能权限</h3>
-        <p data-zh="首次运行会弹出授权提示。授权给启动它的那个终端应用，然后完全退出该应用再重新打开 —— 权限在进程启动时才读取。"
-           data-en="The first run triggers a permission prompt. Grant it to the terminal app that launched the binary, then quit that app completely and reopen it, since permissions are read at process launch.">首次运行会弹出授权提示。授权给启动它的那个终端应用，然后完全退出该应用再重新打开 —— 权限在进程启动时才读取。</p>
-        <code class="cmd">./.build/release/tabflick</code>
+        <p data-zh="首次启动会弹出引导浮层：把浮层里的 TabFlick 图标拖进「辅助功能」列表即完成授权，生效后应用自动重启。也可以手动前往 系统设置 → 隐私与安全性 → 辅助功能 打开开关。"
+           data-en="The first launch shows a guided overlay — drag the TabFlick icon from the overlay into the Accessibility list, and the app relaunches itself once the permission takes effect. You can also enable it manually under System Settings → Privacy &amp; Security → Accessibility.">首次启动会弹出引导浮层：把浮层里的 TabFlick 图标拖进「辅助功能」列表即完成授权，生效后应用自动重启。也可以手动前往 系统设置 → 隐私与安全性 → 辅助功能 打开开关。</p>
       </li>
       <li>
         <h3 data-zh="开始使用" data-en="Start using it">开始使用</h3>
         <p>
-          <span data-zh="日志出现" data-en="Once the log shows">日志出现</span>
-          <code class="inline">✅ Extension connected</code>
-          <span data-zh="即表示两端已接上。点击 Chrome 工具栏的 TabFlick 图标可以打开设置。"
-                data-en="both halves are talking. Click the TabFlick icon in the Chrome toolbar to open settings.">即表示两端已接上。点击 Chrome 工具栏的 TabFlick 图标可以打开设置。</span>
+          <span data-zh="菜单栏图标变亮、菜单第一行显示「已连接」，即表示两端已接上。点击 Chrome 工具栏的 TabFlick 图标可以打开设置。"
+                data-en="When the menu bar icon brightens and its first line reads Connected, both halves are talking. Click the TabFlick icon in the Chrome toolbar to open settings.">菜单栏图标变亮、菜单第一行显示「已连接」，即表示两端已接上。点击 Chrome 工具栏的 TabFlick 图标可以打开设置。</span>
         </p>
         <div class="note">
           <span data-zh="日志文件在" data-en="The log file lives at">日志文件在</span>
