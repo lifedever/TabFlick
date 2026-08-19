@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    macOS app 图标构图：1024 画布，内容板 824×824 居中（四周各留 100 透明边距），
+    圆角半径取板宽的 22.37%（Big Sur 起的 squircle 比例）。
+    浏览器扩展那版是全出血的，直接拿来当 app 图标会显得过大过满。
+
+    卡片组的包围盒：x 267→757（宽 490，中心 512）、y 293→692（高 399，中心 492.5）。
+    水平本来就居中，垂直差 19.5px，用外层 translate 补上，不去动每个矩形的坐标 ——
+    以后再调位置只改这一个数。
+  -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4A82F0"/>
+      <stop offset="100%" stop-color="#2058D8"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F0F4FE"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#0B2E7A" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="184" fill="url(#plate)"/>
+
+  <g transform="translate(0, 19.5)">
+    <!-- 后一张卡片：半透明，表示"上一个标签" -->
+    <rect x="267" y="293" width="399" height="296" rx="52" fill="#FFFFFF" opacity="0.34"/>
+
+    <!-- 前一张卡片：当前选中 -->
+    <g filter="url(#cardShadow)">
+      <rect x="358" y="396" width="399" height="296" rx="52" fill="url(#front)"/>
+    </g>
+    <rect x="415" y="467" width="193" height="39" rx="19" fill="#2058D8" opacity="0.55"/>
+    <rect x="415" y="551" width="283" height="39" rx="19" fill="#2058D8" opacity="0.26"/>
+  </g>
+</svg>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>TabFlick</string>
+    <key>CFBundleDisplayName</key>
+    <string>TabFlick</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.lifedever.TabFlick</string>
+    <key>CFBundleExecutable</key>
+    <string>TabFlick</string>
+    <key>CFBundleIconFile</key>
+    <string>TabFlick</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <!-- 由 scripts/build-app.sh 注入 -->
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__BUILD__</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+
+    <!-- 没有 Dock 图标、没有主窗口：TabFlick 只活在菜单栏里 -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT License © lifedever</string>
+</dict>
+</plist>

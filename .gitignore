@@ -17,3 +17,7 @@ helper/.swiftpm/
 # 运行时产物
 *.log
 tabflick.log
+
+# 打包产物
+build/
+assets/TabFlick.icns
