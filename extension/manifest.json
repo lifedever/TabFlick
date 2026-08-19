@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "TabFlick Bridge",
+  "version": "0.1.0",
+  "description": "把标签页的 MRU 顺序桥接给 TabFlick helper，并执行切换指令。",
+  "permissions": ["tabs", "storage", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "minimum_chrome_version": "116"
+}
