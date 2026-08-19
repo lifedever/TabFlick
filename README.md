@@ -23,7 +23,7 @@
 ---
 
 <p align="center">
-  <img src="https://cdn.jsdelivr.net/gh/lifedever/images@master/uPic/2026/08/tabflick-demo.gif" width="860" alt="TabFlick demo">
+  <img src="https://cdn.jsdelivr.net/gh/lifedever/images@master/uPic/2026/08/tabflick-demo-full.gif" width="860" alt="TabFlick demo">
 </p>
 
 <p align="center">
