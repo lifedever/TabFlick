@@ -1,8 +1,8 @@
 <h3 align="center">⌘ TabFlick</h3>
 
 <p align="center">
-  <strong>An Arc-style most-recently-used tab switcher for Google Chrome.</strong><br>
-  Hold ⌃, tap ⇥, see your tabs — the way ⌘⇥ works for apps.
+  <strong>Most-recently-used tab switching for Google Chrome, with a switcher overlay.</strong><br>
+  Hold ⌃ and tap ⇥ to move through tabs in the order you used them.
 </p>
 
 <p align="center">
@@ -28,21 +28,21 @@
 </p>
 -->
 
-Chrome has never shipped most-recently-used tab cycling. TabFlick adds it, with the switcher UI that makes it usable.
+Chrome cycles tabs in tab-strip order. TabFlick makes ⌃⇥ cycle them by recent use and shows a switcher overlay while you hold the key, the same way ⌘⇥ works for applications.
 
 ## Features
 
-- **True MRU order** — ⌃⇥ goes to the tab you were just on, not the one to the right
-- **Reliable back-and-forth** — tap ⌃⇥ twice and you're back where you started, every time
-- **Live page thumbnails** — recognize tabs by what they look like, not by a truncated title
-- **Keyboard, arrows, and mouse** — ⌃⇥ / ⌃⇧⇥, ←/→ while held, or click any card
-- **Follows your Chrome window** — appears centered on the window you're actually using
-- **Light and dark** — adapts to your system appearance
-- **Graceful degradation** — if anything is down, ⌃⇥ falls through to Chrome's native behavior instead of dying silently
+- ⌃⇥ switches to the tab you used last
+- Tapping ⌃⇥ again returns to where you started, so A↔B toggling stays stable
+- Every tab in the list carries a live page thumbnail
+- Keyboard (⌃⇥, ⌃⇧⇥), arrow keys and mouse clicks all drive the switcher
+- The overlay is centered on the Chrome window in use, across multiple displays
+- Light and dark appearance follow the system setting
+- If the helper or extension is unavailable, ⌃⇥ falls back to Chrome's built-in behavior
 
 ## How it works
 
-Two processes, because neither half can do the job alone:
+TabFlick runs as two parts that talk over a loopback WebSocket:
 
 ```
 ┌─────────────────────────┐         ┌──────────────────────────┐
@@ -57,19 +57,20 @@ Two processes, because neither half can do the job alone:
 └─────────────────────────┘         └──────────────────────────┘
 ```
 
-**Why not a pure extension?** The `Tab` key was removed from `chrome.commands`' supported-key list back in Chrome 33. An extension literally cannot bind ⌃⇥.
+Both halves are required:
 
-**Why not pure native?** Tab list, MRU order, thumbnails and switching all need the `chrome.tabs` API. Accessibility/AppleScript polling is slow and unreliable.
+- **The extension cannot read the keyboard.** `Tab` was removed from the supported-key list of `chrome.commands` in Chrome 33, so no extension can bind ⌃⇥.
+- **The helper cannot read the tabs.** Titles, MRU order, thumbnails and switching all go through the `chrome.tabs` API.
 
 ## Installation
 
 ### Requirements
 
 - macOS 13 or later
-- Xcode Command Line Tools (`xcode-select --install`)
+- Xcode Command Line Tools — `xcode-select --install`
 - Google Chrome 116 or later
 
-### 1. Clone
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/lifedever/TabFlick.git
@@ -83,31 +84,30 @@ cd helper
 swift build -c release
 ```
 
-The binary lands at `helper/.build/release/tabflick`.
+The binary is written to `helper/.build/release/tabflick`.
 
-> For development use `swift build` / `swift run` (debug) instead — it compiles much faster.
+> During development, `swift build` / `swift run` (debug) compile much faster.
 
 ### 3. Load the extension
 
 1. Open `chrome://extensions`
 2. Turn on **Developer mode** (top right)
 3. Click **Load unpacked**
-4. Select the `extension/` folder in this repo
+4. Select the `extension/` folder of this repository
 
 ### 4. Grant Accessibility permission
 
-TabFlick uses a `CGEventTap` to intercept ⌃⇥ before Chrome sees it, which requires Accessibility access.
+The helper installs a `CGEventTap` to intercept ⌃⇥ before Chrome receives it, which requires Accessibility access.
 
-Run the helper once:
+Start it once:
 
 ```bash
 ./.build/release/tabflick
 ```
 
-macOS will prompt for permission. Grant it to **whichever app is running the binary** (Terminal, iTerm, etc.), then **fully quit and reopen that app** — macOS reads the permission at process launch.
+macOS shows a permission prompt. Grant access to the app that launched the binary (Terminal, iTerm, and so on), then quit that app completely and reopen it — permissions are read at process launch.
 
-If `CGEvent.tapCreate` still fails, also enable the same app under
-**System Settings → Privacy & Security → Input Monitoring**.
+If `CGEvent.tapCreate` still fails, enable the same app under **System Settings → Privacy & Security → Input Monitoring** as well.
 
 ### 5. Run
 
@@ -115,7 +115,7 @@ If `CGEvent.tapCreate` still fails, also enable the same app under
 ./.build/release/tabflick
 ```
 
-You should see:
+Startup output:
 
 ```
 [HH:MM:SS.mmm] tabflick started — binary built ...
@@ -124,60 +124,72 @@ You should see:
 [HH:MM:SS.mmm] ✅ Extension connected (1 client(s))
 ```
 
-That last line means the extension found the helper. You're done.
+The last line confirms the extension reached the helper.
 
 ## Usage
 
+### Shortcuts
+
 | Action | Result |
 |---|---|
-| Tap ⌃⇥ and release | Jump to the previously used tab |
-| Tap ⌃⇥ twice (quickly) | Come back — reliable A↔B toggling |
-| Hold ⌃, tap ⇥ repeatedly | Walk further back through history |
-| Hold ⌃, press ⌃⇧⇥ | Walk forward |
-| Hold ⌃, press ← / → | Move the cursor with arrow keys |
-| Hold ⌃, click a card | Jump straight to that tab |
+| Tap ⌃⇥ and release | Switch to the previously used tab |
+| Tap ⌃⇥ twice | Return to the tab you started from |
+| Hold ⌃, tap ⇥ repeatedly | Move further back through the history |
+| Hold ⌃, press ⌃⇧⇥ | Move forward |
+| Hold ⌃, press ← or → | Move the cursor with arrow keys |
+| Hold ⌃, click a card | Switch to that tab immediately |
 | Hold ⌃, hover a card | Move the cursor with the mouse |
+
+The overlay appears when you press ⇥ and closes when you release ⌃. A single quick tap flashes it briefly, matching the behaviour of ⌘⇥.
 
 ### Tab ordering
 
-Two tiers:
+The list has two sections:
 
-1. **Tabs you've visited this session** — sorted by last-visit time, most recent first
-2. **Tabs you've never opened** (restored sessions, background links) — after the first group, in tab-strip order
+1. **Tabs visited this session** — sorted by last visit, most recent first
+2. **Tabs never opened** — restored sessions and background links, listed after the first section in tab-strip order
 
-The second tier is why a freshly started helper seems to list tabs "in tab bar order" — the first tier is still empty. It fills in as you browse.
+A freshly started helper has an empty first section, so the list initially matches tab-strip order. It reorders itself as you browse.
 
 ### Thumbnails
 
-`captureVisibleTab` can only capture the *visible* tab, so TabFlick grabs a screenshot each time a tab becomes active. Since every tab in your MRU list has been active by definition, thumbnails fill in naturally as you use Chrome.
+`captureVisibleTab` only captures the visible tab, so TabFlick takes a screenshot each time a tab becomes active. Every tab in the MRU list has been active at some point, so thumbnails accumulate through normal use.
 
-`chrome://` and Web Store pages can never be captured (Chrome forbids it) — those cards fall back to the favicon.
+`chrome://` pages and the Chrome Web Store cannot be captured — Chrome blocks it. Those cards show the favicon.
 
 ## Troubleshooting
 
-**Nothing happens when I press ⌃⇥**
-Check the helper log (`~/Library/Logs/TabFlick/tabflick.log`, also printed to stdout) for `✅ Extension connected`. If it's absent, the extension isn't reaching the helper — make sure the helper is running and the extension is enabled. When disconnected, TabFlick deliberately lets ⌃⇥ pass through to Chrome's native behavior.
+Start with the helper log at `~/Library/Logs/TabFlick/tabflick.log`, which is also printed to the terminal. It is truncated on every launch, so it always describes the current run.
 
-**`CGEvent.tapCreate failed`**
-Accessibility permission. See step 4 — and remember the terminal app must be fully restarted after granting it.
+### ⌃⇥ does nothing
 
-**I changed the code and nothing changed**
-The helper doesn't hot-reload. Its first log line prints the binary's build time — if that doesn't match your last build, you're running a stale process. Restart it. For extension changes, hit ↻ on `chrome://extensions`.
+Look for `✅ Extension connected` in the log.
 
-**Chrome nags about developer-mode extensions**
-Expected while the extension is loaded unpacked. Web Store distribution is on the roadmap.
+- **Line missing** — the extension is not reaching the helper. Confirm the helper process is running and the extension is enabled in `chrome://extensions`.
+- **Line present, native switching still happens** — the connection dropped afterwards. TabFlick passes ⌃⇥ through to Chrome whenever it is disconnected, so Chrome's own switching is the expected fallback.
 
-## Roadmap
+### `CGEvent.tapCreate failed`
 
-- [ ] Ship the helper as a proper `.app` (`LSUIElement`) with a login-item toggle
-- [ ] Publish the extension to the Chrome Web Store
-- [ ] Supervise/auto-restart the helper
-- [ ] Esc to cancel the current cycle
-- [ ] Configurable hotkey
+Accessibility permission is missing or stale. Follow step 4 of the installation. The terminal app must be quit completely (⌘Q, not just closing the window) before a newly granted permission applies.
+
+### Code changes have no effect
+
+The helper does not hot-reload.
+
+- **Helper changes** — the first log line prints the binary's build time. If it predates your last build, a stale process is still running; stop it and start again.
+- **Extension changes** — click ↻ on the extension card in `chrome://extensions`.
+
+### Chrome warns about developer-mode extensions
+
+Chrome shows this notice for any unpacked extension. It does not affect TabFlick.
+
+### The overlay opens on the wrong display
+
+The overlay follows the frontmost Chrome window. With windows on several displays, the one most recently in front is used.
 
 ## Sponsor
 
-If TabFlick saves you some tab-hunting, consider [sponsoring](https://www.lifedever.com/sponsor/) 💖
+TabFlick is free and open source. If you find it useful, you can [sponsor its development](https://www.lifedever.com/sponsor/) 💖
 
 ## License
 
