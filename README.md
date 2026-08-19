@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="#installation">🚀 <strong>Get Started</strong></a> ｜ <a href="https://www.lifedever.com/sponsor/">💖 <strong>Sponsor</strong></a>
+  <a href="https://www.lifedever.com/TabFlick/">🌐 <strong>Website</strong></a> ｜ <a href="#installation">🚀 <strong>Get Started</strong></a> ｜ <a href="https://www.lifedever.com/sponsor/">💖 <strong>Sponsor</strong></a>
 </p>
 
 <p align="center">
@@ -22,11 +22,13 @@
 
 ---
 
-<!-- 截图占位：跑起来后截一张浮层的图，上传到图床后替换这里
 <p align="center">
-  <img src="<screenshot-url>" width="800" alt="TabFlick Screenshot">
+  <img src="https://cdn.jsdelivr.net/gh/lifedever/images@master/uPic/2026/08/tabflick-demo.gif" width="860" alt="TabFlick demo">
 </p>
--->
+
+<p align="center">
+  <sub>Full-quality video on the <a href="https://www.lifedever.com/TabFlick/">website</a>.</sub>
+</p>
 
 Chrome cycles tabs in tab-strip order. TabFlick makes ⌃⇥ cycle them by recent use and shows a switcher overlay while you hold the key, the same way ⌘⇥ works for applications.
 

@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="#安装">🚀 <strong>快速开始</strong></a> ｜ <a href="https://www.lifedever.com/sponsor/">💖 <strong>赞助</strong></a>
+  <a href="https://www.lifedever.com/TabFlick/">🌐 <strong>官网</strong></a> ｜ <a href="#安装">🚀 <strong>快速开始</strong></a> ｜ <a href="https://www.lifedever.com/sponsor/">💖 <strong>赞助</strong></a>
 </p>
 
 <p align="center">
@@ -22,11 +22,13 @@
 
 ---
 
-<!-- 截图占位：跑起来后截一张浮层的图，上传到图床后替换这里
 <p align="center">
-  <img src="<screenshot-url>" width="800" alt="TabFlick 截图">
+  <img src="https://cdn.jsdelivr.net/gh/lifedever/images@master/uPic/2026/08/tabflick-demo.gif" width="860" alt="TabFlick 演示">
 </p>
--->
+
+<p align="center">
+  <sub>高清视频见<a href="https://www.lifedever.com/TabFlick/">官网</a>。</sub>
+</p>
 
 Chrome 的 ⌃⇥ 按标签栏顺序切换。TabFlick 把它改成按最近使用顺序切换，并在按住按键期间显示切换器浮层，与 ⌘⇥ 切换应用的方式一致。
 
