@@ -101,6 +101,22 @@ private struct SwitcherPane: View {
             }
 
             Section {
+                Toggle(isOn: $settings.allowTabClose) {
+                    Text(L10n.t("悬停时显示关闭按钮", "Show close button on hover"))
+                }
+                .toggleStyle(.switch)
+
+                Text(L10n.t(
+                    "开启后，鼠标悬停在切换器卡片上会出现 ✕，点击直接关闭对应标签。只剩 2 个标签时不显示。",
+                    "When on, hovering a card reveals an ✕ that closes that tab. It hides when only two tabs remain."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("关闭标签", "Closing tabs"))
+            }
+
+            Section {
                 Label(
                     connected
                         ? L10n.t("扩展已连接", "Extension connected")

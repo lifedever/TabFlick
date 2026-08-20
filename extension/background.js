@@ -267,6 +267,19 @@ async function handleHelperMessage(raw) {
     case "switch":
       if (typeof msg.tabId === "number") await activateTab(msg.tabId);
       break;
+    case "close":
+      // 浮层卡片上的 ✕。关闭成功会触发 onRemoved → forgetTab → pushMRU，
+      // 不用在这里重复维护 MRU。
+      if (typeof msg.tabId === "number") {
+        try {
+          await chrome.tabs.remove(msg.tabId);
+        } catch (e) {
+          // 标签可能已经没了（用户手动关掉的竞态），清掉本地记录即可
+          send({ type: "log", message: `close failed: ${e}` });
+          await forgetTab(msg.tabId);
+        }
+      }
+      break;
     case "ping":
       send({ type: "pong" });
       break;

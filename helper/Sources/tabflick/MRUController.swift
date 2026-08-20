@@ -94,6 +94,7 @@ final class IconCache {
 final class MRUController {
 
     private let server: WebSocketServer
+    private let settings: AppSettings
     private let overlay: OverlayPanel
     private let icons = IconCache()
 
@@ -111,6 +112,12 @@ final class MRUController {
     private var snapshot: [TabInfo] = []
     private var cursor = 0
     private var cycling = false
+
+    /// 本轮 cycling 中是否用 ✕ 关过标签。关过的话，松开 Ctrl 时即使游标
+    /// 停在 0 也要提交切换 —— 原来的「起点」标签可能已经被关掉了，
+    /// Chrome 自动激活的是相邻标签而不是 MRU 上一个，不显式切一下的话
+    /// 落点会和面板高亮对不上。切到本来就活跃的标签是无害的幂等操作。
+    private var closedTabThisRound = false
 
     private var connected = false
     private var pingTimer: Timer?
@@ -143,6 +150,7 @@ final class MRUController {
         cycling = false
         cursor = 0
         snapshot = []
+        closedTabThisRound = false
         resetEventTapCycling()
         overlay.hide()
     }
@@ -172,13 +180,17 @@ final class MRUController {
 
     init(server: WebSocketServer, settings: AppSettings) {
         self.server = server
+        self.settings = settings
         self.overlay = OverlayPanel(settings: settings)
         thumbnails.warmUp()   // 磁盘上的图先读进来，第一次按 ⌃⇥ 就有画面
-        overlay.model.onPick = { [weak self] index in
-            self?.pick(index)
+        overlay.model.onPick = { [weak self] tabId in
+            self?.pick(tabId: tabId)
         }
-        overlay.model.onHover = { [weak self] index in
-            self?.hover(index)
+        overlay.model.onHover = { [weak self] tabId in
+            self?.hover(tabId: tabId)
+        }
+        overlay.model.onClose = { [weak self] tabId in
+            self?.closeTab(tabId: tabId)
         }
     }
 
@@ -188,21 +200,61 @@ final class MRUController {
     /// 视图模型那份，悬停后 ⌃⇥ 从旧位置继续、松开 Ctrl 切到的也是旧游标
     /// 那张（高亮和实际切换对不上）。
     /// source 必须是 .mouse：hover 触发自动滚动会形成正反馈环（见 SwitcherView）。
-    private func hover(_ index: Int) {
-        guard cycling, snapshot.indices.contains(index), index != cursor else { return }
+    ///
+    /// 视图回调带来的都是 tab.id，这里按 id 在快照里反查位置 —— 位置索引在
+    /// 「渲染 → 点击」之间可能失真（连续关闭时数组在变），id 不会。
+    private func hover(tabId: Int) {
+        guard cycling,
+              let index = snapshot.firstIndex(where: { $0.id == tabId }),
+              index != cursor else { return }
         cursor = index
         overlay.model.setCursor(index, source: .mouse)
         armWatchdog()
     }
 
     /// 鼠标点选某张卡片：把游标直接定位过去并立即提交。
-    private func pick(_ index: Int) {
-        guard cycling, snapshot.indices.contains(index) else { return }
+    private func pick(tabId: Int) {
+        guard cycling,
+              let index = snapshot.firstIndex(where: { $0.id == tabId }) else { return }
         cursor = index
         // tap 侧的 cycling 也要清，否则用户松开 Ctrl 时会再 commit 一次
         resetEventTapCycling()
         log("🖱 clicked [\(index)] → \(snapshot[index].title.prefix(50))")
         commit()
+    }
+
+    /// 点了卡片上的 ✕：关掉那个标签，卡片消失，本轮 cycling 继续。
+    ///
+    /// 功能默认关闭，由设置项 allowTabClose 打开（视图侧用它控制 ✕ 显隐，
+    /// 这里是状态机侧的同一道门）。只在剩 3 张以上时可用：2 张关 1 张就
+    /// 只剩单标签，切换器不为单标签出现，关到那一步面板就没意义了。
+    /// 这条守卫同时保证 tabs 不会被关到触发 readiness 降级。
+    private func closeTab(tabId: Int) {
+        guard settings.allowTabClose,
+              cycling, snapshot.count > 2,
+              let index = snapshot.firstIndex(where: { $0.id == tabId }) else { return }
+
+        let target = snapshot[index]
+        log("✕ close [\(index)] → \(target.title.prefix(50)) (tabId \(target.id))")
+        server.broadcast(["type": "close", "tabId": target.id])
+        closedTabThisRound = true
+
+        snapshot.remove(at: index)
+        // 本地同步剔除，不等扩展的 onRemoved 推送 —— 窗口期里如果开始
+        // 新一轮 cycling，快照里不该出现已关掉的标签。
+        tabs.removeAll { $0.id == target.id }
+        publishStatus()
+
+        // 关的在游标前面 → 游标跟着前移一位；关的是游标那张且它是末尾 →
+        // 收到新末尾。其余情况游标位置不变（自然落到顶上来的下一张）。
+        if index < cursor {
+            cursor -= 1
+        } else if cursor >= snapshot.count {
+            cursor = snapshot.count - 1
+        }
+
+        overlay.applyRemoval(tabs: snapshot, cursor: cursor)
+        armWatchdog()
     }
 
     // MARK: - 来自 WebSocket
@@ -276,6 +328,7 @@ final class MRUController {
             cycling = true
             snapshot = tabs
             cursor = 0
+            closedTabThisRound = false
             overlay.model.tabs = snapshot
             refreshOverlayImages()
         }
@@ -328,9 +381,10 @@ final class MRUController {
         cycling = false
         overlay.hide()
 
-        defer { cursor = 0; snapshot = [] }
+        defer { cursor = 0; snapshot = []; closedTabThisRound = false }
 
-        guard cursor != 0, snapshot.indices.contains(cursor) else {
+        // 关过标签的话 cursor == 0 也要提交（见 closedTabThisRound 的说明）
+        guard snapshot.indices.contains(cursor), cursor != 0 || closedTabThisRound else {
             log("⌃ released: cursor back at origin, no switch")
             return
         }

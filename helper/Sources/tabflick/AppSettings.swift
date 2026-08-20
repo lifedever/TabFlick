@@ -85,6 +85,7 @@ final class AppSettings: ObservableObject {
         static let appearance = "appearance"
         static let switcherLayout = "switcherLayout"
         static let updateCheckFrequency = "updateCheckFrequency"
+        static let allowTabClose = "allowTabClose"
     }
 
     /// 切换器相关配置变化时通知外部（用来推给扩展）。
@@ -133,6 +134,16 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 悬停切换器卡片时是否显示 ✕（点击直接关闭标签）。
+    /// 默认关闭 —— 切换器的本职是切换，误点关掉标签的代价比多开一次设置高。
+    /// 纯 helper 侧行为开关，浮层每次弹出时读取，不需要推给扩展。
+    @Published var allowTabClose: Bool {
+        didSet {
+            guard oldValue != allowTabClose else { return }
+            UserDefaults.standard.set(allowTabClose, forKey: Key.allowTabClose)
+        }
+    }
+
     /// 自动检查更新的频率。UpdateChecker 到点对账时现读，改动立即生效。
     @Published var updateCheckFrequency: UpdateCheckFrequency {
         didSet {
@@ -159,6 +170,7 @@ final class AppSettings: ObservableObject {
         scopeToWindow = defaults.bool(forKey: Key.scopeToWindow)
         appearance = AppAppearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
         switcherLayout = SwitcherLayout(rawValue: defaults.string(forKey: Key.switcherLayout) ?? "") ?? .strip
+        allowTabClose = defaults.bool(forKey: Key.allowTabClose)   // 未设置时即默认 false
         updateCheckFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Key.updateCheckFrequency) ?? "") ?? .daily
 
         let state = LoginItem.state

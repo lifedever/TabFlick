@@ -18,13 +18,28 @@ final class SwitcherModel: ObservableObject {
     /// 游标这次是被谁移动的。决定要不要自动滚动 —— 见 SwitcherView 里的说明。
     private(set) var cursorSource: CursorSource = .keyboard
 
-    /// 鼠标点选了某张卡片。是回调不是状态，所以不加 @Published。
+    // 三个鼠标回调的参数都是 tab.id，不是位置 index。
+    //
+    // 必须是 id：连续关闭标签时数组不断变短、卡片视图不断位移/重建，
+    // 位置索引在渲染与点击之间存在失真窗口 —— 拿旧位置去索引新数组就会
+    // 关错标签（2026-08-20 实测：连关几张后开始错位）。id 让动作载荷和
+    // 卡片渲染的是同一份 TabInfo，「点谁就是谁」在构造上成立。
+
+    /// 鼠标点选了某张卡片（参数 tab.id）。是回调不是状态，所以不加 @Published。
     var onPick: ((Int) -> Void)?
 
-    /// 鼠标悬停到了某张卡片。必须回调给 MRUController 而不是在视图里直接
-    /// setCursor —— 游标的事实源在状态机那边，视图私自改自己的那份会造成
-    /// 「高亮在 A、⌃⇥ 却从 B 继续、松开切到 B」的失步。
+    /// 鼠标悬停到了某张卡片（参数 tab.id）。必须回调给 MRUController 而不是
+    /// 在视图里直接 setCursor —— 游标的事实源在状态机那边，视图私自改自己的
+    /// 那份会造成「高亮在 A、⌃⇥ 却从 B 继续、松开切到 B」的失步。
     var onHover: ((Int) -> Void)?
+
+    /// 鼠标点了卡片上的 ✕，要求关掉这个标签（参数 tab.id）。同样只回调给
+    /// MRUController，快照怎么改、游标落到哪都由状态机决定，视图只是投影。
+    var onClose: ((Int) -> Void)?
+
+    /// 是否允许在卡片上关标签。设置项（AppSettings.allowTabClose）的投影，
+    /// 浮层每次弹出时读入。
+    @Published var allowClose = false
 
     /// 必须走这里改游标：source 要先于 cursor 落定，
     /// 否则 onChange 读到的是上一次的来源。
@@ -84,9 +99,10 @@ private struct SwitcherView: View {
             // 飞到列表尽头。而且 hover 本来就不需要滚动 —— 鼠标能指到的
             // 卡片必然已经在可视区内。
             .onChange(of: model.cursor) { newValue in
-                guard model.cursorSource == .keyboard else { return }
+                guard model.cursorSource == .keyboard,
+                      model.tabs.indices.contains(newValue) else { return }
                 withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(newValue, anchor: .center)
+                    proxy.scrollTo(model.tabs[newValue].id, anchor: .center)
                 }
             }
         }
@@ -116,16 +132,25 @@ private struct SwitcherView: View {
         }
     }
 
-    /// 两种排布共用同一组卡片。`.id(index)` 供 ScrollViewReader 按游标定位。
+    /// 两种排布共用同一组卡片。`.id(tab.id)` 供 ScrollViewReader 按游标定位。
+    ///
+    /// 身份必须用 tab.id 而不是 index：用位置当身份的话，删掉一张卡后
+    /// 右侧所有卡片的 index 全变 → SwiftUI 把它们当「销毁 + 新建」处理，
+    /// 移除动画期间新旧视图并存，点击可能落在携带旧位置的残影上。
+    /// 用 tab.id 卡片只是「移动」，视图和数据的对应关系全程不断。
     private var cards: some View {
         ForEach(Array(model.tabs.enumerated()), id: \.element.id) { index, tab in
             TabCard(tab: tab,
                     icon: model.icons[tab.id],
                     thumb: model.thumbs[tab.id],
                     selected: index == model.cursor,
-                    onHover: { model.onHover?(index) },
-                    onPick: { model.onPick?(index) })
-                .id(index)
+                    // 开关默认关；开了之后剩 2 张时也不给 ✕：再关 1 张就只剩
+                    // 单标签，而切换器本来就不为单标签出现，关到那一步面板就没意义了。
+                    closable: model.allowClose && model.tabs.count > 2,
+                    onHover: { model.onHover?(tab.id) },
+                    onPick: { model.onPick?(tab.id) },
+                    onClose: { model.onClose?(tab.id) })
+                .id(tab.id)
         }
     }
 }
@@ -135,10 +160,17 @@ private struct TabCard: View {
     let icon: IconInfo?
     let thumb: NSImage?
     let selected: Bool
+    let closable: Bool
     let onHover: () -> Void
     let onPick: () -> Void
+    let onClose: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+
+    /// 鼠标正悬在这张卡片上（决定 ✕ 的显隐）。
+    @State private var hovering = false
+    /// 鼠标正悬在 ✕ 本身上（按钮加深一档作反馈）。
+    @State private var closeHovering = false
 
     /// 上一次的鼠标**屏幕**坐标。
     ///
@@ -172,6 +204,13 @@ private struct TabCard: View {
                 .shadow(color: .black.opacity(scheme == .dark ? 0.30 : (selected ? 0.16 : 0.12)),
                         radius: scheme == .dark ? 20 : (selected ? 20 : 16),
                         y: scheme == .dark ? 8 : (selected ? 8 : 6))
+                // hover 时缩略图右上角出一枚 ✕。挂在阴影之后，
+                // 免得按钮也被卡片的双层阴影再描一遍。
+                .overlay(alignment: .topTrailing) {
+                    if closable && hovering {
+                        closeButton
+                    }
+                }
 
             HStack(spacing: 5) {
                 Group {
@@ -232,6 +271,52 @@ private struct TabCard: View {
                 break
             }
         }
+        // ✕ 的显隐用简单的进出判断就够，不需要 onContinuousHover 那套
+        // 移动量守卫 —— 它不动游标，浮层弹出时鼠标恰好停在卡片上就显示
+        // 也是合理的（鼠标确实悬在这张卡上）。
+        .onHover { inside in
+            withAnimation(.easeOut(duration: 0.1)) { hovering = inside }
+        }
+    }
+
+    /// 缩略图右上角的关闭钮：磨砂玻璃圆底再压一层深色，保证白 ✕ 在任何
+    /// 截图（包括纯白网页）上都有反差；悬停变红（危险动作的通用信号）、
+    /// 微放大、鼠标切成小手。点击由 Button 消费，不会落到卡片的
+    /// onTapGesture（pick）上。
+    private var closeButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background {
+                    ZStack {
+                        Circle().fill(.ultraThinMaterial)
+                        Circle().fill(closeHovering ? Color.red.opacity(0.85)
+                                                    : Color.black.opacity(0.38))
+                    }
+                }
+                .overlay(Circle().strokeBorder(Color.white.opacity(closeHovering ? 0.55 : 0.30),
+                                               lineWidth: 1))
+                .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                .scaleEffect(closeHovering ? 1.1 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.12), value: closeHovering)
+        .onHover { inside in
+            closeHovering = inside
+            // 小手光标。push/pop 必须配平 —— 点击后卡片被移除时按钮直接
+            // 消失、收不到 onHover(false)，靠下面的 onDisappear 兜底。
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .onDisappear {
+            if closeHovering {
+                NSCursor.pop()
+                closeHovering = false
+            }
+        }
+        .padding(5)
+        .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: .topTrailing)))
     }
 
     /// favicon 的反差底板。
@@ -312,8 +397,13 @@ final class OverlayPanel {
     private(set) var gridRowStride = 0
 
     private var panel: NSPanel?
+    private var hostingView: NSHostingView<SwitcherView>?
     private var hideWorkItem: DispatchWorkItem?
     private var shownAt: Date?
+
+    /// presentNow 按 Chrome 窗口 / 屏幕算出的面板尺寸上限。
+    /// 关标签后重算布局（applyRemoval）沿用同一套上限，收缩前后同一套规则。
+    private var panelMaxSize = NSSize.zero
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -361,11 +451,52 @@ final class OverlayPanel {
     private func closeNow() {
         panel?.orderOut(nil)
         panel = nil
+        hostingView = nil
         shownAt = nil
+    }
+
+    /// 关掉了一个标签后的收尾：卡片带动画消失，面板中心不动往里收，
+    /// 宫格列数按新数量重排。空列表不会走到这里 —— ✕ 只在 3 张以上时
+    /// 出现（见 MRUController.closeTab 的守卫）。
+    func applyRemoval(tabs: [TabInfo], cursor: Int) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            model.tabs = tabs
+            model.setCursor(cursor, source: .mouse)
+        }
+
+        guard let panel, !tabs.isEmpty else { return }
+
+        let (size, columns) = contentLayout(count: tabs.count,
+                                            maxWidth: panelMaxSize.width,
+                                            maxHeight: panelMaxSize.height)
+        if columns != gridRowStride {
+            gridRowStride = columns
+            hostingView?.rootView = SwitcherView(model: model, gridColumns: columns)
+        }
+        guard size != panel.frame.size else { return }
+
+        // 左上角锚定收缩（AppKit 原点在左下，顶边不动要补 y）：连续关闭时
+        // 被删卡片左侧的所有卡片在屏幕上纹丝不动，右侧邻居滑进原位 ——
+        // 和 Chrome 标签栏连续关标签的手感一致。之前按中心收缩，每关一张
+        // 所有卡片横移半张宽，鼠标下的目标一直在跑。
+        var frame = panel.frame
+        frame.origin.y += frame.height - size.height
+        frame.size = size
+        // 只收不涨一般不会越界，但保持与 presentNow 同一套夹取规则
+        let visible = (panel.screen ?? NSScreen.main ?? NSScreen.screens[0]).visibleFrame
+        frame.origin.x = min(max(frame.origin.x, visible.minX + 8), visible.maxX - frame.width - 8)
+        frame.origin.y = min(max(frame.origin.y, visible.minY + 8), visible.maxY - frame.height - 8)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(frame, display: true)
+        }
     }
 
     private func presentNow() {
         guard !model.tabs.isEmpty else { return }
+        model.allowClose = settings.allowTabClose
 
         let effect = NSVisualEffectView()
         // 深浅色都用 .hudWindow —— HUD 浮层专用材质,模糊重、透感强,背景色
@@ -388,34 +519,14 @@ final class OverlayPanel {
         // 面板尺寸上限：不越出 Chrome 窗口，也不越出所在屏幕的可见区。
         let maxPanelWidth = min(anchor.width, screen.visibleFrame.width) * 0.94
         let maxPanelHeight = min(anchor.height, screen.visibleFrame.height) * 0.94
+        panelMaxSize = NSSize(width: maxPanelWidth, height: maxPanelHeight)
 
-        let count = model.tabs.count
-        let width: CGFloat
-        let height: CGFloat
-
-        switch settings.switcherLayout {
-        case .strip:
-            gridRowStride = 0
-            let n = CGFloat(count)
-            let naturalWidth = n * kCardWidth + max(0, n - 1) * kCardSpacing + kOuterPadding * 2
-            width = min(naturalWidth, maxPanelWidth)
-            height = kCardHeight + kOuterPadding * 2
-
-        case .grid:
-            // 先按塞满宽度算至少要几行，再回头平衡列数：30 个标签在
-            // 12 列上限下排成 10×3，而不是 12+12+6 那种最后一行孤零零的样子。
-            // 只有标签多到整屏都放不下时才铺满宽度、纵向滚动。
-            let maxCols = max(1, Int((maxPanelWidth - kOuterPadding * 2 + kCardSpacing)
-                                     / (kCardWidth + kCardSpacing)))
-            let maxRows = max(1, Int((maxPanelHeight - kOuterPadding * 2 + kCardSpacing)
-                                     / (kCardHeight + kCardSpacing)))
-            let neededRows = (count + maxCols - 1) / maxCols
-            let cols = neededRows <= maxRows ? (count + neededRows - 1) / neededRows : maxCols
-            let rows = min(neededRows, maxRows)
-            gridRowStride = cols
-            width = CGFloat(cols) * kCardWidth + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2
-            height = CGFloat(rows) * kCardHeight + CGFloat(rows - 1) * kCardSpacing + kOuterPadding * 2
-        }
+        let (contentSize, columns) = contentLayout(count: model.tabs.count,
+                                                   maxWidth: maxPanelWidth,
+                                                   maxHeight: maxPanelHeight)
+        gridRowStride = columns
+        let width = contentSize.width
+        let height = contentSize.height
 
         let hosting = NSHostingView(rootView: SwitcherView(model: model, gridColumns: gridRowStride))
 
@@ -468,7 +579,37 @@ final class OverlayPanel {
         }
 
         self.panel = panel
+        self.hostingView = hosting
         self.shownAt = Date()
+    }
+
+    /// 按标签数算面板内容尺寸。宫格模式同时返回列数（也是 ⌃↑/⌃↓ 的行步长），
+    /// 长条模式列数为 0。presentNow 和 applyRemoval 共用这一份，别各抄一套。
+    private func contentLayout(count: Int,
+                               maxWidth: CGFloat,
+                               maxHeight: CGFloat) -> (size: NSSize, columns: Int) {
+        switch settings.switcherLayout {
+        case .strip:
+            let n = CGFloat(count)
+            let naturalWidth = n * kCardWidth + max(0, n - 1) * kCardSpacing + kOuterPadding * 2
+            return (NSSize(width: min(naturalWidth, maxWidth),
+                           height: kCardHeight + kOuterPadding * 2), 0)
+
+        case .grid:
+            // 先按塞满宽度算至少要几行，再回头平衡列数：30 个标签在
+            // 12 列上限下排成 10×3，而不是 12+12+6 那种最后一行孤零零的样子。
+            // 只有标签多到整屏都放不下时才铺满宽度、纵向滚动。
+            let maxCols = max(1, Int((maxWidth - kOuterPadding * 2 + kCardSpacing)
+                                     / (kCardWidth + kCardSpacing)))
+            let maxRows = max(1, Int((maxHeight - kOuterPadding * 2 + kCardSpacing)
+                                     / (kCardHeight + kCardSpacing)))
+            let neededRows = (count + maxCols - 1) / maxCols
+            let cols = neededRows <= maxRows ? (count + neededRows - 1) / neededRows : maxCols
+            let rows = min(neededRows, maxRows)
+            return (NSSize(width: CGFloat(cols) * kCardWidth + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2,
+                           height: CGFloat(rows) * kCardHeight + CGFloat(rows - 1) * kCardSpacing + kOuterPadding * 2),
+                    cols)
+        }
     }
 
     /// NSVisualEffectView 的圆角遮罩。
