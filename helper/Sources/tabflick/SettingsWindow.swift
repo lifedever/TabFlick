@@ -69,6 +69,23 @@ private struct SwitcherPane: View {
             }
 
             Section {
+                Picker(L10n.t("样式", "Style"), selection: $settings.switcherLayout) {
+                    ForEach(SwitcherLayout.allCases) { layout in
+                        Text(layout.label).tag(layout)
+                    }
+                }
+
+                Text(L10n.t(
+                    "长条横向排成一行；宫格自动换行，尽量一屏放下所有标签。宫格下可以用 ⌃ + 方向键上下左右移动。",
+                    "Strip lays tabs out in a single row; grid wraps them to fit on one screen. In grid mode, hold ⌃ and use all four arrow keys to move."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("布局", "Layout"))
+            }
+
+            Section {
                 Label(
                     connected
                         ? L10n.t("扩展已连接", "Extension connected")

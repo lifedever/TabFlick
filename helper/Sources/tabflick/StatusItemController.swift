@@ -6,11 +6,10 @@ import AppKit
 /// 可见的部分，也是「它到底还活着吗」的唯一答案。所以状态行必须如实反映
 /// 扩展的连接情况，而不只是摆个图标。
 @MainActor
-final class StatusItemController: NSObject, NSMenuDelegate {
+final class StatusItemController: NSObject {
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let loginItemLine = NSMenuItem(title: L10n.t("开机时启动", "Open at Login"), action: nil, keyEquivalent: "")
 
     /// 打开 app 的设置窗口。
     var onOpenSettings: (() -> Void)?
@@ -51,15 +50,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     // MARK: - 菜单
 
     private func buildMenu() {
-        // statusLine / loginItemLine 是复用的存储属性，而 NSMenuItem 同一时刻
-        // 只能属于一个菜单 —— 不先从旧菜单摘下来，第二次 buildMenu（init 后的
+        // statusLine 是复用的存储属性，而 NSMenuItem 同一时刻只能属于一个
+        // 菜单 —— 不先从旧菜单摘下来，第二次 buildMenu（init 后的
         // showUnauthorized、或语言切换的 rebuildMenu）会在 insertItem 处抛
         // NSInternalInconsistencyException 直接崩掉。
         statusLine.menu?.removeItem(statusLine)
-        loginItemLine.menu?.removeItem(loginItemLine)
 
         let menu = NSMenu()
-        menu.delegate = self
 
         statusLine.isEnabled = false
         menu.addItem(statusLine)
@@ -86,10 +83,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         settings.target = self
         menu.addItem(settings)
 
-        loginItemLine.action = #selector(toggleLoginItem)
-        loginItemLine.target = self
-        menu.addItem(loginItemLine)
-
         menu.addItem(.separator())
 
         let logs = NSMenuItem(title: L10n.t("打开日志文件", "Open Log File"), action: #selector(openLog), keyEquivalent: "")
@@ -115,33 +108,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         render(connected: connected, tabCount: lastTabCount)
     }
 
-    /// 菜单每次打开时现读登录项状态，不缓存 —— 用户可能刚在系统设置里改过。
-    func menuWillOpen(_ menu: NSMenu) {
-        guard !unauthorized else { return }
-        switch LoginItem.state {
-        case .enabled:
-            loginItemLine.state = .on
-            loginItemLine.title = L10n.t("开机时启动", "Open at Login")
-        case .disabled:
-            loginItemLine.state = .off
-            loginItemLine.title = L10n.t("开机时启动", "Open at Login")
-        case .requiresApproval:
-            // 已注册但等用户在系统设置里批准。显示成"关"会让人反复点却毫无反应。
-            loginItemLine.state = .mixed
-            loginItemLine.title = L10n.t("开机时启动（需在系统设置中批准）", "Open at Login (approve in Settings)")
-        }
-    }
-
     // MARK: - 状态
 
     func render(connected: Bool, tabCount: Int) {
         self.connected = connected
         self.lastTabCount = tabCount
 
-        let symbol = "rectangle.on.rectangle.angled"
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "TabFlick")
-        image?.isTemplate = true          // 跟随菜单栏明暗自动反色
-        statusItem.button?.image = image
+        statusItem.button?.image = Self.cardIcon
         // 断开时压暗图标：不换符号，位置和形状保持稳定，只是"灰掉"
         statusItem.button?.alphaValue = connected ? 1.0 : 0.45
 
@@ -149,6 +122,63 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             ? L10n.t("已连接 · \(tabCount) 个标签", "Connected · \(tabCount) tab\(tabCount == 1 ? "" : "s")")
             : L10n.t("扩展未连接", "Extension not connected")
     }
+
+    // MARK: - 图标
+
+    /// 菜单栏图标：竖向卡片堆叠——前卡直立实心、后卡空心描边斜出右上。
+    /// 实心/空心的层次让前卡有分量，9° 的倾斜保留「切换/翻动」的动感
+    /// （平行偏移就成了普通「拷贝」图标，也和 PasteMemo 的构图撞车）。
+    /// 前卡周围用 destinationOut 抠一圈缝，让后卡的线不贴着前卡
+    /// （SF Symbols 的叠卡图标都是这个做法）。模板图，自动跟随菜单栏
+    /// 明暗反色。
+    private static let cardIcon: NSImage = {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { rect in
+            let w: CGFloat = 9.5, h: CGFloat = 12, r: CGFloat = 2.25, stroke: CGFloat = 1.2
+
+            // 先在原点附近摆好几何，最后按墨迹包围盒整体平移居中
+            let front = NSRect(x: 0, y: 0, width: w, height: h)
+
+            // 后卡：同尺寸，中心偏右上，绕自身中心倾斜 9°
+            let backCenter = NSPoint(x: front.midX + 3.2, y: front.midY - 3.2)
+            let t = NSAffineTransform()
+            t.translateX(by: backCenter.x, yBy: backCenter.y)
+            t.rotate(byDegrees: -9)
+            t.translateX(by: -backCenter.x, yBy: -backCenter.y)
+            let backRect = NSRect(x: backCenter.x - w / 2, y: backCenter.y - h / 2,
+                                  width: w, height: h)
+            let back = NSBezierPath(roundedRect: backRect, xRadius: r, yRadius: r)
+            back.transform(using: t as AffineTransform)
+            back.lineWidth = stroke
+
+            // 墨迹 = 前卡填充 ∪ 后卡描边外缘。算出包围盒后平移到画布正中 ——
+            // 手调 origin 每改一次参数就偏一次（上一版就是这么偏上的），
+            // 程序化居中一劳永逸。平移量不取整：后卡斜 9° 本来就全程抗锯齿，
+            // 前卡是填充不是描边，亚像素平移对清晰度没有实际影响，
+            // 取整反而留下最多 1/4pt 的偏心。
+            let ink = front.union(back.bounds.insetBy(dx: -stroke / 2, dy: -stroke / 2))
+            NSGraphicsContext.current?.cgContext.translateBy(x: rect.midX - ink.midX,
+                                                             y: rect.midY - ink.midY)
+
+            NSColor.black.setStroke()
+            back.stroke()
+
+            // 前卡周围抠缝
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: front.insetBy(dx: -1.3, dy: -1.3),
+                         xRadius: r + 1.3, yRadius: r + 1.3).fill()
+            NSGraphicsContext.restoreGraphicsState()
+
+            // 前卡实心
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: front, xRadius: r, yRadius: r).fill()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "TabFlick"
+        return image
+    }()
 
     // MARK: - 动作
 
@@ -158,14 +188,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func openSettings() {
         onOpenSettings?()
-    }
-
-    @objc private func toggleLoginItem() {
-        let result = LoginItem.toggle()
-        if result == .requiresApproval {
-            LoginItem.openSystemSettings()
-        }
-        menuWillOpen(statusItem.menu!)   // 立刻回读，别假设操作成功
     }
 
     @objc private func openLog() {

@@ -36,6 +36,8 @@ MainActor.assumeIsolated {
         // 我们的窗口盖住或挤走，而菜单点完就收起，不占前台。
         log("Accessibility permission missing — waiting via menu bar")
 
+        MainMenu.install(openSettings: nil)   // 至少让 ⌘Q 可用
+
         let coordinator = PermissionCoordinator()
         let statusItem = StatusItemController()
         statusItem.showUnauthorized()
@@ -55,9 +57,15 @@ MainActor.assumeIsolated {
 
         let updates = UpdateChecker()
         let server = WebSocketServer(port: kPort)
-        let controller = MRUController(server: server)
+        let controller = MRUController(server: server, settings: settings)
         let statusItem = StatusItemController()
         let settingsWindow = SettingsWindowController(settings: settings, updates: updates)
+
+        // 没有主菜单，⌘W/⌘Q/⌘, 这些 key equivalent 无处路由，
+        // 设置窗口会对标准快捷键毫无反应。
+        MainMenu.install(openSettings: {
+            MainActor.assumeIsolated { settingsWindow.show() }
+        })
 
         // 设置的事实源在 app：改动后立刻推给扩展，扩展只执行不持久化。
         settings.onChange = { [weak controller] in
@@ -72,6 +80,7 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated {
                 statusItem.rebuildMenu()
                 settingsWindow.reloadForLanguageChange()
+                MainMenu.rebuild()
             }
         }
 
@@ -119,6 +128,9 @@ MainActor.assumeIsolated {
             try tap.start(
                 onStep: { backward in
                     MainActor.assumeIsolated { controller.step(backward: backward) }
+                },
+                onRowStep: { up in
+                    MainActor.assumeIsolated { controller.stepRow(up: up) }
                 },
                 onCommit: {
                     MainActor.assumeIsolated { controller.commit() }

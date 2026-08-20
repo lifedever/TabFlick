@@ -45,23 +45,32 @@ private let kPanelCornerRadius: CGFloat = 22
 
 private struct SwitcherView: View {
     @ObservedObject var model: SwitcherModel
+    /// 宫格模式的列数；0 表示横向长条。
+    let gridColumns: Int
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: kCardSpacing) {
-                    ForEach(Array(model.tabs.enumerated()), id: \.element.id) { index, tab in
-                        TabCard(tab: tab,
-                                icon: model.icons[tab.id],
-                                thumb: model.thumbs[tab.id],
-                                selected: index == model.cursor,
-                                onHover: { model.setCursor(index, source: .mouse) },
-                                onPick: { model.onPick?(index) })
-                            .id(index)
+            Group {
+                if gridColumns > 0 {
+                    // 宫格：面板尺寸在 presentNow 里已按「一屏放得下」算好，
+                    // 只有标签多到连整屏宫格都装不下时才会真的纵向滚动。
+                    ScrollView(.vertical, showsIndicators: false) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(kCardWidth), spacing: kCardSpacing),
+                                                 count: gridColumns),
+                                  spacing: kCardSpacing) {
+                            cards
+                        }
+                        .padding(kOuterPadding)
+                    }
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: kCardSpacing) {
+                            cards
+                        }
+                        .padding(kOuterPadding)
                     }
                 }
-                .padding(kOuterPadding)
             }
             // 只有键盘移动游标时才自动滚动。
             //
@@ -90,6 +99,19 @@ private struct SwitcherView: View {
                 .strokeBorder(scheme == .dark ? Color.white.opacity(0.14)
                                               : Color.black.opacity(0.055),
                               lineWidth: 1)
+        }
+    }
+
+    /// 两种排布共用同一组卡片。`.id(index)` 供 ScrollViewReader 按游标定位。
+    private var cards: some View {
+        ForEach(Array(model.tabs.enumerated()), id: \.element.id) { index, tab in
+            TabCard(tab: tab,
+                    icon: model.icons[tab.id],
+                    thumb: model.thumbs[tab.id],
+                    selected: index == model.cursor,
+                    onHover: { model.setCursor(index, source: .mouse) },
+                    onPick: { model.onPick?(index) })
+                .id(index)
         }
     }
 }
@@ -258,9 +280,19 @@ final class OverlayPanel {
 
     let model = SwitcherModel()
 
+    private let settings: AppSettings
+
+    /// 宫格模式下当前显示的列数；长条模式为 0。
+    /// ⌃↑/⌃↓ 按行移动游标时以它为步长（见 MRUController.stepRow）。
+    private(set) var gridRowStride = 0
+
     private var panel: NSPanel?
     private var hideWorkItem: DispatchWorkItem?
     private var shownAt: Date?
+
+    init(settings: AppSettings) {
+        self.settings = settings
+    }
 
     /// 浮层最少可见这么久。
     ///
@@ -310,8 +342,6 @@ final class OverlayPanel {
     private func presentNow() {
         guard !model.tabs.isEmpty else { return }
 
-        let hosting = NSHostingView(rootView: SwitcherView(model: model))
-
         let effect = NSVisualEffectView()
         // 浅色用 .popover(接近白、干净;.hudWindow 在浅色下发灰)。
         // 深色用 .hudWindow —— HUD 浮层专用材质,模糊重、透感强,背景色能
@@ -330,10 +360,39 @@ final class OverlayPanel {
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) })
                   ?? NSScreen.main ?? NSScreen.screens[0]
 
-        let count = CGFloat(model.tabs.count)
-        let naturalWidth = count * kCardWidth + max(0, count - 1) * kCardSpacing + kOuterPadding * 2
-        let width = min(naturalWidth, min(anchor.width, screen.visibleFrame.width) * 0.94)
-        let height = kCardHeight + kOuterPadding * 2
+        // 面板尺寸上限：不越出 Chrome 窗口，也不越出所在屏幕的可见区。
+        let maxPanelWidth = min(anchor.width, screen.visibleFrame.width) * 0.94
+        let maxPanelHeight = min(anchor.height, screen.visibleFrame.height) * 0.94
+
+        let count = model.tabs.count
+        let width: CGFloat
+        let height: CGFloat
+
+        switch settings.switcherLayout {
+        case .strip:
+            gridRowStride = 0
+            let n = CGFloat(count)
+            let naturalWidth = n * kCardWidth + max(0, n - 1) * kCardSpacing + kOuterPadding * 2
+            width = min(naturalWidth, maxPanelWidth)
+            height = kCardHeight + kOuterPadding * 2
+
+        case .grid:
+            // 先按塞满宽度算至少要几行，再回头平衡列数：30 个标签在
+            // 12 列上限下排成 10×3，而不是 12+12+6 那种最后一行孤零零的样子。
+            // 只有标签多到整屏都放不下时才铺满宽度、纵向滚动。
+            let maxCols = max(1, Int((maxPanelWidth - kOuterPadding * 2 + kCardSpacing)
+                                     / (kCardWidth + kCardSpacing)))
+            let maxRows = max(1, Int((maxPanelHeight - kOuterPadding * 2 + kCardSpacing)
+                                     / (kCardHeight + kCardSpacing)))
+            let neededRows = (count + maxCols - 1) / maxCols
+            let cols = neededRows <= maxRows ? (count + neededRows - 1) / neededRows : maxCols
+            let rows = min(neededRows, maxRows)
+            gridRowStride = cols
+            width = CGFloat(cols) * kCardWidth + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2
+            height = CGFloat(rows) * kCardHeight + CGFloat(rows - 1) * kCardSpacing + kOuterPadding * 2
+        }
+
+        let hosting = NSHostingView(rootView: SwitcherView(model: model, gridColumns: gridRowStride))
 
         let panel = NonActivatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: width, height: height),

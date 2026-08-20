@@ -57,6 +57,8 @@ func stopEventTap() {
 
 /// 按下一步。参数为 true 表示反向（Ctrl+Shift+Tab）。
 private var gOnStep: ((Bool) -> Void)?
+/// 上下方向键按行移动（宫格布局用）。参数为 true 表示向上。
+private var gOnRowStep: ((Bool) -> Void)?
 /// Ctrl 松开，提交本轮切换。
 private var gOnCommit: (() -> Void)?
 
@@ -116,6 +118,16 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
            flags.contains(.maskControl),
            code == Int64(kVK_LeftArrow) || code == Int64(kVK_RightArrow) {
             gOnStep?(code == Int64(kVK_LeftArrow))
+            return nil
+        }
+
+        // 上下方向键：宫格布局按行移动。长条布局下没有动作，但同样要吞 ——
+        // ⌃↑/⌃↓ 是系统调度中心（Mission Control）的快捷键，切换到一半
+        // 整个桌面飞走，比「按了没反应」糟糕得多。
+        if gCycling,
+           flags.contains(.maskControl),
+           code == Int64(kVK_UpArrow) || code == Int64(kVK_DownArrow) {
+            gOnRowStep?(code == Int64(kVK_UpArrow))
             return nil
         }
 
@@ -197,11 +209,13 @@ final class EventTap {
 
     /// - Parameters:
     ///   - onStep: 每次 Ctrl+Tab。参数 true 表示反向。
+    ///   - onRowStep: 切换中按 ⌃↑/⌃↓。参数 true 表示向上（宫格布局按行移动）。
     ///   - onCommit: Ctrl 松开。
     /// - Parameters:
     ///   - onGaveUp: 钩子因反复超时被永久放弃时调用。
     ///   - onPermissionLost: 运行期间辅助功能权限被撤销时调用。
     func start(onStep: @escaping (Bool) -> Void,
+               onRowStep: @escaping (Bool) -> Void,
                onCommit: @escaping () -> Void,
                onGaveUp: @escaping () -> Void,
                onPermissionLost: @escaping () -> Void) throws {
@@ -212,6 +226,7 @@ final class EventTap {
         }
 
         gOnStep = onStep
+        gOnRowStep = onRowStep
         gOnCommit = onCommit
         gOnGaveUp = onGaveUp
         gOnPermissionLost = onPermissionLost

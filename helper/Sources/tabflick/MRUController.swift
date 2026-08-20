@@ -94,7 +94,7 @@ final class IconCache {
 final class MRUController {
 
     private let server: WebSocketServer
-    private let overlay = OverlayPanel()
+    private let overlay: OverlayPanel
     private let icons = IconCache()
 
     /// 网页缩略图缓存（内存 + 磁盘，按 URL 索引）。
@@ -170,8 +170,9 @@ final class MRUController {
         setEventTapReady(connected && tabs.count > 1)
     }
 
-    init(server: WebSocketServer) {
+    init(server: WebSocketServer, settings: AppSettings) {
         self.server = server
+        self.overlay = OverlayPanel(settings: settings)
         thumbnails.warmUp()   // 磁盘上的图先读进来，第一次按 ⌃⇥ 就有画面
         overlay.model.onPick = { [weak self] index in
             self?.pick(index)
@@ -277,6 +278,32 @@ final class MRUController {
         armWatchdog()
 
         log("⌃\(backward ? "⇧" : "")⇥  [\(cursor)/\(snapshot.count - 1)] → \(snapshot[cursor].title.prefix(50))")
+    }
+
+    /// ⌃↑/⌃↓：宫格布局下按行移动游标。
+    ///
+    /// 长条布局（gridRowStride == 0）没有第二行，忽略；单行宫格同理会被
+    /// 下面的越界判断挡住。上下都不回绕 —— 宫格里「从顶行再往上」的预期
+    /// 是停住，不是跳到底部。最后一行不满时，从上一行按 ↓ 落到末尾一张。
+    func stepRow(up: Bool) {
+        guard cycling, snapshot.count > 1 else { return }
+        let cols = overlay.gridRowStride
+        guard cols > 0 else { return }
+
+        let lastRowStart = (snapshot.count - 1) / cols * cols
+        if up {
+            guard cursor >= cols else { return }
+            cursor -= cols
+        } else {
+            guard cursor < lastRowStart else { return }
+            cursor = min(cursor + cols, snapshot.count - 1)
+        }
+
+        overlay.model.setCursor(cursor, source: .keyboard)
+        overlay.requestShow()
+        armWatchdog()
+
+        log("⌃\(up ? "↑" : "↓")  [\(cursor)/\(snapshot.count - 1)] → \(snapshot[cursor].title.prefix(50))")
     }
 
     func commit() {

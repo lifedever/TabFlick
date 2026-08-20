@@ -28,6 +28,23 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// 切换器浮层的排布方式。
+enum SwitcherLayout: String, CaseIterable, Identifiable {
+    /// 横向一行，放不下时左右滚动（默认，和 macOS ⌘⇥ 一个形态）。
+    case strip
+    /// 自动换行的宫格，尽量一屏放下全部标签。
+    case grid
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .strip: return L10n.t("横向长条", "Horizontal strip")
+        case .grid:  return L10n.t("宫格", "Grid")
+        }
+    }
+}
+
 /// app 设置。
 ///
 /// 事实源放在 app 这边而不是扩展的 `chrome.storage`：MV3 的 service worker
@@ -40,6 +57,7 @@ final class AppSettings: ObservableObject {
     private enum Key {
         static let scopeToWindow = "scopeToWindow"
         static let appearance = "appearance"
+        static let switcherLayout = "switcherLayout"
     }
 
     /// 切换器相关配置变化时通知外部（用来推给扩展）。
@@ -79,6 +97,15 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 切换器浮层的排布。纯 helper 侧的展示配置，浮层每次弹出时读取，
+    /// 不需要推给扩展，也就不走 `onChange`。
+    @Published var switcherLayout: SwitcherLayout {
+        didSet {
+            guard oldValue != switcherLayout else { return }
+            UserDefaults.standard.set(switcherLayout.rawValue, forKey: Key.switcherLayout)
+        }
+    }
+
     /// 开机自启。
     ///
     /// 这是**镜像**而非事实源 —— 真值在 `SMAppService`，用户随时可能在系统设置里
@@ -96,6 +123,7 @@ final class AppSettings: ObservableObject {
         defaults.register(defaults: [Key.scopeToWindow: true])
         scopeToWindow = defaults.bool(forKey: Key.scopeToWindow)
         appearance = AppAppearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
+        switcherLayout = SwitcherLayout(rawValue: defaults.string(forKey: Key.switcherLayout) ?? "") ?? .strip
 
         let state = LoginItem.state
         launchAtLogin = state == .enabled
