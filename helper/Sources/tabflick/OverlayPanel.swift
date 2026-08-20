@@ -137,16 +137,14 @@ private struct TabCard: View {
             thumbnail
                 .frame(width: kThumbWidth, height: kThumbHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                // 未选中:极淡 hairline 兜底(纯白网页贴纯白背景时的最后一道分界),
+                // 极淡 hairline 兜底(纯白网页贴纯白背景时的最后一道分界),
                 // 真正把缩略图和背景分开的是下面的投影 —— Arc 就是这个路子。
-                // 选中:accent 描边,Arc 的选中指示就是这圈蓝框 —— 深色下
-                // 灰底高亮几乎不可见,描边是唯一在两种外观下都够醒目的指示。
+                // 选中指示只靠卡片底下的那块灰底(见下方 background),不加描边。
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(selected ? Color.accentColor
-                                               : (scheme == .dark ? Color.white.opacity(0.16)
-                                                                  : Color.primary.opacity(0.07)),
-                                      lineWidth: selected ? 2 : (scheme == .dark ? 1 : 0.5))
+                        .strokeBorder(scheme == .dark ? Color.white.opacity(0.16)
+                                                      : Color.primary.opacity(0.07),
+                                      lineWidth: scheme == .dark ? 1 : 0.5)
                 }
                 // 层次感的主要来源。Arc 的投影比常规 UI 重得多:大半径、低透明,
                 // 糊开一大片而不是勾一条硬边。
