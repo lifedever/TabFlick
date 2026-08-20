@@ -88,7 +88,9 @@ done
 if [[ " $* " == *" --install "* ]]; then
     NATIVE_ARCH="$(uname -m)"
     APP="$BUILD_DIR/$NATIVE_ARCH/TabFlick.app"
-    echo "▸ 安装到 /Applications（$NATIVE_ARCH）…"
+    # ${} 必须写全：$VAR 后紧跟全角括号时 bash 会把多字节字符并进变量名，
+    # set -u 下直接 unbound variable 中止（Coloplast 发布脚本踩过同款）
+    echo "▸ 安装到 /Applications（${NATIVE_ARCH}）…"
     # 先请正在运行的实例退出，否则替换的是一个正被使用的 bundle
     if pgrep -f "/Applications/TabFlick.app/Contents/MacOS/TabFlick" >/dev/null; then
         osascript -e 'tell application "TabFlick" to quit' 2>/dev/null || true
