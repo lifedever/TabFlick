@@ -77,23 +77,24 @@ async function pushMRU() {
     await persistMRU();
   }
 
-  let visible = allTabs;
-  if (settings.scopeToWindow) {
-    const windowId = await currentWindowId();
-    if (windowId === undefined) return;
-    visible = allTabs.filter((t) => t.windowId === windowId);
-  }
-  if (visible.length === 0) return;
+  if (allTabs.length === 0) return;
 
-  const byId = new Map(visible.map((t) => [t.id, t]));
+  // 始终推全量（所有窗口）：helper 的状态栏菜单要列出全部标签。
+  // 「只切换当前窗口」的过滤在 helper 侧做（只作用于切换器），
+  // 这里附上 currentWindowId 供它过滤。settings.scopeToWindow 不再
+  // 影响推送内容。
+  const windowId = await currentWindowId();
+
+  const byId = new Map(allTabs.map((t) => [t.id, t]));
 
   // 已知顺序优先；从没被激活过的标签页（后台打开的、恢复会话带回来的）排在末尾
   const known = mru.filter((id) => byId.has(id));
   const knownSet = new Set(known);
-  const unknown = visible.filter((t) => !knownSet.has(t.id)).map((t) => t.id);
+  const unknown = allTabs.filter((t) => !knownSet.has(t.id)).map((t) => t.id);
 
   send({
     type: "mru",
+    currentWindowId: windowId ?? -1,
     tabs: [...known, ...unknown].map((id) => {
       const t = byId.get(id);
       return {
@@ -287,7 +288,8 @@ async function handleHelperMessage(raw) {
       await pushMRU();
       break;
     case "settings":
-      // app 推来的配置。收下即用，不落盘 —— 事实源在 app。
+      // app 推来的配置。范围过滤已移到 helper 侧，这里收下配置后推一份
+      // 全量列表即可（helper 换了过滤条件后需要新数据立即生效）。
       if (typeof msg.scopeToWindow === "boolean") {
         settings.scopeToWindow = msg.scopeToWindow;
         pushMRU();

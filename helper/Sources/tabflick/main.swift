@@ -106,6 +106,14 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated { updates.check(userInitiated: true) }
         }
 
+        // 状态行的二级菜单：hover 展开全部标签，点击把 Chrome 带到前台并切过去
+        statusItem.tabsProvider = {
+            MainActor.assumeIsolated { controller.menuTabs }
+        }
+        statusItem.onPickTab = { tabId in
+            MainActor.assumeIsolated { controller.activateFromMenu(tabId: tabId) }
+        }
+
         server.onText = { data in
             MainActor.assumeIsolated { controller.handleMessage(data) }
         }

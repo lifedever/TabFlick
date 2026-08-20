@@ -106,7 +106,21 @@ final class MRUController {
     private let thumbnails = ThumbnailStore()
 
     /// 扩展推来的实时 MRU 顺序，最近使用的在前。index 0 就是当前标签页。
+    /// 这是**全量**列表（所有窗口）—— 状态栏菜单直接用它；切换器按设置
+    /// 走 `switcherTabs` 过滤。
     private var tabs: [TabInfo] = []
+
+    /// 扩展随每次 mru 推送附带的「当前窗口」id，-1 表示未知。
+    private var currentWindowId = -1
+
+    /// 切换器实际使用的列表：「只切换当前窗口」开着就按 currentWindowId
+    /// 过滤。过滤结果为空（窗口 id 对不上的异常情况）时退回全量，
+    /// 宁可范围变大也不能让切换器凭空失灵。
+    private var switcherTabs: [TabInfo] {
+        guard settings.scopeToWindow else { return tabs }
+        let scoped = tabs.filter { $0.windowId == currentWindowId }
+        return scoped.isEmpty ? tabs : scoped
+    }
 
     /// 本轮 cycling 的快照，与 `tabs` 隔离。
     private var snapshot: [TabInfo] = []
@@ -174,8 +188,10 @@ final class MRUController {
     }
 
     /// 数据没就绪时让 event tap 放行 Ctrl+Tab，降级到 Chrome 的原生切换。
+    /// 判定基准是切换器视角的列表（按窗口过滤后）：当前窗口只有 1 个标签
+    /// 时即便别的窗口还有标签，⌃⇥ 也该放行给 Chrome。
     private func updateReadiness() {
-        setEventTapReady(connected && tabs.count > 1)
+        setEventTapReady(connected && switcherTabs.count > 1)
     }
 
     init(server: WebSocketServer, settings: AppSettings) {
@@ -269,6 +285,7 @@ final class MRUController {
                   let payload = try? JSONSerialization.data(withJSONObject: raw),
                   let decoded = try? JSONDecoder().decode([TabInfo].self, from: payload) else { return }
             tabs = decoded
+            currentWindowId = (root["currentWindowId"] as? NSNumber)?.intValue ?? -1
             icons.prefetch(decoded.map(\.favIconUrl)) { [weak self] in
                 self?.refreshOverlayImages()
             }
@@ -326,7 +343,7 @@ final class MRUController {
     func step(backward: Bool) {
         if !cycling {
             cycling = true
-            snapshot = tabs
+            snapshot = switcherTabs
             cursor = 0
             closedTabThisRound = false
             overlay.model.tabs = snapshot
@@ -391,6 +408,28 @@ final class MRUController {
 
         let target = snapshot[cursor]
         log("⌃ released → switching to: \(target.title.prefix(50)) (tabId \(target.id))")
+        server.broadcast(["type": "switch", "tabId": target.id])
+    }
+
+    // MARK: - 状态栏子菜单
+
+    /// 子菜单的数据源：当前列表（MRU 顺序，首位即当前标签）+ 已缓存的 favicon。
+    var menuTabs: [(tab: TabInfo, icon: NSImage?)] {
+        tabs.map { ($0, icons.image(for: $0.favIconUrl)?.image) }
+    }
+
+    /// 状态栏子菜单点选：把 Chrome 带到前台并切到该标签。
+    ///
+    /// 和 ⌃⇥ 的 commit 不同，走到这里时 Chrome 多半不在前台：扩展的
+    /// windows.update(focused:) 只管 Chrome 自己窗口之间的焦点，跨 App 的
+    /// 激活必须由 helper 在 macOS 层面做。
+    func activateFromMenu(tabId: Int) {
+        guard let target = tabs.first(where: { $0.id == tabId }) else { return }
+        _ = NSRunningApplication
+            .runningApplications(withBundleIdentifier: ChromeWindowLocator.bundleID)
+            .first?
+            .activate(options: [])
+        log("📎 menu pick → \(target.title.prefix(50)) (tabId \(target.id))")
         server.broadcast(["type": "switch", "tabId": target.id])
     }
 

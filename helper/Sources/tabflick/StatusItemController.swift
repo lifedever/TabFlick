@@ -6,10 +6,20 @@ import AppKit
 /// 可见的部分，也是「它到底还活着吗」的唯一答案。所以状态行必须如实反映
 /// 扩展的连接情况，而不只是摆个图标。
 @MainActor
-final class StatusItemController: NSObject {
+final class StatusItemController: NSObject, NSMenuDelegate {
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+
+    /// 状态行的二级菜单：列出当前所有标签（MRU 顺序），点击直接切过去。
+    /// 内容在每次展开时现取现建（menuNeedsUpdate），不做增量维护 ——
+    /// 标签随时在变，缓存一份反而要操心失效。
+    private let tabsSubmenu = NSMenu()
+
+    /// 子菜单的数据源（MRU 顺序 + 已缓存的 favicon）。
+    var tabsProvider: (() -> [(tab: TabInfo, icon: NSImage?)])?
+    /// 点了子菜单里的某个标签（参数 tab.id）。
+    var onPickTab: ((Int) -> Void)?
 
     /// 打开 app 的设置窗口。
     var onOpenSettings: (() -> Void)?
@@ -25,6 +35,7 @@ final class StatusItemController: NSObject {
 
     func showUnauthorized() {
         unauthorized = true
+        statusLine.submenu = nil
         buildMenu()
         if let button = statusItem.button {
             let image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
@@ -44,6 +55,7 @@ final class StatusItemController: NSObject {
 
     override init() {
         super.init()
+        tabsSubmenu.autoenablesItems = false
         buildMenu()
         render(connected: false, tabCount: 0)
     }
@@ -58,6 +70,11 @@ final class StatusItemController: NSObject {
         statusLine.menu?.removeItem(statusLine)
 
         let menu = NSMenu()
+        // 自动启用会把「子菜单还是空的」的状态行判成禁用（子菜单在展开时才
+        // 填充，父项灰着就永远展不开 —— 鸡生蛋死锁）。改手动管理：状态行
+        // 的可用性跟随子菜单挂载（见 render），其余动作项默认可用。
+        menu.autoenablesItems = false
+        menu.delegate = self
 
         statusLine.isEnabled = false
         menu.addItem(statusLine)
@@ -135,6 +152,70 @@ final class StatusItemController: NSObject {
             ? L10n.t("已连接 · \(tabCount) 个标签", "Connected · \(tabCount) tab\(tabCount == 1 ? "" : "s")")
             : L10n.t("扩展未连接", "Extension not connected")
         statusLine.image = Self.symbol(connected ? "checkmark.circle" : "exclamationmark.circle")
+
+        // 连接且有标签时给状态行挂子菜单，hover 展开标签列表；
+        // 断开时摘掉，恢复成灰色的纯状态行。
+        let showTabs = connected && tabCount > 0 && !unauthorized
+        statusLine.submenu = showTabs ? tabsSubmenu : nil
+        statusLine.isEnabled = showTabs
+    }
+
+    // MARK: - 标签子菜单
+
+    /// 主菜单每次打开时把子菜单填好 —— 不能等子菜单自己展开时再填：
+    /// 空子菜单的父项会被判成禁用，永远展不开（2026-08-20 实测截图）。
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === statusItem.menu, statusLine.submenu != nil else { return }
+        rebuildTabsSubmenu()
+    }
+
+    private func rebuildTabsSubmenu() {
+        let menu = tabsSubmenu
+        menu.removeAllItems()
+        let entries = tabsProvider?() ?? []
+
+        // 多窗口时按窗口分组（组头小灰字），组的顺序 = 窗口在 MRU 里首次
+        // 出现的顺序，当前窗口天然排最前；单窗口不加组头，保持干净。
+        // 注意「只切换当前窗口」开着时扩展只推当前窗口的标签，此时这里
+        // 天然只有一组 —— 菜单范围和状态行的计数、切换器保持一致。
+        var windowOrder: [Int] = []
+        for entry in entries where !windowOrder.contains(entry.tab.windowId) {
+            windowOrder.append(entry.tab.windowId)
+        }
+
+        for (groupIndex, windowId) in windowOrder.enumerated() {
+            let group = entries.filter { $0.tab.windowId == windowId }
+            if windowOrder.count > 1 {
+                menu.addItem(.sectionHeader(title: L10n.t(
+                    "窗口 \(groupIndex + 1) · \(group.count) 个标签",
+                    "Window \(groupIndex + 1) · \(group.count) tab\(group.count == 1 ? "" : "s")")))
+            }
+            for entry in group {
+                let raw = entry.tab.title.isEmpty ? entry.tab.url : entry.tab.title
+                let title = raw.count > 60 ? String(raw.prefix(60)) + "…" : raw
+                let item = NSMenuItem(title: title, action: #selector(pickTab(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = entry.tab.id
+                item.image = Self.faviconIcon(entry.icon)
+                if entry.tab.id == entries.first?.tab.id {
+                    item.state = .on   // MRU 首位就是当前标签
+                }
+                menu.addItem(item)
+            }
+        }
+    }
+
+    /// favicon 统一缩到菜单标准的 16pt；没缓存到的用 globe 占位
+    /// （图标要么全有要么全无）。
+    private static func faviconIcon(_ icon: NSImage?) -> NSImage? {
+        guard let icon, let copy = icon.copy() as? NSImage else { return symbol("globe") }
+        copy.size = NSSize(width: 16, height: 16)
+        return copy
+    }
+
+    @objc private func pickTab(_ sender: NSMenuItem) {
+        guard let tabId = sender.representedObject as? Int else { return }
+        onPickTab?(tabId)
     }
 
     // MARK: - 图标
