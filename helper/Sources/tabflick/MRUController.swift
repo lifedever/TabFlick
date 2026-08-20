@@ -307,7 +307,14 @@ final class MRUController {
     }
 
     private func pushSettings(to id: UUID) {
-        server.send(settings.payload(favoritesFor: effectiveBrowser(of: id)), to: id)
+        // 身份必须用**识别结果**，不能用 effectiveBrowser 的前台猜测：
+        // 猜错一次就是把别家浏览器的置顶恢复进来。未识别 → 发的配置不含
+        // 收藏/待办，识别完成时 handleClientIdentified 会补推完整版。
+        let browser = clients[id]?.browser
+        if browser == nil {
+            log("⏳ settings without favorites → client \(id.uuidString.prefix(8))（身份未识别，待识别后补推）")
+        }
+        server.send(settings.payload(favoritesFor: browser), to: id)
     }
 
     /// 数据没就绪时让 event tap 放行 Ctrl+Tab，降级到 Chrome 的原生切换。
@@ -481,6 +488,13 @@ final class MRUController {
                 log("☆ browser unpin → unfavorite: \(settings.favorites[index].title.prefix(50))")
                 settings.favorites.remove(at: index)
             }
+
+        case "unpinsApplied":
+            // 扩展补做完了离线期间攒下的取消置顶，销账
+            guard let hosts = root["hosts"] as? [String], !hosts.isEmpty else { return }
+            let browser = effectiveBrowser(of: clientID)
+            settings.pendingUnpins.removeAll { $0.browser == browser && hosts.contains($0.host) }
+            log("☆ pending unpins applied [\(browser)]: \(hosts.joined(separator: ", "))")
 
         case "favoriteBound":
             // 扩展核对收藏后上报「这个收藏现在对应哪个活标签」
@@ -676,7 +690,14 @@ final class MRUController {
             guard let host = URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host
                     ?? URL(string: fav.url)?.host else { continue }
             guard let clientID = clients.first(where: { effectiveBrowser(of: $0.key) == fav.browser })?.key else {
-                log("☆ unpin skipped (\(fav.browser) 未连接): \(host)")
+                // 浏览器不在线：记账，等它下次连上补做。不记的话它自己的
+                // 会话恢复会把置顶带回来，收编扫描再把它加回列表（用户实测：
+                // 关着浏览器删掉，重开又回来了）。
+                let pending = PendingUnpin(browser: fav.browser, host: host)
+                if !settings.pendingUnpins.contains(pending) {
+                    settings.pendingUnpins.append(pending)
+                }
+                log("☆ unpin deferred (\(fav.browser) 未连接): \(host)")
                 continue
             }
             log("☆ unpin \(host) [\(fav.browser)]")

@@ -256,6 +256,10 @@ const selfPinned = new Set();
 /// 跳过「用户取消置顶」上报，防止误删同域名的其他置顶记录。
 const selfUnpinned = new Set();
 
+/// helper 下发的「待补做取消置顶」域名：用户在 app 里删掉置顶记录时，
+/// 这个浏览器不在线，命令没能发出来。下一次核对前先补做。
+let pendingUnpinHosts = [];
+
 function hostOf(url) {
   try {
     return new URL(url).host || null;
@@ -272,7 +276,45 @@ async function ensureFavorites() {
     if (settleWait > 0) await new Promise((r) => setTimeout(r, settleWait));
 
     const favorites = settings.favorites ?? [];
-    const allTabs = await chrome.tabs.query({});
+    const allTabsRaw = await chrome.tabs.query({});
+
+    // 先补做离线期间攒下的取消置顶，再做匹配和收编 —— 顺序是关键：
+    // 浏览器自己的会话恢复会把这些置顶带回来，先被收编扫描看到的话，
+    // 它们又会变成收藏（用户实测：关着浏览器删掉置顶，重开又回来了）。
+    const unpinHosts = pendingUnpinHosts;
+    pendingUnpinHosts = [];
+    const suppressed = new Set();
+    if (unpinHosts.length > 0) {
+      // 离线删除的置顶：用户早已表态不要它，重启带回来的这份只是会话
+      // 恢复的残影 —— 直接**关闭**，不留一个孤零零的普通标签。
+      // 唯一例外：它是最后一个标签时关掉会把窗口/浏览器一起带走，
+      // 退化为取消置顶。
+      let remaining = allTabsRaw.length;
+      for (const t of allTabsRaw) {
+        const h = hostOf(t.url ?? "");
+        if (!t.pinned || !h || !unpinHosts.includes(h)) continue;
+        suppressed.add(t.id);
+        try {
+          if (remaining > 1) {
+            await chrome.tabs.remove(t.id);
+            remaining -= 1;
+            send({ type: "log", message: `pending unpin: closed ${h}` });
+          } else {
+            selfUnpinned.add(t.id);
+            await chrome.tabs.update(t.id, { pinned: false });
+            send({ type: "log", message: `pending unpin: unpinned ${h} (last tab)` });
+          }
+        } catch (e) {
+          send({ type: "log", message: `pending unpin failed (${h}): ${e}` });
+        }
+      }
+      // 现场有没有对应标签都要销账：这次机会已经用掉了
+      send({ type: "unpinsApplied", hosts: unpinHosts });
+    }
+
+    // allTabs 是取消置顶之前的快照，里面这些标签还写着 pinned:true ——
+    // 直接摘出去，别让它们参与匹配或收编
+    const allTabs = allTabsRaw.filter((t) => !suppressed.has(t.id));
     // 每个收藏认领一个标签，认领过的不再参与后续匹配。
     // 两遍匹配：先做「最后访问 URL」的精确认领，再做域名兜底 ——
     // 同域名的两个收藏若单遍处理，前一个会把后一个的标签按域名抢走，
@@ -504,6 +546,10 @@ async function handleHelperMessage(raw) {
       }
       if (typeof msg.tabLifetimeHours === "number") {
         settings.tabLifetimeHours = msg.tabLifetimeHours;
+      }
+      // 必须先于 favorites 落位：ensureFavorites 会用到它
+      if (Array.isArray(msg.pendingUnpinHosts)) {
+        pendingUnpinHosts = msg.pendingUnpinHosts;
       }
       if (Array.isArray(msg.favorites)) {
         settings.favorites = msg.favorites;

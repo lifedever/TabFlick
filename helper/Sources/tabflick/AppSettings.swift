@@ -123,6 +123,16 @@ struct HotkeyConfig: Codable, Equatable {
     }
 }
 
+/// 待补做的取消置顶：删除置顶记录时目标浏览器不在线，命令无处可发。
+///
+/// 不记账的话：浏览器下次启动会由**它自己的会话恢复**把置顶标签带回来，
+/// 而扩展的收编扫描分不清「用户新置顶的」和「刚被删掉、没来得及取消的」，
+/// 于是又把它加回列表 —— 用户看到的就是「关着浏览器删掉，重开又回来」。
+struct PendingUnpin: Codable, Equatable {
+    let browser: String
+    let host: String
+}
+
 /// 标签存活时间（Arc 式自动清理）：超过时限未使用的标签由扩展自动关闭。
 enum TabLifetime: String, CaseIterable, Identifiable {
     case forever
@@ -199,6 +209,7 @@ final class AppSettings: ObservableObject {
         static let pinHotkey = "pinHotkey"
         static let switcherHotkey = "switcherHotkey"
         static let knownBrowsers = "knownBrowsers"
+        static let pendingUnpins = "pendingUnpins"
     }
 
     /// 切换器相关配置变化时通知外部（用来推给扩展）。
@@ -290,6 +301,17 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 待补做的取消置顶。目标浏览器下次连上时随设置下发，执行完即清除。
+    /// 不触发 onChange —— 它跟着 settings payload 走，不需要额外推送。
+    @Published var pendingUnpins: [PendingUnpin] {
+        didSet {
+            guard oldValue != pendingUnpins else { return }
+            if let data = try? JSONEncoder().encode(pendingUnpins) {
+                UserDefaults.standard.set(data, forKey: Key.pendingUnpins)
+            }
+        }
+    }
+
     /// 连接过的浏览器（bundle id）。设置页的浏览器状态列表用 ——
     /// 没连着的浏览器我们无从探测，只能记住见过谁。
     @Published var knownBrowsers: [String] {
@@ -374,6 +396,8 @@ final class AppSettings: ObservableObject {
         switcherHotkey = defaults.data(forKey: Key.switcherHotkey)
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
         knownBrowsers = defaults.stringArray(forKey: Key.knownBrowsers) ?? []
+        pendingUnpins = defaults.data(forKey: Key.pendingUnpins)
+            .flatMap { try? JSONDecoder().decode([PendingUnpin].self, from: $0) } ?? []
         favoriteCurrentUrls = defaults.dictionary(forKey: Key.favoriteCurrentUrls) as? [String: String] ?? [:]
         updateCheckFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Key.updateCheckFrequency) ?? "") ?? .daily
 
@@ -401,15 +425,26 @@ final class AppSettings: ObservableObject {
 
     /// 传给某个客户端的配置字典。收藏只下发**它自己浏览器**的那份 ——
     /// 浏览器是隔离主体，别的浏览器的置顶不该在这里恢复。
-    func payload(favoritesFor browser: String) -> [String: Any] {
-        ["type": "settings",
-         "scopeToWindow": scopeToWindow,
-         "tabLifetimeHours": tabLifetime.hours,
-         "favorites": favorites.filter { $0.browser == browser }.map {
-             ["id": $0.id,
-              "url": $0.url,
-              "title": $0.title,
-              "currentUrl": favoriteCurrentUrls[$0.id] ?? $0.url]
-         }]
+    ///
+    /// browser 传 nil（身份还没识别出来）时**不携带**收藏/待办字段：
+    /// 扩展见不到 favorites 键就不会跑核对。按猜测的浏览器下发过一次，
+    /// 结果是把 Chrome 的置顶恢复进了夸克（重载扩展后多出重复置顶）。
+    func payload(favoritesFor browser: String?) -> [String: Any] {
+        var payload: [String: Any] = [
+            "type": "settings",
+            "scopeToWindow": scopeToWindow,
+            "tabLifetimeHours": tabLifetime.hours,
+        ]
+        if let browser {
+            // 离线期间攒下的取消置顶，由扩展在核对前补做
+            payload["pendingUnpinHosts"] = pendingUnpins.filter { $0.browser == browser }.map(\.host)
+            payload["favorites"] = favorites.filter { $0.browser == browser }.map {
+                ["id": $0.id,
+                 "url": $0.url,
+                 "title": $0.title,
+                 "currentUrl": favoriteCurrentUrls[$0.id] ?? $0.url]
+            }
+        }
+        return payload
     }
 }
