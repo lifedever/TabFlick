@@ -21,3 +21,6 @@ tabflick.log
 # 打包产物
 build/
 assets/TabFlick.icns
+
+# 设计草稿(本地预览用,不进仓库)
+mockups/

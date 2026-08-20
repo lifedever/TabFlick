@@ -21,6 +21,11 @@ final class SwitcherModel: ObservableObject {
     /// 鼠标点选了某张卡片。是回调不是状态，所以不加 @Published。
     var onPick: ((Int) -> Void)?
 
+    /// 鼠标悬停到了某张卡片。必须回调给 MRUController 而不是在视图里直接
+    /// setCursor —— 游标的事实源在状态机那边，视图私自改自己的那份会造成
+    /// 「高亮在 A、⌃⇥ 却从 B 继续、松开切到 B」的失步。
+    var onHover: ((Int) -> Void)?
+
     /// 必须走这里改游标：source 要先于 cursor 落定，
     /// 否则 onChange 读到的是上一次的来源。
     func setCursor(_ index: Int, source: CursorSource) {
@@ -85,20 +90,29 @@ private struct SwitcherView: View {
                 }
             }
         }
-        // 浅色:纯材质渲染出来发灰,叠白才有 Arc 那种通透的白。
-        // 深色:**什么都不叠**——玻璃的「透」全靠材质本身,之前无论叠黑
-        // (0.26)还是叠白(0.07)都在把模糊后的背景色盖掉,面板立刻变成
-        // 一块不透明铁板。深色的透感由 .hudWindow 材质负责(见 presentNow)。
+        // 「玻璃·浅调」（mockups/switcher-redesign.html 方案 01）：
+        // 材质（.hudWindow）负责「透」，这里的叠色只负责把色调拉向暖灰/烟灰，
+        // 透明度必须低 —— 样张里的 62%/50% 是叠在纯模糊上的等效值，
+        // 材质自带底色，叠太多两层一乘就成铁板（第一版就是这么翻的车）。
         .background {
-            scheme == .dark ? Color.clear : Color.white.opacity(0.74)
+            scheme == .dark ? Color(red: 64/255, green: 64/255, blue: 72/255).opacity(0.35)
+                            : Color(red: 226/255, green: 223/255, blue: 218/255).opacity(0.25)
         }
-        // 浮层边缘的 hairline。同样要按外观分开给：浅色下需要的是极淡的
-        // 黑描边(用 primary 0.12 会明显发黑)，深色下需要的是较亮的白高光边。
+        // 浮层边缘的 hairline。按外观分开给：浅色极淡黑描边，深色白高光边。
         .overlay {
             RoundedRectangle(cornerRadius: kPanelCornerRadius, style: .continuous)
-                .strokeBorder(scheme == .dark ? Color.white.opacity(0.14)
-                                              : Color.black.opacity(0.055),
+                .strokeBorder(scheme == .dark ? Color.white.opacity(0.16)
+                                              : Color.black.opacity(0.08),
                               lineWidth: 1)
+        }
+        // 玻璃棱边：顶部一道白高光，沿边框向下渐隐。
+        .overlay {
+            RoundedRectangle(cornerRadius: kPanelCornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.12 : 0.42),
+                                            .clear],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1)
         }
     }
 
@@ -109,7 +123,7 @@ private struct SwitcherView: View {
                     icon: model.icons[tab.id],
                     thumb: model.thumbs[tab.id],
                     selected: index == model.cursor,
-                    onHover: { model.setCursor(index, source: .mouse) },
+                    onHover: { model.onHover?(index) },
                     onPick: { model.onPick?(index) })
                 .id(index)
         }
@@ -137,20 +151,27 @@ private struct TabCard: View {
             thumbnail
                 .frame(width: kThumbWidth, height: kThumbHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                // 极淡 hairline 兜底(纯白网页贴纯白背景时的最后一道分界),
-                // 真正把缩略图和背景分开的是下面的投影 —— Arc 就是这个路子。
-                // 选中指示只靠卡片底下的那块灰底(见下方 background),不加描边。
+                // 「玻璃·浅调」的立体卡处理:1px 描边划清边界(0.5px·7% 那条
+                // 发丝线撑不住白卡贴灰面板)。选中 = accent 蓝框(2px)+ 底下灰底,
+                // 两种外观下都醒目。
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(scheme == .dark ? Color.white.opacity(0.16)
-                                                      : Color.primary.opacity(0.07),
-                                      lineWidth: scheme == .dark ? 1 : 0.5)
+                        .strokeBorder(selected ? Color.accentColor
+                                               : (scheme == .dark ? Color.white.opacity(0.14)
+                                                                  : Color.black.opacity(0.12)),
+                                      lineWidth: selected ? 2 : 1)
                 }
-                // 层次感的主要来源。Arc 的投影比常规 UI 重得多:大半径、低透明,
-                // 糊开一大片而不是勾一条硬边。
-                .shadow(color: .black.opacity(selected ? 0.24 : 0.18),
-                        radius: selected ? 7 : 5,
-                        y: selected ? 3.5 : 2.5)
+                // 深色下蓝框和深灰背景对比有限,给选中卡加一圈 accent 光晕,
+                // 玻璃面板上「点亮」的那张一眼可辨。浅色不需要(白底上蓝框已够跳)。
+                .shadow(color: selected && scheme == .dark ? Color.accentColor.opacity(0.45) : .clear,
+                        radius: 7)
+                // 双层阴影:贴地投影勾边缘,环境光晕给层次;选中整体加深一档。
+                .shadow(color: .black.opacity(scheme == .dark ? 0.40 : (selected ? 0.22 : 0.18)),
+                        radius: scheme == .dark ? 5 : (selected ? 4 : 2),
+                        y: scheme == .dark ? 2 : (selected ? 2 : 1))
+                .shadow(color: .black.opacity(scheme == .dark ? 0.30 : (selected ? 0.16 : 0.12)),
+                        radius: scheme == .dark ? 20 : (selected ? 20 : 16),
+                        y: scheme == .dark ? 8 : (selected ? 8 : 6))
 
             HStack(spacing: 5) {
                 Group {
@@ -184,9 +205,13 @@ private struct TabCard: View {
         // 选中态就是一块灰底，没有边框 —— Arc 的做法。
         // 之前那圈 1.5px 蓝框和它整体的克制感格格不入。
         // 未选中完全透明；语义色 primary 自动适配深浅色外观。
+        // 深色选中底从白 18% 提到 28%:未选中缩略图底本身就是白 14%,
+        // 只差 4 个百分点的话整块面板都挤在一条窄灰带里,选中格看不出来。
         .background {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(selected ? Color.primary.opacity(0.16) : Color.clear)
+                .fill(selected ? (scheme == .dark ? Color.white.opacity(0.28)
+                                                  : Color.black.opacity(0.15))
+                               : Color.clear)
         }
         .contentShape(Rectangle())          // 透明区域也要能点，不然只有缩略图可点
         .onTapGesture(perform: onPick)
@@ -231,8 +256,10 @@ private struct TabCard: View {
             // 深色下用**半透明**白 —— 不透明灰块(0.22/0.30 都试过)在玻璃
             // 面板上就是一块铁板,怎么调灰度都糊;半透明让玻璃的模糊背景
             // 透上来,卡片才轻(Arc 的空卡片就是这种「玻璃上的亮一层」)。
+            // 浅色从 textBackgroundColor(纯白,在灰玻璃上和真白页混淆)换成
+            // 略带暖调的近白,和面板灰保持一档亮度差。
             Rectangle().fill(scheme == .dark ? Color.white.opacity(0.14)
-                                             : Color(nsColor: .textBackgroundColor))
+                                             : Color(red: 250/255, green: 249/255, blue: 247/255))
 
             if let thumb {
                 Image(nsImage: thumb)
@@ -341,11 +368,11 @@ final class OverlayPanel {
         guard !model.tabs.isEmpty else { return }
 
         let effect = NSVisualEffectView()
-        // 浅色用 .popover(接近白、干净;.hudWindow 在浅色下发灰)。
-        // 深色用 .hudWindow —— HUD 浮层专用材质,模糊重、透感强,背景色能
-        // 透进面板(系统 ⌘⇥ 切换器就是这个观感);.popover 在深色下太闷。
-        let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        effect.material = isDark ? .hudWindow : .popover
+        // 深浅色都用 .hudWindow —— HUD 浮层专用材质,模糊重、透感强,背景色
+        // 能透进面板(系统 ⌘⇥ 切换器就是这个观感)。浅色曾用 .popover,
+        // 但它本身近乎不透明,再叠任何颜色都是铁板;「玻璃感」的前提是
+        // 材质这一层就得透,灰调只能靠上面的轻微叠色给。
+        effect.material = .hudWindow
         effect.blendingMode = .behindWindow
         effect.state = .active
         // 圆角必须走 maskImage,不能用 layer.cornerRadius —— 后者裁不住

@@ -177,6 +177,22 @@ final class MRUController {
         overlay.model.onPick = { [weak self] index in
             self?.pick(index)
         }
+        overlay.model.onHover = { [weak self] index in
+            self?.hover(index)
+        }
+    }
+
+    /// 鼠标悬停：把状态机游标移过去，再回写视觉高亮。
+    ///
+    /// 游标只有这一份（状态机的），视觉是它的投影 —— 之前 hover 直接改
+    /// 视图模型那份，悬停后 ⌃⇥ 从旧位置继续、松开 Ctrl 切到的也是旧游标
+    /// 那张（高亮和实际切换对不上）。
+    /// source 必须是 .mouse：hover 触发自动滚动会形成正反馈环（见 SwitcherView）。
+    private func hover(_ index: Int) {
+        guard cycling, snapshot.indices.contains(index), index != cursor else { return }
+        cursor = index
+        overlay.model.setCursor(index, source: .mouse)
+        armWatchdog()
     }
 
     /// 鼠标点选某张卡片：把游标直接定位过去并立即提交。
