@@ -45,6 +45,32 @@ enum SwitcherLayout: String, CaseIterable, Identifiable {
     }
 }
 
+/// 自动检查更新的频率。
+enum UpdateCheckFrequency: String, CaseIterable, Identifiable {
+    case daily
+    case weekly
+    case never
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .daily:  return L10n.t("每天", "Daily")
+        case .weekly: return L10n.t("每周", "Weekly")
+        case .never:  return L10n.t("从不", "Never")
+        }
+    }
+
+    /// nil 表示不自动检查。
+    var interval: TimeInterval? {
+        switch self {
+        case .daily:  return 86_400
+        case .weekly: return 604_800
+        case .never:  return nil
+        }
+    }
+}
+
 /// app 设置。
 ///
 /// 事实源放在 app 这边而不是扩展的 `chrome.storage`：MV3 的 service worker
@@ -58,6 +84,7 @@ final class AppSettings: ObservableObject {
         static let scopeToWindow = "scopeToWindow"
         static let appearance = "appearance"
         static let switcherLayout = "switcherLayout"
+        static let updateCheckFrequency = "updateCheckFrequency"
     }
 
     /// 切换器相关配置变化时通知外部（用来推给扩展）。
@@ -106,6 +133,14 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 自动检查更新的频率。UpdateChecker 到点对账时现读，改动立即生效。
+    @Published var updateCheckFrequency: UpdateCheckFrequency {
+        didSet {
+            guard oldValue != updateCheckFrequency else { return }
+            UserDefaults.standard.set(updateCheckFrequency.rawValue, forKey: Key.updateCheckFrequency)
+        }
+    }
+
     /// 开机自启。
     ///
     /// 这是**镜像**而非事实源 —— 真值在 `SMAppService`，用户随时可能在系统设置里
@@ -124,6 +159,7 @@ final class AppSettings: ObservableObject {
         scopeToWindow = defaults.bool(forKey: Key.scopeToWindow)
         appearance = AppAppearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
         switcherLayout = SwitcherLayout(rawValue: defaults.string(forKey: Key.switcherLayout) ?? "") ?? .strip
+        updateCheckFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Key.updateCheckFrequency) ?? "") ?? .daily
 
         let state = LoginItem.state
         launchAtLogin = state == .enabled

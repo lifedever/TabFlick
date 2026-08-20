@@ -38,6 +38,21 @@ private struct GeneralPane: View {
                     }
                 }
             }
+
+            Section {
+                Picker(L10n.t("自动检查更新", "Check for updates"), selection: $settings.updateCheckFrequency) {
+                    ForEach(UpdateCheckFrequency.allCases) { freq in
+                        Text(freq.label).tag(freq)
+                    }
+                }
+
+                Text(L10n.t(
+                    "发现新版本时会提示，确认后自动下载安装并重新启动。",
+                    "You'll be notified when an update is found; it downloads, installs, and relaunches automatically after you confirm."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .frame(width: 460)
@@ -138,11 +153,13 @@ private struct AboutPane: View {
                 } label: {
                     if updates.status == .checking {
                         Text(L10n.t("检查中…", "Checking…"))
+                    } else if updates.isDownloading {
+                        Text(L10n.t("下载中…", "Downloading…"))
                     } else {
                         Text(L10n.t("检查更新", "Check for Updates"))
                     }
                 }
-                .disabled(updates.status == .checking)
+                .disabled(updates.status == .checking || updates.isDownloading)
 
                 Button {
                     NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/sponsor/")!)

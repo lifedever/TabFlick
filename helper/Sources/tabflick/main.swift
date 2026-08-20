@@ -67,6 +67,10 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated { settingsWindow.show() }
         })
 
+        // 自动检查更新：频率现读设置，到点才真的查
+        updates.frequency = { MainActor.assumeIsolated { settings.updateCheckFrequency } }
+        updates.startPeriodicChecks()
+
         // 设置的事实源在 app：改动后立刻推给扩展，扩展只执行不持久化。
         settings.onChange = { [weak controller] in
             MainActor.assumeIsolated { controller?.pushSettings(settings.payload) }

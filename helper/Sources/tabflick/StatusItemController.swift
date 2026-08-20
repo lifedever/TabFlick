@@ -35,6 +35,7 @@ final class StatusItemController: NSObject {
         }
         statusLine.title = L10n.t("未授权 —— 需要「辅助功能」权限",
                                   "Not authorized — Accessibility permission required")
+        statusLine.image = Self.symbol("exclamationmark.triangle")
     }
     var onCheckForUpdates: (() -> Void)?
 
@@ -62,16 +63,20 @@ final class StatusItemController: NSObject {
         menu.addItem(statusLine)
         menu.addItem(.separator())
 
+        // 菜单项图标要么全有要么全无 —— 系统会给个别标准项（如「设置」）
+        // 自动配图标，其余项没有就参差不齐，所以统一显式给全。
         if unauthorized {
             let grant = NSMenuItem(title: L10n.t("授权 TabFlick…", "Authorize TabFlick…"),
                                    action: #selector(requestAuthorization), keyEquivalent: "")
             grant.target = self
+            grant.image = Self.symbol("lock.shield")
             menu.addItem(grant)
             menu.addItem(.separator())
 
             let quitOnly = NSMenuItem(title: L10n.t("退出 TabFlick", "Quit TabFlick"),
                                       action: #selector(quit), keyEquivalent: "q")
             quitOnly.target = self
+            quitOnly.image = Self.symbol("power")
             menu.addItem(quitOnly)
             statusItem.menu = menu
             return
@@ -81,25 +86,33 @@ final class StatusItemController: NSObject {
                                   action: #selector(openSettings),
                                   keyEquivalent: ",")
         settings.target = self
+        settings.image = Self.symbol("gearshape")
         menu.addItem(settings)
 
         menu.addItem(.separator())
 
         let logs = NSMenuItem(title: L10n.t("打开日志文件", "Open Log File"), action: #selector(openLog), keyEquivalent: "")
         logs.target = self
+        logs.image = Self.symbol("doc.text")
         menu.addItem(logs)
 
         let updates = NSMenuItem(title: L10n.t("检查更新…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
+        updates.image = Self.symbol("arrow.triangle.2.circlepath")
         menu.addItem(updates)
 
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: L10n.t("退出 TabFlick", "Quit TabFlick"), action: #selector(quit), keyEquivalent: "q")
         quit.target = self
+        quit.image = Self.symbol("power")
         menu.addItem(quit)
 
         statusItem.menu = menu
+    }
+
+    private static func symbol(_ name: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)
     }
 
     /// 语言变了要重建菜单：菜单项标题是创建时写死的，不会自己更新。
@@ -121,6 +134,7 @@ final class StatusItemController: NSObject {
         statusLine.title = connected
             ? L10n.t("已连接 · \(tabCount) 个标签", "Connected · \(tabCount) tab\(tabCount == 1 ? "" : "s")")
             : L10n.t("扩展未连接", "Extension not connected")
+        statusLine.image = Self.symbol(connected ? "checkmark.circle" : "exclamationmark.circle")
     }
 
     // MARK: - 图标
