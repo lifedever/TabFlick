@@ -8,6 +8,11 @@ struct TabInfo: Decodable {
     let title: String
     let url: String
     let favIconUrl: String
+    /// 最近一次被使用的时刻（ms epoch，Chrome 121+ 的 tab.lastAccessed）。
+    /// 旧版扩展或旧版 Chrome 拿不到时为 nil/0，界面上就不显示时间。
+    let lastAccessed: Double?
+    /// 是否置顶。切换器卡片的置顶标记用；旧版扩展没有该字段。
+    let pinned: Bool?
 }
 
 /// 一枚 favicon 及其视觉属性。
@@ -112,6 +117,11 @@ final class MRUController {
 
     /// 扩展随每次 mru 推送附带的「当前窗口」id，-1 表示未知。
     private var currentWindowId = -1
+
+    /// 收藏 → 活标签的绑定（favorite.id → tabId）。
+    /// 置顶标签会在站内外漂移，域名判定随时失真；绑定是唯一稳定的对应。
+    /// tabId 随浏览器会话失效，绑定死了就等下一次 favoriteBound 重建。
+    private var favoriteTabBindings: [String: Int] = [:]
 
     /// 切换器实际使用的列表：「只切换当前窗口」开着就按 currentWindowId
     /// 过滤。过滤结果为空（窗口 id 对不上的异常情况）时退回全量，
@@ -286,6 +296,7 @@ final class MRUController {
                   let decoded = try? JSONDecoder().decode([TabInfo].self, from: payload) else { return }
             tabs = decoded
             currentWindowId = (root["currentWindowId"] as? NSNumber)?.intValue ?? -1
+            syncFavoriteBindings()
             icons.prefetch(decoded.map(\.favIconUrl)) { [weak self] in
                 self?.refreshOverlayImages()
             }
@@ -301,6 +312,58 @@ final class MRUController {
                   let data = Data(base64Encoded: base64) else { return }
             thumbnails.store(data, for: url)
             refreshOverlayImages()
+
+        case "pinnedTab":
+            // 浏览器里被置顶的标签（用户手动置顶，或程序离线期间置顶、
+            // 连接后由 ensureFavorites 收编上报）。置顶 = 收藏。
+            // 每条记录有独立 id，同域名甚至同 URL 都允许多条 ——
+            // 列表如实镜像浏览器的置顶状态。自家 ensure 补的置顶由扩展侧
+            // selfPinned 标记拦下，不会走到这里。
+            guard let tabId = (root["tabId"] as? NSNumber)?.intValue,
+                  let url = root["url"] as? String, url.hasPrefix("http"),
+                  let host = URL(string: url)?.host else { return }
+            // 已绑定这个标签的收藏 → 无事
+            if settings.favorites.contains(where: { favoriteTabBindings[$0.id] == tabId }) {
+                return
+            }
+            // 无活绑定、且最后访问/原始 URL 与之精确相同的收藏 → 认领
+            // （浏览器重启后的收编落在这里）
+            if let orphan = settings.favorites.first(where: { fav in
+                favoriteTabBindings[fav.id] == nil
+                    && (settings.favoriteCurrentUrls[fav.id] ?? fav.url) == url
+            }) {
+                favoriteTabBindings[orphan.id] = tabId
+                return
+            }
+            let title = root["title"] as? String ?? ""
+            log("★ browser pin → favorite: \(title.prefix(50)) (\(host))")
+            let fav = FavoriteTab(url: url, title: title,
+                                  favIconUrl: root["favIconUrl"] as? String)
+            favoriteTabBindings[fav.id] = tabId
+            settings.favorites.append(fav)
+
+        case "unpinned":
+            // 用户在浏览器里主动取消了某个标签的置顶（⌘W 关闭不会来这条）。
+            // 收藏的语义就是「常驻置顶」，置顶被主动撤掉 = 用户不想要了，
+            // 收藏一并移除。绑定命中优先 —— 漂移后按域名已经判不准了。
+            let tabId = (root["tabId"] as? NSNumber)?.intValue
+            let host = root["host"] as? String
+            let index = settings.favorites.firstIndex { fav in
+                if let tabId, favoriteTabBindings[fav.id] == tabId { return true }
+                guard let host, !host.isEmpty else { return false }
+                return URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
+                    || URL(string: fav.url)?.host == host
+            }
+            if let index {
+                log("☆ browser unpin → unfavorite: \(settings.favorites[index].title.prefix(50))")
+                settings.favorites.remove(at: index)
+            }
+
+        case "favoriteBound":
+            // 扩展核对收藏后上报「这个收藏现在对应哪个活标签」
+            guard let favId = root["id"] as? String,
+                  let tabId = (root["tabId"] as? NSNumber)?.intValue else { return }
+            favoriteTabBindings[favId] = tabId
 
         case "requestSettings":
             // 扩展（重）连上了，向我们要一份当前配置
@@ -409,6 +472,75 @@ final class MRUController {
         let target = snapshot[cursor]
         log("⌃ released → switching to: \(target.title.prefix(50)) (tabId \(target.id))")
         server.broadcast(["type": "switch", "tabId": target.id])
+    }
+
+    // MARK: - 收藏标签
+
+    /// 当前标签（MRU 首位）。状态栏「收藏当前标签」用。
+    var currentTab: TabInfo? { tabs.first }
+
+    /// 当前标签是否已收藏（nil = 没有当前标签）。绑定优先 ——
+    /// 置顶标签可能已漂到别的域名，光看域名会误判成「未收藏」。
+    var currentTabFavorited: Bool? {
+        guard let tab = tabs.first else { return nil }
+        if favoriteTabBindings.values.contains(tab.id) { return true }
+        guard let host = URL(string: tab.url)?.host else { return nil }
+        return settings.favorites.contains { fav in
+            URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
+                || URL(string: fav.url)?.host == host
+        }
+    }
+
+    /// 收藏被移除后撤销对应域名的置顶。取消收藏 = 恢复普通标签。
+    /// 域名按「最后访问」取 —— 置顶标签可能已漂离原始域名。
+    func unpinRemovedFavorites(_ removed: [FavoriteTab]) {
+        let hosts = removed.compactMap {
+            URL(string: settings.favoriteCurrentUrls[$0.id] ?? $0.url)?.host
+                ?? URL(string: $0.url)?.host
+        }
+        removed.forEach { favoriteTabBindings.removeValue(forKey: $0.id) }
+        guard !hosts.isEmpty else { return }
+        log("☆ unpin hosts: \(hosts.joined(separator: ", "))")
+        server.broadcast(["type": "unpin", "hosts": hosts])
+    }
+
+    /// 收藏 / 取消收藏当前标签。
+    func toggleFavoriteCurrentTab() {
+        guard let current = tabs.first else { return }
+
+        // 取消：绑定命中优先（漂移后域名对不上，绑定还在）
+        if let bound = favoriteTabBindings.first(where: { $0.value == current.id }),
+           let index = settings.favorites.firstIndex(where: { $0.id == bound.key }) {
+            log("☆ unfavorite: \(settings.favorites[index].title.prefix(50))")
+            settings.favorites.remove(at: index)
+            return
+        }
+        guard let host = URL(string: current.url)?.host else { return }
+        if let index = settings.favorites.firstIndex(where: { URL(string: $0.url)?.host == host }) {
+            log("☆ unfavorite: \(settings.favorites[index].title.prefix(50))")
+            settings.favorites.remove(at: index)
+        } else {
+            log("★ favorite: \(current.title.prefix(50)) (\(host))")
+            let fav = FavoriteTab(url: current.url, title: current.title,
+                                  favIconUrl: current.favIconUrl)
+            favoriteTabBindings[fav.id] = current.id
+            settings.favorites.append(fav)
+        }
+        // favorites 的 didSet → onChange → 推给扩展，扩展立即核对补齐
+    }
+
+    /// 每次 MRU 推送后维护绑定：把绑定标签的最新 URL 记为「最后访问」；
+    /// 标签没了就解绑（tabId 不复用，失效即永久失效）。
+    private func syncFavoriteBindings() {
+        for (favId, tabId) in favoriteTabBindings {
+            guard let tab = tabs.first(where: { $0.id == tabId }) else {
+                favoriteTabBindings.removeValue(forKey: favId)
+                continue
+            }
+            if tab.url.hasPrefix("http"), settings.favoriteCurrentUrls[favId] != tab.url {
+                settings.favoriteCurrentUrls[favId] = tab.url
+            }
+        }
     }
 
     // MARK: - 状态栏子菜单

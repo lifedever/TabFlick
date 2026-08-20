@@ -55,6 +55,19 @@ func stopEventTap() {
     gReady = false
 }
 
+/// 用户自定义的「置顶/取消置顶当前标签」快捷键。-1 = 未设置（不吞任何键）。
+/// keyCode 来自用户录制而非硬编码，flags 只含 ⌘⌃⌥⇧ 四位、要求精确匹配。
+private var gPinHotkeyCode: Int64 = -1
+private var gPinHotkeyFlags: CGEventFlags = []
+private var gOnPinHotkey: (() -> Void)?
+
+/// 快捷键设置变化时由主线程调用（与其他文件级状态一样，读写都在主线程）。
+func configurePinHotkey(keyCode: Int64?, flags: CGEventFlags, handler: (() -> Void)?) {
+    gPinHotkeyCode = keyCode ?? -1
+    gPinHotkeyFlags = flags
+    gOnPinHotkey = handler
+}
+
 /// 按下一步。参数为 true 表示反向（Ctrl+Shift+Tab）。
 private var gOnStep: ((Bool) -> Void)?
 /// 上下方向键按行移动（宫格布局用）。参数为 true 表示向上。
@@ -128,6 +141,16 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
            flags.contains(.maskControl),
            code == Int64(kVK_UpArrow) || code == Int64(kVK_DownArrow) {
             gOnRowStep?(code == Int64(kVK_UpArrow))
+            return nil
+        }
+
+        // 用户自定义的置顶快捷键。未设置时 gPinHotkeyCode 为 -1，永不命中；
+        // 只在 Chrome 前台吞键，其余场合原样放行。
+        if gPinHotkeyCode >= 0,
+           code == gPinHotkeyCode,
+           gFrontIsChrome,
+           flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]) == gPinHotkeyFlags {
+            gOnPinHotkey?()
             return nil
         }
 

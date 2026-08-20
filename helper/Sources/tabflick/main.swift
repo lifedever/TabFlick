@@ -79,6 +79,10 @@ MainActor.assumeIsolated {
         controller.onNeedSettingsPush = { [weak controller] in
             MainActor.assumeIsolated { controller?.pushSettings(settings.payload) }
         }
+        // 取消收藏（菜单或设置页删除）要连带撤销置顶
+        settings.onFavoritesRemoved = { [weak controller] removed in
+            MainActor.assumeIsolated { controller?.unpinRemovedFavorites(removed) }
+        }
         // 语言是渲染时取的，改完要把已经建好的界面重建一遍
         settings.onLanguageChange = {
             MainActor.assumeIsolated {
@@ -113,6 +117,35 @@ MainActor.assumeIsolated {
         statusItem.onPickTab = { tabId in
             MainActor.assumeIsolated { controller.activateFromMenu(tabId: tabId) }
         }
+
+        // 收藏当前标签（绑定优先 + 域名兜底的判定在 MRUController）
+        statusItem.favoriteState = {
+            MainActor.assumeIsolated { controller.currentTabFavorited }
+        }
+        statusItem.onToggleFavorite = {
+            MainActor.assumeIsolated { controller.toggleFavoriteCurrentTab() }
+        }
+
+        // 置顶快捷键：设置变化时重挂 event tap 匹配；菜单项右侧原生显示
+        statusItem.pinHotkeyProvider = {
+            MainActor.assumeIsolated {
+                guard let hotkey = settings.pinHotkey else { return nil }
+                return (hotkey.character, hotkey.modifierFlags)
+            }
+        }
+        let applyPinHotkey = {
+            MainActor.assumeIsolated {
+                if let hotkey = settings.pinHotkey {
+                    configurePinHotkey(keyCode: Int64(hotkey.keyCode), flags: hotkey.cgFlags) {
+                        MainActor.assumeIsolated { controller.toggleFavoriteCurrentTab() }
+                    }
+                } else {
+                    configurePinHotkey(keyCode: nil, flags: [], handler: nil)
+                }
+            }
+        }
+        settings.onHotkeyChange = applyPinHotkey
+        applyPinHotkey()
 
         server.onText = { data in
             MainActor.assumeIsolated { controller.handleMessage(data) }

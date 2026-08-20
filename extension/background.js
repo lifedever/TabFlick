@@ -19,6 +19,12 @@ const STORAGE_KEY = "mru";
 /// 所以 service worker 被回收也不会导致两边不一致。
 const DEFAULT_SETTINGS = {
   scopeToWindow: true,
+  // 标签存活小时数，0 = 不清理。超时未使用的标签由 sweepExpiredTabs 关闭。
+  // 默认 0：service worker 重启后 helper 不在线时就是这份默认值，
+  // 清理这种破坏性动作的失败方向必须是「不动手」。
+  tabLifetimeHours: 0,
+  // 收藏的标签 [{url, title}]，连上时核对补齐（ensureFavorites）。
+  favorites: [],
 };
 
 let connected = false;   // offscreen 报上来的连接状态
@@ -103,6 +109,11 @@ async function pushMRU() {
         title: t.title ?? "",
         url: t.url ?? "",
         favIconUrl: t.favIconUrl ?? "",
+        // 最近一次被使用的时刻（ms epoch，Chrome 121+）。状态栏菜单的
+        // 「X 分钟前」和存活时间判定都以它为准。
+        lastAccessed: typeof t.lastAccessed === "number" ? t.lastAccessed : 0,
+        // 置顶态，切换器卡片的星标用
+        pinned: t.pinned ?? false,
       };
     }),
   });
@@ -206,6 +217,168 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+// ── 收藏标签（常驻置顶） ─────────────────────────────────────────────────
+//
+// app 侧维护收藏列表（url + title），每次收到配置就核对一遍：
+//   · 该域名一个标签都没有 → 置顶打开（不抢焦点）
+//   · 有标签但都没置顶   → 把第一个补成置顶
+// 按域名识别：webapp 在站内不断跳转，按完整 URL 匹配会反复开重复标签。
+// 只在收到配置时核对（连接建立 / 收藏变更），不做周期性强制 ——
+// 用户会话中手动关掉收藏标签是明确意图，等浏览器下次重启再恢复。
+//
+// 解决的痛点：Chrome 的置顶是窗口级的，关掉带置顶的窗口再退出浏览器，
+// 下次启动置顶标签就没了。收藏列表存在 app 侧，跟浏览器会话完全解耦。
+
+let ensuringFavorites = false;
+
+/// 浏览器启动后的安定期：会话恢复（含置顶标签）需要一点时间，核对跑得
+/// 太早会「没看到恢复中的置顶 → 再开一个」。onStartup 时设置截止时间，
+/// 核对开始前先等到点。
+let startupSettleUntil = 0;
+
+/// 我们自己置顶的 tabId：pinned:true 事件里跳过上报，防止「ensure 补置顶
+/// → 事件上报 → helper 又添一条」的环。去重不再按域名（同域名允许多个
+/// 置顶），这层标记是唯一的防环手段。
+const selfPinned = new Set();
+
+/// 我们自己取消置顶的 tabId（helper 的 unpin 命令）：pinned:false 事件里
+/// 跳过「用户取消置顶」上报，防止误删同域名的其他置顶记录。
+const selfUnpinned = new Set();
+
+function hostOf(url) {
+  try {
+    return new URL(url).host || null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureFavorites() {
+  if (ensuringFavorites) return;
+  ensuringFavorites = true;
+  try {
+    const settleWait = startupSettleUntil - Date.now();
+    if (settleWait > 0) await new Promise((r) => setTimeout(r, settleWait));
+
+    const favorites = settings.favorites ?? [];
+    const allTabs = await chrome.tabs.query({});
+    // 每个收藏认领一个标签，认领过的不再参与后续匹配。
+    // 两遍匹配：先做「最后访问 URL」的精确认领，再做域名兜底 ——
+    // 同域名的两个收藏若单遍处理，前一个会把后一个的标签按域名抢走，
+    // 后一个又去新开一个重复置顶。
+    const claimed = new Set();
+    const plan = favorites.map((fav) => {
+      const targetUrl = fav.currentUrl || fav.url;
+      const exact = allTabs.find((t) => !claimed.has(t.id) && (t.url ?? "") === targetUrl);
+      if (exact) claimed.add(exact.id);
+      return { fav, match: exact ?? null };
+    });
+    for (const entry of plan) {
+      if (entry.match) continue;
+      // 恢复以「最后访问」为准（标签位语义：把上次的会话带回来）。
+      // 收藏的常常是登录页，登录后重定向到别的域名 —— 只认原始域名
+      // 会「找不到 → 再开一个」，每次重开窗口堆一个重复置顶。
+      const targetUrl = entry.fav.currentUrl || entry.fav.url;
+      const curHost = hostOf(targetUrl);
+      const origHost = hostOf(entry.fav.url);
+      const free = (t) => !claimed.has(t.id);
+      entry.match =
+        (curHost ? allTabs.find((t) => free(t) && hostOf(t.url ?? "") === curHost) : null) ??
+        (origHost ? allTabs.find((t) => free(t) && hostOf(t.url ?? "") === origHost) : null);
+      if (entry.match) claimed.add(entry.match.id);
+    }
+    // 第三遍：仍没着落的收藏 ↔ 现场没被认领的**置顶**标签，按序配对。
+    // 重启恢复的置顶会因登录重定向漂到别的域名（signin…?callback=flow…），
+    // 精确/域名两遍全落空 —— 但一个不认识的置顶标签存在，本身就说明它是
+    // 某个收藏的化身，直接收编绑定，绝不再开新的（实测：不配对就双置顶）。
+    for (const entry of plan) {
+      if (entry.match) continue;
+      const stray = allTabs.find((t) => t.pinned && !claimed.has(t.id));
+      if (stray) {
+        claimed.add(stray.id);
+        entry.match = stray;
+      }
+    }
+
+    for (const { fav, match } of plan) {
+      const targetUrl = fav.currentUrl || fav.url;
+      try {
+        if (match) {
+          if (!match.pinned) {
+            selfPinned.add(match.id);
+            await chrome.tabs.update(match.id, { pinned: true });
+            send({ type: "log", message: `favorite re-pinned: ${hostOf(match.url ?? "") ?? "?"}` });
+          }
+          send({ type: "favoriteBound", id: fav.id, tabId: match.id });
+        } else {
+          const created = await chrome.tabs.create({ url: targetUrl, pinned: true, active: false });
+          selfPinned.add(created.id);
+          claimed.add(created.id);
+          send({ type: "favoriteBound", id: fav.id, tabId: created.id });
+          send({ type: "log", message: `favorite restored: ${targetUrl}` });
+        }
+      } catch (e) {
+        send({ type: "log", message: `favorite ensure failed (${fav.url}): ${e}` });
+      }
+    }
+
+    // 收编：列表之外的置顶标签（程序没运行时用户置顶的）也报给 helper
+    // 记为收藏 —— 置顶 = 收藏，双向同步。
+    for (const t of allTabs) {
+      if (t.pinned && !claimed.has(t.id) && (t.url ?? "").startsWith("http")) {
+        send({ type: "pinnedTab", tabId: t.id, url: t.url, title: t.title ?? "",
+               favIconUrl: t.favIconUrl ?? "" });
+      }
+    }
+  } finally {
+    ensuringFavorites = false;
+  }
+}
+
+// ── 标签存活时间（Arc 式自动清理） ──────────────────────────────────────
+//
+// 超过设定时限未被使用的标签自动关闭。判定用 tab.lastAccessed
+// （最近一次激活的时刻，Chrome 121+；拿不到该字段的标签一律不动）。
+//
+// 保护名单（宁可漏清不可错杀）：
+//   · active  —— 各窗口的当前标签。附带效果：每个窗口至少保住一个标签，
+//                绝不会把窗口/浏览器整个关掉
+//   · pinned  —— 用户固定 = 明确要留
+//   · audible —— 正在出声（后台放歌算「在用」）
+//   · 分组内的标签 —— 进了 tab group 是刻意整理过的
+// 另外只在连着 helper 时清理：TabFlick 没在运行就不该动用户的标签。
+
+const LIFETIME_ALARM = "tabflick-lifetime";
+const LIFETIME_SWEEP_MINUTES = 5;
+
+async function sweepExpiredTabs() {
+  const hours = settings.tabLifetimeHours;
+  if (!hours || !connected) return;
+
+  const cutoff = Date.now() - hours * 3600 * 1000;
+  const allTabs = await chrome.tabs.query({});
+  const victims = allTabs.filter((t) =>
+    !t.active && !t.pinned && !t.audible &&
+    (t.groupId === undefined || t.groupId === -1) &&
+    typeof t.lastAccessed === "number" && t.lastAccessed > 0 &&
+    t.lastAccessed < cutoff
+  );
+  if (victims.length === 0) return;
+
+  // 清理留痕：哪些标签、多久没用，都写进 helper 日志，
+  // 「我标签怎么没了」必须有处可查
+  const detail = victims
+    .map((t) => `${(t.title || t.url || "?").slice(0, 40)} (idle ${Math.round((Date.now() - t.lastAccessed) / 3600000)}h)`)
+    .join("; ");
+  send({ type: "log", message: `lifetime sweep: closing ${victims.length} tab(s) > ${hours}h idle: ${detail}` });
+
+  try {
+    await chrome.tabs.remove(victims.map((t) => t.id));
+  } catch (e) {
+    send({ type: "log", message: `lifetime sweep failed: ${e}` });
+  }
+}
+
 // ── 执行切换 ────────────────────────────────────────────────────────────
 
 async function activateTab(tabId) {
@@ -268,6 +441,25 @@ async function handleHelperMessage(raw) {
     case "switch":
       if (typeof msg.tabId === "number") await activateTab(msg.tabId);
       break;
+    case "unpin":
+      // 取消收藏：撤销该域名下所有标签的置顶（收藏核对只补不撤，
+      // 撤销必须由 helper 明确指令）
+      if (Array.isArray(msg.hosts)) {
+        const pinned = await chrome.tabs.query({ pinned: true });
+        for (const t of pinned) {
+          const h = hostOf(t.url ?? "");
+          if (h && msg.hosts.includes(h)) {
+            try {
+              selfUnpinned.add(t.id);
+              await chrome.tabs.update(t.id, { pinned: false });
+            } catch (e) {
+              selfUnpinned.delete(t.id);
+              send({ type: "log", message: `unpin failed (${h}): ${e}` });
+            }
+          }
+        }
+      }
+      break;
     case "close":
       // 浮层卡片上的 ✕。关闭成功会触发 onRemoved → forgetTab → pushMRU，
       // 不用在这里重复维护 MRU。
@@ -294,11 +486,23 @@ async function handleHelperMessage(raw) {
         settings.scopeToWindow = msg.scopeToWindow;
         pushMRU();
       }
+      if (typeof msg.tabLifetimeHours === "number") {
+        settings.tabLifetimeHours = msg.tabLifetimeHours;
+      }
+      if (Array.isArray(msg.favorites)) {
+        settings.favorites = msg.favorites;
+        ensureFavorites();
+      }
       break;
   }
 }
 
-// offscreen 转发上来的连接事件与数据
+// offscreen 转发上来的连接事件与数据。
+// helper 的消息必须**串行**处理：发送顺序就是语义顺序（先 unpin 后推新
+// 配置），async 处理器并发交错会把顺序打乱 —— 收编扫描在置顶撤掉之前
+// 跑到，就会把刚取消的置顶又加回列表（取消置顶死循环，实测）。
+let helperQueue = Promise.resolve();
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.target !== "sw") return;
 
@@ -319,7 +523,9 @@ chrome.runtime.onMessage.addListener((message) => {
       console.log("[TabFlick] 连接断开");
       break;
     case "ws-message":
-      handleHelperMessage(message.data);
+      helperQueue = helperQueue
+        .then(() => handleHelperMessage(message.data))
+        .catch(() => {});
       break;
   }
 });
@@ -346,8 +552,49 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 // 标题 / favicon 变了要让 overlay 显示最新的。走节流版：这是全场最吵的事件。
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.title || changeInfo.favIconUrl) schedulePush();
+  // 置顶状态变化也要刷新推送 —— 切换器卡片的星标跟着它走
+  if (changeInfo.pinned !== undefined) schedulePush();
+
+  // 用户主动取消置顶（⌘W 关闭走的是 onRemoved，不会触发这里）。
+  // 是否命中收藏由 helper 判定（绑定优先、域名兜底）—— 收藏的事实源
+  // 在 app，SW 重启后本地副本可能还是空的。我们自己发的 unpin 命令也会
+  // 走到这里，但那时收藏已被移除，helper 查无此项、不会成环。
+  //
+  // ⚠️ 必须延迟核实：窗口/浏览器关闭的 teardown 也会给置顶标签发一次
+  // pinned:false（实测：上报后 33ms 连接就断了，收藏被误删）。400ms 后
+  // 标签还活着且仍未置顶，才算用户主动取消；标签没了就是关闭，忽略。
+  // 浏览器整体退出时 SW 一起死，这个回调根本不会跑 —— 天然安全。
+  // 用户置顶了一个标签 → 收编进收藏列表（置顶 = 收藏）。
+  // 自家 ensure 补的置顶（selfPinned 标记）跳过，防环。
+  if (changeInfo.pinned === true) {
+    if (selfPinned.has(tabId)) {
+      selfPinned.delete(tabId);
+    } else if ((tab?.url ?? "").startsWith("http")) {
+      send({ type: "pinnedTab", tabId, url: tab.url, title: tab?.title ?? "",
+             favIconUrl: tab?.favIconUrl ?? "" });
+    }
+  }
+
+  if (changeInfo.pinned === false) {
+    if (selfUnpinned.has(tabId)) {
+      // 自家 unpin 命令的回声，不当作用户动作
+      selfUnpinned.delete(tabId);
+      return;
+    }
+    const fallbackHost = hostOf(tab?.url ?? "") ?? "";
+    setTimeout(async () => {
+      try {
+        const live = await chrome.tabs.get(tabId);
+        if (!live.pinned) {
+          send({ type: "unpinned", host: hostOf(live.url ?? "") ?? fallbackHost, tabId });
+        }
+      } catch {
+        // 标签已不存在 —— 是关闭不是取消置顶
+      }
+    }, 400);
+  }
 });
 
 // 标签页被拖到别的窗口 —— 按窗口过滤时列表内容会变。
@@ -362,16 +609,26 @@ chrome.action.onClicked.addListener(() => {
   send({ type: "openSettings" });
 });
 
-chrome.runtime.onStartup.addListener(connect);
+function ensureAlarms() {
+  chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: 0.5 });
+  chrome.alarms.create(LIFETIME_ALARM, { periodInMinutes: LIFETIME_SWEEP_MINUTES });
+}
+
+chrome.runtime.onStartup.addListener(() => {
+  startupSettleUntil = Date.now() + 2500;
+  connect();
+  ensureAlarms();
+});
 chrome.runtime.onInstalled.addListener(() => {
   connect();
-  chrome.alarms.create(RECONNECT_ALARM, { periodInMinutes: 0.5 });
+  ensureAlarms();
 });
 
 // 兜底：helper 重启或连接意外断掉时，最多 30s 内恢复。
 // 正常情况下连接由 helper 的定时 ping 维持，走不到这里。
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RECONNECT_ALARM) connect();
+  if (alarm.name === LIFETIME_ALARM) sweepExpiredTabs();
 });
 
 connect();

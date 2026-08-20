@@ -211,6 +211,13 @@ private struct TabCard: View {
                         closeButton
                     }
                 }
+                // 左上角常驻星标：置顶（收藏）的标签一眼可辨。
+                // 和 ✕ 同一设计语言：磨砂圆底 + 深色压暗 + 发丝描边。
+                .overlay(alignment: .topLeading) {
+                    if tab.pinned == true {
+                        pinBadge
+                    }
+                }
 
             HStack(spacing: 5) {
                 Group {
@@ -277,6 +284,23 @@ private struct TabCard: View {
         .onHover { inside in
             withAnimation(.easeOut(duration: 0.1)) { hovering = inside }
         }
+    }
+
+    /// 左上角的置顶星标。金黄星形在深色磨砂圆底上，亮暗缩略图都立得住。
+    private var pinBadge: some View {
+        Image(systemName: "star.fill")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.20))
+            .frame(width: 18, height: 18)
+            .background {
+                ZStack {
+                    Circle().fill(.ultraThinMaterial)
+                    Circle().fill(Color.black.opacity(0.35))
+                }
+            }
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+            .shadow(color: .black.opacity(0.30), radius: 2.5, y: 1)
+            .padding(5)
     }
 
     /// 缩略图右上角的关闭钮：磨砂玻璃圆底再压一层深色，保证白 ✕ 在任何

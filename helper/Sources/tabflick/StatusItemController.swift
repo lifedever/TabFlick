@@ -21,6 +21,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 点了子菜单里的某个标签（参数 tab.id）。
     var onPickTab: ((Int) -> Void)?
 
+    /// 「收藏当前标签」菜单项。标题/图标随当前标签的收藏状态切换。
+    private let favoriteItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    /// 当前标签是否已收藏；nil = 没有当前标签（未连接），菜单项置灰。
+    var favoriteState: (() -> Bool?)?
+    /// 点了「收藏 / 取消收藏当前标签」。
+    var onToggleFavorite: (() -> Void)?
+    /// 置顶快捷键（菜单项右侧显示用）。nil = 未设置，不显示。
+    var pinHotkeyProvider: (() -> (key: String, modifiers: NSEvent.ModifierFlags)?)?
+
     /// 打开 app 的设置窗口。
     var onOpenSettings: (() -> Void)?
     /// 未授权状态下点「授权」。
@@ -63,11 +72,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     // MARK: - 菜单
 
     private func buildMenu() {
-        // statusLine 是复用的存储属性，而 NSMenuItem 同一时刻只能属于一个
-        // 菜单 —— 不先从旧菜单摘下来，第二次 buildMenu（init 后的
+        // statusLine / favoriteItem 是复用的存储属性，而 NSMenuItem 同一时刻
+        // 只能属于一个菜单 —— 不先从旧菜单摘下来，第二次 buildMenu（init 后的
         // showUnauthorized、或语言切换的 rebuildMenu）会在 insertItem 处抛
         // NSInternalInconsistencyException 直接崩掉。
         statusLine.menu?.removeItem(statusLine)
+        favoriteItem.menu?.removeItem(favoriteItem)
 
         let menu = NSMenu()
         // 自动启用会把「子菜单还是空的」的状态行判成禁用（子菜单在展开时才
@@ -98,6 +108,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             statusItem.menu = menu
             return
         }
+
+        favoriteItem.target = self
+        favoriteItem.action = #selector(toggleFavorite)
+        favoriteItem.title = L10n.t("置顶当前标签", "Pin Current Tab")
+        favoriteItem.image = Self.symbol("pin")
+        favoriteItem.isEnabled = false   // menuNeedsUpdate 时按当前标签刷新
+        menu.addItem(favoriteItem)
 
         let settings = NSMenuItem(title: L10n.t("设置…", "Settings…"),
                                   action: #selector(openSettings),
@@ -164,9 +181,33 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// 主菜单每次打开时把子菜单填好 —— 不能等子菜单自己展开时再填：
     /// 空子菜单的父项会被判成禁用，永远展不开（2026-08-20 实测截图）。
+    /// 「收藏当前标签」的标题/状态也在这时按当前标签刷新。
     func menuNeedsUpdate(_ menu: NSMenu) {
-        guard menu === statusItem.menu, statusLine.submenu != nil else { return }
-        rebuildTabsSubmenu()
+        guard menu === statusItem.menu else { return }
+        refreshFavoriteItem()
+        if statusLine.submenu != nil { rebuildTabsSubmenu() }
+    }
+
+    private func refreshFavoriteItem() {
+        if let isFavorited = favoriteState?() {
+            favoriteItem.isEnabled = true
+            favoriteItem.title = isFavorited
+                ? L10n.t("取消置顶当前标签", "Unpin Current Tab")
+                : L10n.t("置顶当前标签", "Pin Current Tab")
+            favoriteItem.image = Self.symbol(isFavorited ? "pin.fill" : "pin")
+        } else {
+            favoriteItem.isEnabled = false
+            favoriteItem.title = L10n.t("置顶当前标签", "Pin Current Tab")
+            favoriteItem.image = Self.symbol("pin")
+        }
+        // 设置了快捷键就用系统原生方式显示在菜单项右侧
+        if let hotkey = pinHotkeyProvider?() {
+            favoriteItem.keyEquivalent = hotkey.key
+            favoriteItem.keyEquivalentModifierMask = hotkey.modifiers
+        } else {
+            favoriteItem.keyEquivalent = ""
+            favoriteItem.keyEquivalentModifierMask = []
+        }
     }
 
     private func rebuildTabsSubmenu() {
@@ -200,9 +241,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 if entry.tab.id == entries.first?.tab.id {
                     item.state = .on   // MRU 首位就是当前标签
                 }
+                // 右侧灰字徽标：最近使用时间。Chrome 只给 lastAccessed
+                // （最近使用），不给创建时间 —— 最近使用也正好和 MRU 排序、
+                // 存活时间清理的判定口径一致。
+                if let rel = Self.relativeTime(entry.tab.lastAccessed) {
+                    item.badge = NSMenuItemBadge(string: rel)
+                }
                 menu.addItem(item)
             }
         }
+    }
+
+    /// 「X 分钟前」。输入是 tab.lastAccessed（ms epoch），拿不到就返回 nil
+    /// （旧扩展 / 旧 Chrome），菜单项不带徽标。
+    private static func relativeTime(_ msEpoch: Double?) -> String? {
+        guard let msEpoch, msEpoch > 0 else { return nil }
+        let seconds = Date().timeIntervalSince1970 - msEpoch / 1000
+        guard seconds >= 0 else { return nil }
+        if seconds < 60 { return L10n.t("刚刚", "just now") }
+        let minutes = Int(seconds / 60)
+        if minutes < 60 { return L10n.t("\(minutes) 分钟前", "\(minutes)m ago") }
+        let hours = Int(seconds / 3600)
+        if hours < 24 { return L10n.t("\(hours) 小时前", "\(hours)h ago") }
+        return L10n.t("\(Int(seconds / 86400)) 天前", "\(Int(seconds / 86400))d ago")
     }
 
     /// favicon 统一缩到菜单标准的 16pt；没缓存到的用 globe 占位
@@ -283,6 +344,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func openSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func toggleFavorite() {
+        onToggleFavorite?()
     }
 
     @objc private func openLog() {

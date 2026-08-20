@@ -101,22 +101,6 @@ private struct SwitcherPane: View {
             }
 
             Section {
-                Toggle(isOn: $settings.allowTabClose) {
-                    Text(L10n.t("悬停时显示关闭按钮", "Show close button on hover"))
-                }
-                .toggleStyle(.switch)
-
-                Text(L10n.t(
-                    "开启后，鼠标悬停在切换器卡片上会出现 ✕，点击直接关闭对应标签。只剩 2 个标签时不显示。",
-                    "When on, hovering a card reveals an ✕ that closes that tab. It hides when only two tabs remain."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            } header: {
-                Text(L10n.t("关闭标签", "Closing tabs"))
-            }
-
-            Section {
                 Label(
                     connected
                         ? L10n.t("扩展已连接", "Extension connected")
@@ -130,6 +114,232 @@ private struct SwitcherPane: View {
         }
         .formStyle(.grouped)
         .frame(width: 460)
+    }
+}
+
+// MARK: - 标签管理
+
+private struct TabManagementPane: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        Form {
+            Section {
+                if settings.favorites.isEmpty {
+                    Text(L10n.t("还没有置顶。在 Chrome 里置顶任意标签，或在菜单栏选「置顶当前标签」。",
+                                "Nothing pinned yet. Pin any tab in Chrome, or use \u{201C}Pin Current Tab\u{201D} in the menu bar."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else if settings.favorites.count > 6 {
+                    // 收藏多时限高滚动 —— 设置窗口按内容自适应高度，
+                    // 列表无限增长会把窗口顶出屏幕。
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(settings.favorites) { fav in
+                                favoriteRow(fav)
+                                    .padding(.vertical, 5)
+                                if fav.id != settings.favorites.last?.id {
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: 250)
+                } else {
+                    ForEach(settings.favorites) { fav in
+                        favoriteRow(fav)
+                    }
+                }
+
+                Text(L10n.t(
+                    "与 Chrome 双向同步：置顶即加入、取消置顶即移除（⌘W 关闭不算）。Chrome 重启后自动恢复置顶，并带回最后访问的页面。",
+                    "Two-way sync with Chrome: pinning adds, unpinning removes (⌘W doesn't count). Pins come back after Chrome restarts, restored to the last page visited."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(settings.favorites.isEmpty
+                     ? L10n.t("置顶标签", "Pinned tabs")
+                     : L10n.t("置顶标签 · \(settings.favorites.count) 个",
+                              "Pinned tabs · \(settings.favorites.count)"))
+            }
+
+            Section {
+                Toggle(isOn: $settings.allowTabClose) {
+                    Text(L10n.t("切换器中悬停显示关闭按钮", "Show close button on hover in the switcher"))
+                }
+                .toggleStyle(.switch)
+
+                Text(L10n.t(
+                    "悬停切换器卡片时显示 ✕，点击关闭标签。只剩 2 个标签时不显示。",
+                    "Hover a switcher card to reveal ✕. Hidden when only two tabs remain."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("关闭标签", "Closing tabs"))
+            }
+
+            Section {
+                Picker(L10n.t("自动清理未使用的标签", "Auto-clean unused tabs"),
+                       selection: $settings.tabLifetime) {
+                    ForEach(TabLifetime.allCases) { lifetime in
+                        Text(lifetime.label).tag(lifetime)
+                    }
+                }
+
+                Text(L10n.t(
+                    "超时未使用的标签自动关闭。置顶、发声、标签组内及各窗口当前标签不受影响。",
+                    "Closes tabs unused past the limit. Pinned, audible, grouped, and current tabs are exempt."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("标签存活时间", "Tab lifetime"))
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460)
+    }
+
+    @ViewBuilder
+    private func favoriteRow(_ fav: FavoriteTab) -> some View {
+        HStack(spacing: 8) {
+            FaviconView(fav: fav)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(fav.title.isEmpty ? fav.url : fav.title)
+                    .lineLimit(1)
+                // 显示「最后访问」而不是原始收藏地址 —— 恢复时开的就是它
+                Text(settings.favoriteCurrentUrls[fav.id] ?? fav.url)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button {
+                settings.favorites.removeAll { $0.id == fav.id }
+            } label: {
+                Image(systemName: "trash")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.t("移除并取消置顶", "Remove and unpin"))
+        }
+    }
+}
+
+/// 置顶列表行首的站点图标。
+///
+/// 不用 AsyncImage：很多站点的 favicon 是 `data:image/svg+xml` 内联 SVG
+/// （云效 Flow 就是），AsyncImage 的解码管线不认 SVG，会永远停在占位图。
+/// NSImage(data:) 原生支持 SVG / ICO / PNG，成功率高得多。
+/// 候选链：置顶时记录的 favIconUrl → 域名根的 /favicon.ico → globe。
+private struct FaviconView: View {
+    let fav: FavoriteTab
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+            } else {
+                Image(systemName: "globe")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 16, height: 16)
+        .task(id: fav.id) {
+            image = await Self.load(fav)
+        }
+    }
+
+    private static func load(_ fav: FavoriteTab) async -> NSImage? {
+        var candidates: [URL] = []
+        if let stored = fav.favIconUrl, !stored.isEmpty, let url = URL(string: stored) {
+            candidates.append(url)
+        }
+        if let page = URL(string: fav.url), let host = page.host,
+           let ico = URL(string: "\(page.scheme ?? "https")://\(host)/favicon.ico") {
+            candidates.append(ico)
+        }
+        for url in candidates {
+            if let (data, _) = try? await URLSession.shared.data(from: url),
+               let image = NSImage(data: data), image.isValid {
+                return image
+            }
+        }
+        return nil
+    }
+}
+
+// MARK: - 快捷键
+
+private struct HotkeyPane: View {
+    @ObservedObject var settings: AppSettings
+    @State private var recording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        Form {
+            Section {
+                HStack {
+                    Text(L10n.t("置顶 / 取消置顶当前标签", "Pin / unpin current tab"))
+                    Spacer()
+                    Button {
+                        recording ? stopRecording() : startRecording()
+                    } label: {
+                        Text(recording
+                             ? L10n.t("按下快捷键…", "Press shortcut…")
+                             : (settings.pinHotkey?.display ?? L10n.t("点击录制", "Record")))
+                            .frame(minWidth: 96)
+                    }
+                    if settings.pinHotkey != nil && !recording {
+                        Button {
+                            settings.pinHotkey = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(L10n.t("清除", "Clear"))
+                    }
+                }
+
+                Text(L10n.t(
+                    "需包含 ⌘ / ⌃ / ⌥ 至少一个修饰键，仅在 Chrome 前台生效，Esc 取消录制。注意避开 Chrome 自带的快捷键（如 ⌘T 新建标签、⌘D 收藏书签）。",
+                    "Include at least one of ⌘ / ⌃ / ⌥. Works only while Chrome is frontmost; Esc cancels recording. Avoid Chrome's own shortcuts (⌘T new tab, ⌘D bookmark)."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("快捷键", "Shortcuts"))
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460)
+        .onDisappear { stopRecording() }
+    }
+
+    private func startRecording() {
+        recording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            defer { stopRecording() }
+            if event.keyCode == 53 { return nil }   // Esc 取消
+            let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
+            guard !mods.intersection([.command, .control, .option]).isEmpty,
+                  let chars = event.charactersIgnoringModifiers, !chars.isEmpty else { return nil }
+            settings.pinHotkey = HotkeyConfig(keyCode: event.keyCode,
+                                              modifiers: mods.rawValue,
+                                              character: chars.lowercased())
+            return nil   // 这次按键被录制吃掉，不下发
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        recording = false
     }
 }
 
@@ -156,8 +366,8 @@ private struct AboutPane: View {
             }
 
             Text(L10n.t(
-                "为 Chrome 补上按最近使用顺序切换标签的能力。",
-                "Most-recently-used tab switching for Google Chrome."
+                "增强 Chrome 标签体验：最近使用顺序切换、标签管理、置顶常驻。",
+                "Enhance Chrome's tab experience: MRU switching, tab management, and pins that persist."
             ))
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
@@ -226,6 +436,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private var generalHost: NSHostingController<GeneralPane>?
     private var switcherHost: NSHostingController<SwitcherPane>?
+    private var tabManagementHost: NSHostingController<TabManagementPane>?
+    private var hotkeyHost: NSHostingController<HotkeyPane>?
     private var aboutHost: NSHostingController<AboutPane>?
     private var tabController: NSTabViewController?
 
@@ -254,6 +466,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private static var paneTitles: [String] {
         [L10n.t("通用", "General"),
          L10n.t("切换器", "Switcher"),
+         L10n.t("标签管理", "Tabs"),
+         L10n.t("快捷键", "Shortcuts"),
          L10n.t("关于", "About")]
     }
 
@@ -261,6 +475,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         guard let window, window.isVisible else { return }
         generalHost?.rootView = GeneralPane(settings: settings)
         switcherHost?.rootView = SwitcherPane(settings: settings, connected: connected)
+        tabManagementHost?.rootView = TabManagementPane(settings: settings)
+        hotkeyHost?.rootView = HotkeyPane(settings: settings)
         aboutHost?.rootView = AboutPane(updates: updates)
     }
 
@@ -275,20 +491,26 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if window == nil {
             let general = NSHostingController(rootView: GeneralPane(settings: settings))
             let switcher = NSHostingController(rootView: SwitcherPane(settings: settings, connected: connected))
+            let tabManagement = NSHostingController(rootView: TabManagementPane(settings: settings))
+            let hotkey = NSHostingController(rootView: HotkeyPane(settings: settings))
             let about = NSHostingController(rootView: AboutPane(updates: updates))
             // 让 preferredContentSize 跟随 SwiftUI 内容：NSTabViewController
             // 切 tab 时按它做窗口尺寸动画（顶边锚定是 AppKit 原生行为）
             general.sizingOptions = [.preferredContentSize]
             switcher.sizingOptions = [.preferredContentSize]
+            tabManagement.sizingOptions = [.preferredContentSize]
+            hotkey.sizingOptions = [.preferredContentSize]
             about.sizingOptions = [.preferredContentSize]
             generalHost = general
             switcherHost = switcher
+            tabManagementHost = tabManagement
+            hotkeyHost = hotkey
             aboutHost = about
 
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
-            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "info.circle"]
-            for (index, controller) in ([general, switcher, about] as [NSViewController]).enumerated() {
+            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "rectangle.stack", "command", "info.circle"]
+            for (index, controller) in ([general, switcher, tabManagement, hotkey, about] as [NSViewController]).enumerated() {
                 let item = NSTabViewItem(viewController: controller)
                 item.label = Self.paneTitles[index]
                 item.image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: nil)
