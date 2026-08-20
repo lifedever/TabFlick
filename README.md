@@ -1,7 +1,7 @@
 <h3 align="center">⌘ TabFlick</h3>
 
 <p align="center">
-  <strong>Most-recently-used tab switching for Google Chrome, with a switcher overlay.</strong><br>
+  <strong>Supercharge Chrome's tab experience — MRU switching, tab management, and pins that persist.</strong><br>
   Hold ⌃ and tap ⇥ to move through tabs in the order you used them.
 </p>
 

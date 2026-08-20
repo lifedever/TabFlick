@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TabFlick — Arc 式标签切换器 for Chrome</title>
-<meta name="description" content="给 Chrome 加上按最近使用顺序切换标签的能力，带网页缩略图的切换器浮层。macOS 开源工具。">
+<meta name="description" content="增强 Chrome 标签体验：按最近使用顺序切换标签、标签管理、置顶常驻，带网页缩略图切换器。macOS 开源工具。">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 
 <meta property="og:title" content="TabFlick — Arc-style tab switcher for Chrome">
-<meta property="og:description" content="Most-recently-used tab switching for Google Chrome, with a switcher overlay.">
+<meta property="og:description" content="Enhance Chrome's tab experience: MRU tab switching, tab management, and persistent pins.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.lifedever.com/TabFlick/">
 
@@ -266,11 +266,11 @@
 
   <div class="hero">
     <img class="icon" src="logo.svg" alt="TabFlick">
-    <h1 data-zh="Chrome 也能按使用顺序切标签"
-        data-en="Tab switching by recent use, in Chrome">Chrome 也能按使用顺序切标签</h1>
+    <h1 data-zh="增强 Chrome 的标签体验"
+        data-en="Supercharge Chrome's tabs">增强 Chrome 的标签体验</h1>
     <p class="sub"
-       data-zh="Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你实际使用的顺序走，并在按住按键时显示带网页缩略图的切换器 —— 和 ⌘⇥ 切换应用一样。"
-       data-en="Chrome cycles tabs in tab-strip order. TabFlick makes ⌃⇥ cycle them by recent use and shows a switcher with page thumbnails while you hold the key, the same way ⌘⇥ works for applications.">Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你实际使用的顺序走，并在按住按键时显示带网页缩略图的切换器 —— 和 ⌘⇥ 切换应用一样。</p>
+       data-zh="Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你实际使用的顺序走，带网页缩略图切换器；还能自动清理闲置标签、让置顶跨重启常驻。"
+       data-en="Chrome cycles tabs in tab-strip order. TabFlick makes ⌃⇥ cycle them by recent use with a thumbnail switcher — plus idle-tab cleanup and pins that survive restarts.">Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你实际使用的顺序走，带网页缩略图切换器；还能自动清理闲置标签、让置顶跨重启常驻。</p>
 
     <div class="badges">
       <span class="badge">macOS 14+</span>
@@ -297,8 +297,8 @@
 <section class="block alt" id="features">
   <div class="wrap">
     <h2 data-zh="功能" data-en="Features">功能</h2>
-    <p class="lead" data-zh="做的事情不多，但每一件都做到位。"
-       data-en="A small set of things, each done properly.">做的事情不多，但每一件都做到位。</p>
+    <p class="lead" data-zh="从切换到管理，每一件都做到位。"
+       data-en="From switching to managing — each piece done properly.">从切换到管理，每一件都做到位。</p>
 
     <div class="grid">
       <div class="card">
@@ -325,6 +325,31 @@
         <h3 data-zh="按窗口隔离" data-en="Scoped per window">按窗口隔离</h3>
         <p data-zh="切换器只列出你正在用的那个窗口的标签，每个窗口保留各自的历史。可在设置中关闭。"
            data-en="The switcher lists only the tabs of the window in use, and each window keeps its own history. Can be turned off in settings.">切换器只列出你正在用的那个窗口的标签，每个窗口保留各自的历史。可在设置中关闭。</p>
+      </div>
+      <div class="card">
+        <h3 data-zh="置顶常驻" data-en="Pins that persist">置顶常驻</h3>
+        <p data-zh="置顶的标签由 TabFlick 记住并与 Chrome 双向同步：重启浏览器自动恢复置顶，并带回最后访问的页面。"
+           data-en="Pinned tabs are remembered and kept in two-way sync: after a Chrome restart they come back pinned, restored to the last page you visited.">置顶的标签由 TabFlick 记住并与 Chrome 双向同步：重启浏览器自动恢复置顶，并带回最后访问的页面。</p>
+      </div>
+      <div class="card">
+        <h3 data-zh="菜单栏标签列表" data-en="Menu bar tab list">菜单栏标签列表</h3>
+        <p data-zh="状态栏一键展开所有窗口的标签：按窗口分组、显示最近使用时间，点击直接把 Chrome 带到前台并切过去。"
+           data-en="Every tab across every window, one hover away in the menu bar — grouped by window with last-used times; click to bring Chrome forward on that tab.">状态栏一键展开所有窗口的标签：按窗口分组、显示最近使用时间，点击直接把 Chrome 带到前台并切过去。</p>
+      </div>
+      <div class="card">
+        <h3 data-zh="边切边关" data-en="Close while switching">边切边关</h3>
+        <p data-zh="切换器卡片上悬停出现 ✕，顺手关掉不要的标签，本轮切换不中断。默认关闭，可在设置开启。"
+           data-en="Hover a switcher card for an ✕ and close tabs as you cycle, without breaking the round. Off by default, enable in settings.">切换器卡片上悬停出现 ✕，顺手关掉不要的标签，本轮切换不中断。默认关闭，可在设置开启。</p>
+      </div>
+      <div class="card">
+        <h3 data-zh="标签存活时间" data-en="Tab lifetime">标签存活时间</h3>
+        <p data-zh="12 小时 / 24 小时 / 7 天，超时未使用的标签自动清理；置顶、发声、标签组内和当前标签永不误伤。默认关闭。"
+           data-en="12 hours, 24 hours or 7 days — idle tabs get cleaned up automatically; pinned, audible, grouped and current tabs are never touched. Off by default.">12 小时 / 24 小时 / 7 天，超时未使用的标签自动清理；置顶、发声、标签组内和当前标签永不误伤。默认关闭。</p>
+      </div>
+      <div class="card">
+        <h3 data-zh="自定义快捷键" data-en="Custom shortcuts">自定义快捷键</h3>
+        <p data-zh="给「置顶 / 取消置顶当前标签」录制一个快捷键，只在 Chrome 前台生效，其他应用完全不受影响。"
+           data-en="Record a shortcut for pin / unpin current tab. It only fires while Chrome is frontmost — other apps never see it.">给「置顶 / 取消置顶当前标签」录制一个快捷键，只在 Chrome 前台生效，其他应用完全不受影响。</p>
       </div>
       <div class="card">
         <h3 data-zh="不会静默失灵" data-en="Never silently broken">不会静默失灵</h3>
@@ -377,12 +402,14 @@
         <h3 data-zh="下载安装" data-en="Download and install">下载安装</h3>
         <p data-zh="从 Releases 下载 DMG，把 TabFlick.app 拖进「应用程序」。首次打开如提示「无法验证开发者」，在「应用程序」里右键 TabFlick →「打开」即可 —— 应用没有付费开发者签名，DMG 内的说明文件有详细步骤。也可以按仓库 README 从源码编译。"
            data-en="Download the DMG from Releases and drag TabFlick.app into Applications. If the first launch says the developer cannot be verified, right-click TabFlick in Applications and choose Open — the app carries no paid Apple signature; the read-me inside the DMG covers the details. Building from source is documented in the repository README.">从 Releases 下载 DMG，把 TabFlick.app 拖进「应用程序」。首次打开如提示「无法验证开发者」，在「应用程序」里右键 TabFlick →「打开」即可 —— 应用没有付费开发者签名，DMG 内的说明文件有详细步骤。也可以按仓库 README 从源码编译。</p>
-        <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="下载 TabFlick" data-en="Download TabFlick">下载 TabFlick</a>
+        <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="下载 App" data-en="Download the App">下载 App</a>
       </li>
       <li>
-        <h3 data-zh="加载扩展" data-en="Load the extension">加载扩展</h3>
-        <p data-zh="打开 chrome://extensions，右上角开启开发者模式，点「加载已解压的扩展程序」，选择仓库里的 extension 目录。"
-           data-en="Open chrome://extensions, turn on Developer mode, click Load unpacked, and select the extension folder of the repository.">打开 chrome://extensions，右上角开启开发者模式，点「加载已解压的扩展程序」，选择仓库里的 extension 目录。</p>
+        <h3 data-zh="安装扩展" data-en="Install the extension">安装扩展</h3>
+        <p data-zh="下载扩展包并解压，打开 chrome://extensions，右上角开启开发者模式，点「加载已解压的扩展程序」选择解压出的文件夹。扩展未上架商店，需要这一步开发者模式安装 —— 详细图文见安装说明。"
+           data-en="Download and unzip the extension, open chrome://extensions, turn on Developer mode, click Load unpacked and pick the unzipped folder. The extension isn't on the Web Store, so this developer-mode step is required — the guide walks through it.">下载扩展包并解压，打开 chrome://extensions，右上角开启开发者模式，点「加载已解压的扩展程序」选择解压出的文件夹。扩展未上架商店，需要这一步开发者模式安装 —— 详细图文见安装说明。</p>
+        <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip" rel="noreferrer" data-zh="下载扩展" data-en="Download Extension">下载扩展</a>
+        <a class="btn btn-secondary" href="install-extension.html" data-zh="扩展安装说明" data-en="Install Guide">扩展安装说明</a>
       </li>
       <li>
         <h3 data-zh="授予辅助功能权限" data-en="Grant Accessibility permission">授予辅助功能权限</h3>
@@ -436,6 +463,10 @@
         <tr>
           <td class="keys" data-zh="⌃ + 点击" data-en="⌃ + click">⌃ + 点击</td>
           <td data-zh="直接切到点中的那个标签" data-en="Switch straight to the card you click">直接切到点中的那个标签</td>
+        </tr>
+        <tr>
+          <td class="keys" data-zh="自定义" data-en="Custom">自定义</td>
+          <td data-zh="置顶 / 取消置顶当前标签（在 设置 → 快捷键 中录制）" data-en="Pin / unpin the current tab (record it under Settings → Shortcuts)">置顶 / 取消置顶当前标签（在 设置 → 快捷键 中录制）</td>
         </tr>
       </tbody>
     </table>

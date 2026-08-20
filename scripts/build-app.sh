@@ -84,6 +84,17 @@ for arch in "${ARCHS[@]}"; do
     build_one "$arch"
 done
 
+# 扩展 zip。官网「扩展下载」固定指向
+#   releases/latest/download/TabFlick-Extension.zip
+# 资产名和 DMG 命名一样是契约：改名 = 官网链接 404。
+echo "▸ 打包扩展 zip…"
+EXT_STAGE="$BUILD_DIR/ext-stage"
+rm -rf "$EXT_STAGE"
+mkdir -p "$EXT_STAGE"
+cp -R extension "$EXT_STAGE/TabFlick-Extension"
+(cd "$EXT_STAGE" && zip -qr "$BUILD_DIR/TabFlick-Extension.zip" TabFlick-Extension -x "*.DS_Store")
+rm -rf "$EXT_STAGE"
+
 # --install：把本机架构的包直接替换 /Applications 里的版本，省掉手动拖拽
 if [[ " $* " == *" --install "* ]]; then
     NATIVE_ARCH="$(uname -m)"

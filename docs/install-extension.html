@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TabFlick — 扩展安装说明</title>
+<meta name="description" content="TabFlick Bridge 扩展的安装步骤：开发者模式加载已解压的扩展程序。">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+
+<style>
+  :root {
+    --bg: #FFFFFF;
+    --bg-alt: #F9FAFB;
+    --card-bg: #FFFFFF;
+    --border: #F3F4F6;
+    --border-strong: #E5E7EB;
+    --text: #1F2937;
+    --text-heading: #111827;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
+    --accent: #2C6BED;
+    --accent-soft: rgba(44, 107, 237, 0.10);
+    --kbd-bg: #F3F4F6;
+    --kbd-border: #E5E7EB;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0F0F0F;
+      --bg-alt: #1A1A1A;
+      --card-bg: #1E1E1E;
+      --border: #2A2A2A;
+      --border-strong: #383838;
+      --text: #E5E5E5;
+      --text-heading: #F5F5F5;
+      --text-secondary: #A3A3A3;
+      --text-muted: #737373;
+      --accent: #5B8DEF;
+      --accent-soft: rgba(91, 141, 239, 0.14);
+      --kbd-bg: #262626;
+      --kbd-border: #404040;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.75 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+          "Helvetica Neue", sans-serif;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 0; border-bottom: 1px solid var(--border);
+  }
+  header .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text-heading); text-decoration: none; }
+  header .brand img { width: 26px; height: 26px; }
+  .lang-btn {
+    border: 1px solid var(--border-strong); background: var(--card-bg); color: var(--text-secondary);
+    border-radius: 8px; padding: 4px 12px; font-size: 13px; cursor: pointer;
+  }
+  h1 { font-size: 28px; color: var(--text-heading); margin: 40px 0 8px; }
+  .lead { color: var(--text-secondary); margin: 0 0 28px; }
+  ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0 0 40px; }
+  ol.steps li {
+    counter-increment: step; position: relative; padding: 18px 20px 18px 62px;
+    border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg); margin-bottom: 14px;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    position: absolute; left: 18px; top: 20px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps h3 { margin: 0 0 6px; font-size: 16px; color: var(--text-heading); }
+  ol.steps p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  code.inline {
+    background: var(--kbd-bg); border: 1px solid var(--kbd-border);
+    border-radius: 6px; padding: 1px 7px; font-size: 13px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .btn {
+    display: inline-block; margin-top: 12px; padding: 8px 18px; border-radius: 10px;
+    background: var(--accent); color: #fff; text-decoration: none; font-size: 14px; font-weight: 600;
+  }
+  .note {
+    border-left: 3px solid var(--accent); background: var(--bg-alt);
+    padding: 12px 16px; border-radius: 0 10px 10px 0;
+    color: var(--text-secondary); font-size: 14px; margin: 0 0 48px;
+  }
+  footer { color: var(--text-muted); font-size: 13px; padding: 24px 0 40px; border-top: 1px solid var(--border); }
+  footer a { color: var(--text-secondary); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <a class="brand" href="index.html"><img src="logo.svg" alt=""><span>TabFlick</span></a>
+    <button class="lang-btn" id="langToggle">EN</button>
+  </header>
+
+  <h1 data-zh="扩展安装说明" data-en="Installing the extension">扩展安装说明</h1>
+  <p class="lead"
+     data-zh="TabFlick Bridge 扩展暂未上架 Chrome 应用商店，需要通过开发者模式安装，一次装好长期使用。"
+     data-en="The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.">TabFlick Bridge 扩展暂未上架 Chrome 应用商店，需要通过开发者模式安装，一次装好长期使用。</p>
+
+  <ol class="steps">
+    <li>
+      <h3 data-zh="下载并解压扩展包" data-en="Download and unzip">下载并解压扩展包</h3>
+      <p data-zh="下载 TabFlick-Extension.zip，双击解压得到 TabFlick-Extension 文件夹。建议把它放到一个不会误删的位置（如「文稿」）—— Chrome 会持续从这个文件夹加载扩展，删掉文件夹扩展就失效了。"
+         data-en="Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.">下载 TabFlick-Extension.zip，双击解压得到 TabFlick-Extension 文件夹。建议把它放到一个不会误删的位置（如「文稿」）—— Chrome 会持续从这个文件夹加载扩展，删掉文件夹扩展就失效了。</p>
+      <a class="btn" href="https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip" rel="noreferrer" data-zh="下载扩展包" data-en="Download the extension">下载扩展包</a>
+    </li>
+    <li>
+      <h3 data-zh="打开扩展管理页" data-en="Open the extensions page">打开扩展管理页</h3>
+      <p data-zh="在 Chrome 地址栏输入 chrome://extensions 回车，或菜单 → 扩展程序 → 管理扩展程序。"
+         data-en="Type chrome://extensions in the address bar, or use Menu → Extensions → Manage Extensions.">在 Chrome 地址栏输入 chrome://extensions 回车，或菜单 → 扩展程序 → 管理扩展程序。</p>
+    </li>
+    <li>
+      <h3 data-zh="开启开发者模式" data-en="Turn on Developer mode">开启开发者模式</h3>
+      <p data-zh="页面右上角有「开发者模式」开关，打开它，页面顶部会多出一排按钮。"
+         data-en="Flip the Developer mode toggle in the top-right corner; a new row of buttons appears.">页面右上角有「开发者模式」开关，打开它，页面顶部会多出一排按钮。</p>
+    </li>
+    <li>
+      <h3 data-zh="加载扩展" data-en="Load the extension">加载扩展</h3>
+      <p data-zh="点「加载已解压的扩展程序」，选择第 1 步解压出的 TabFlick-Extension 文件夹。列表里出现 TabFlick Bridge 即安装成功。"
+         data-en="Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.">点「加载已解压的扩展程序」，选择第 1 步解压出的 TabFlick-Extension 文件夹。列表里出现 TabFlick Bridge 即安装成功。</p>
+    </li>
+    <li>
+      <h3 data-zh="确认连接" data-en="Confirm the connection">确认连接</h3>
+      <p data-zh="保持 TabFlick 应用运行，菜单栏图标变亮、第一行显示「已连接」即两端接通。之后按住 ⌃ 点 ⇥ 就能唤出切换器。"
+         data-en="With the TabFlick app running, the menu bar icon brightens and its first line reads Connected. Hold ⌃ and tap ⇥ to bring up the switcher.">保持 TabFlick 应用运行，菜单栏图标变亮、第一行显示「已连接」即两端接通。之后按住 ⌃ 点 ⇥ 就能唤出切换器。</p>
+    </li>
+  </ol>
+
+  <div class="note">
+    <span data-zh="升级说明：TabFlick 应用发新版时，如果发版说明提到扩展有更新，下载新的扩展包解压覆盖原文件夹，然后在 chrome://extensions 点击 TabFlick Bridge 卡片上的刷新按钮（↻）即可。"
+          data-en="Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.">升级说明：TabFlick 应用发新版时，如果发版说明提到扩展有更新，下载新的扩展包解压覆盖原文件夹，然后在 chrome://extensions 点击 TabFlick Bridge 卡片上的刷新按钮（↻）即可。</span>
+  </div>
+
+  <footer>
+    <a href="index.html" data-zh="← 返回首页" data-en="← Back to home">← 返回首页</a>
+    · MIT License · © <a href="https://github.com/lifedever" rel="noreferrer">lifedever</a>
+  </footer>
+</div>
+
+<script>
+  const KEY = "tabflick-lang";
+  const toggle = document.getElementById("langToggle");
+  function apply(lang) {
+    document.documentElement.lang = lang;
+    for (const el of document.querySelectorAll("[data-zh][data-en]")) {
+      const value = el.dataset[lang];
+      if (value !== undefined) el.textContent = value;
+    }
+    toggle.textContent = lang === "zh" ? "EN" : "中文";
+    document.title = lang === "zh"
+      ? "TabFlick — 扩展安装说明"
+      : "TabFlick — Installing the extension";
+  }
+  let lang = localStorage.getItem(KEY)
+    || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
+  apply(lang);
+  toggle.addEventListener("click", () => {
+    lang = lang === "zh" ? "en" : "zh";
+    localStorage.setItem(KEY, lang);
+    apply(lang);
+  });
+</script>
+
+</body>
+</html>

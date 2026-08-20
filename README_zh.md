@@ -1,7 +1,7 @@
 <h3 align="center">⌘ TabFlick</h3>
 
 <p align="center">
-  <strong>给 Google Chrome 加上按最近使用顺序切换标签的能力，并带切换器浮层。</strong><br>
+  <strong>增强 Chrome 标签体验 —— 最近使用顺序切换、标签管理、置顶常驻。</strong><br>
   按住 ⌃ 点 ⇥，按你实际使用的顺序在标签之间移动。
 </p>
 
