@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/lifedever/TabFlick/stargazers"><img src="https://img.shields.io/github/stars/lifedever/TabFlick?style=flat-square&color=F59E0B&label=Stars" alt="Stars"></a>
-  <img src="https://img.shields.io/badge/platform-macOS%2013%2B-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-macOS%2014%2B-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Chrome-116%2B-7C3AED?style=flat-square" alt="Chrome">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </p>
@@ -38,8 +38,10 @@ Chrome cycles tabs in tab-strip order. TabFlick makes ⌃⇥ cycle them by recen
 - Tapping ⌃⇥ again returns to where you started, so A↔B toggling stays stable
 - Every tab in the list carries a live page thumbnail
 - Keyboard (⌃⇥, ⌃⇧⇥), arrow keys and mouse clicks all drive the switcher
+- Two switcher layouts: a horizontal strip, or an adaptive grid that fits every tab on one screen
 - The overlay is centered on the Chrome window in use, across multiple displays
 - Light and dark appearance follow the system setting
+- In-app updates — checks GitHub Releases on a schedule you pick and installs in place after one click
 - If the helper or extension is unavailable, ⌃⇥ falls back to Chrome's built-in behavior
 
 ## How it works
@@ -68,9 +70,18 @@ Both halves are required:
 
 ### Requirements
 
-- macOS 13 or later
-- Xcode Command Line Tools — `xcode-select --install`
+- macOS 14 or later
 - Google Chrome 116 or later
+- Xcode Command Line Tools (source build only) — `xcode-select --install`
+
+### Option 1 — Download the app (recommended)
+
+1. Grab the DMG for your Mac from [Releases](https://github.com/lifedever/TabFlick/releases/latest): `arm64` for Apple Silicon, `x86_64` for Intel
+2. Drag **TabFlick.app** into **Applications** and launch it — a guided overlay walks you through granting Accessibility permission
+3. Load the extension (step 3 below) — this part is always required
+4. Done. Future versions update themselves: TabFlick checks GitHub Releases on your chosen schedule and installs in place after one click
+
+### Option 2 — Build from source
 
 ### 1. Clone the repository
 
@@ -139,6 +150,7 @@ The last line confirms the extension reached the helper.
 | Hold ⌃, tap ⇥ repeatedly | Move further back through the history |
 | Hold ⌃, press ⌃⇧⇥ | Move forward |
 | Hold ⌃, press ← or → | Move the cursor with arrow keys |
+| Hold ⌃, press ↑ or ↓ | Move by row (grid layout) |
 | Hold ⌃, click a card | Switch to that tab immediately |
 | Hold ⌃, hover a card | Move the cursor with the mouse |
 
@@ -146,13 +158,16 @@ The overlay appears when you press ⇥ and closes when you release ⌃. A single
 
 ### Settings
 
-Click the TabFlick icon in the Chrome toolbar to open the settings page. Changes take effect immediately — the helper does not need to restart.
+Open the settings window from the menu bar icon (**Settings…**, or ⌘, while a TabFlick window is focused) or by clicking the TabFlick icon in the Chrome toolbar. Changes take effect immediately — nothing needs to restart.
 
 | Setting | Default | Effect |
 |---|---|---|
 | Limit switching to the current window | On | The switcher lists only the tabs of the Chrome window in use. Turn it off to cycle through every window's tabs in one list. |
+| Switcher layout | Horizontal strip | Grid wraps the cards so every tab fits on one screen; ⌃↑/⌃↓ then move by row. |
+| Check for updates | Daily | Automatic update checks: daily / weekly / never. Updates download, install in place, and relaunch after you confirm. |
+| Language / Appearance / Open at Login | — | Interface language (中文/English), light/dark override, launch at login. |
 
-Each window keeps its own history either way. Switching the setting off merges the lists for display; it does not discard anything.
+Each window keeps its own history either way. Switching the scope setting off merges the lists for display; it does not discard anything.
 
 ### Tab ordering
 

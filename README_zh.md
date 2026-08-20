@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/lifedever/TabFlick/stargazers"><img src="https://img.shields.io/github/stars/lifedever/TabFlick?style=flat-square&color=F59E0B&label=Stars" alt="Stars"></a>
-  <img src="https://img.shields.io/badge/platform-macOS%2013%2B-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-macOS%2014%2B-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Chrome-116%2B-7C3AED?style=flat-square" alt="Chrome">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </p>
@@ -38,8 +38,10 @@ Chrome 的 ⌃⇥ 按标签栏顺序切换。TabFlick 把它改成按最近使�
 - 再点一次 ⌃⇥ 回到出发的标签，A↔B 来回切换保持稳定
 - 列表中每个标签都带网页缩略图
 - 键盘（⌃⇥、⌃⇧⇥）、方向键、鼠标点击都可以操作切换器
+- 两种切换器布局：横向长条，或自适应宫格（尽量一屏放下全部标签）
 - 浮层显示在正在使用的 Chrome 窗口正中，支持多显示器
 - 深浅色外观跟随系统设置
+- 应用内自动更新 —— 按设定频率检查 GitHub Releases，确认后一键原地安装
 - helper 或扩展不可用时，⌃⇥ 回落到 Chrome 自带的切换行为
 
 ## 工作原理
@@ -68,9 +70,18 @@ TabFlick 由两部分组成，通过本地回环 WebSocket 通信：
 
 ### 环境要求
 
-- macOS 13 或更高
-- Xcode 命令行工具 —— `xcode-select --install`
+- macOS 14 或更高
 - Google Chrome 116 或更高
+- Xcode 命令行工具（仅源码构建需要）—— `xcode-select --install`
+
+### 方式一 —— 下载安装（推荐）
+
+1. 从 [Releases](https://github.com/lifedever/TabFlick/releases/latest) 下载对应本机的 DMG：Apple Silicon 选 `arm64`，Intel 选 `x86_64`
+2. 把 **TabFlick.app** 拖进「应用程序」并启动 —— 引导浮层会带你完成辅助功能授权
+3. 加载扩展（见下方步骤 3）—— 这一步任何安装方式都需要
+4. 完成。之后的新版本可以自动更新：TabFlick 按设定频率检查 GitHub Releases，确认后一键原地安装
+
+### 方式二 —— 源码构建
 
 ### 1. 克隆仓库
 
@@ -139,6 +150,7 @@ macOS 会弹出授权提示。授权给启动这个二进制的应用（终端�
 | 按住 ⌃ 连点 ⇥ | 沿使用历史继续往回移动 |
 | 按住 ⌃ 按 ⌃⇧⇥ | 往前移动 |
 | 按住 ⌃ 按 ← 或 → | 用方向键移动游标 |
+| 按住 ⌃ 按 ↑ 或 ↓ | 按行移动（宫格布局） |
 | 按住 ⌃ 点击卡片 | 立即切换到该标签 |
 | 按住 ⌃ 鼠标悬停 | 用鼠标移动游标 |
 
@@ -146,13 +158,16 @@ macOS 会弹出授权提示。授权给启动这个二进制的应用（终端�
 
 ### 设置
 
-点击 Chrome 工具栏上的 TabFlick 图标打开设置页。改动立即生效，helper 不需要重启。
+从菜单栏图标打开设置窗口（「设置…」，或窗口聚焦时按 ⌘,），点击 Chrome 工具栏上的 TabFlick 图标也可以。改动立即生效，无需重启。
 
 | 设置项 | 默认 | 作用 |
 |---|---|---|
-| Limit switching to the current window | 开 | 切换器只列出正在使用的那个 Chrome 窗口的标签。关闭后所有窗口的标签合并成一张列表。 |
+| 只切换当前窗口的标签 | 开 | 切换器只列出正在使用的那个 Chrome 窗口的标签。关闭后所有窗口的标签合并成一张列表。 |
+| 切换器布局 | 横向长条 | 宫格会自动换行，尽量一屏放下全部标签；此时 ⌃↑/⌃↓ 按行移动。 |
+| 自动检查更新 | 每天 | 每天 / 每周 / 从不。发现新版本后确认一次即可自动下载、原地安装并重启。 |
+| 语言 / 外观 / 开机时启动 | — | 界面语言（中/英）、深浅色、登录自启。 |
 
-两种模式下每个窗口都保留各自的历史。关闭该选项只是把列表合并展示，不会丢弃任何记录。
+两种模式下每个窗口都保留各自的历史。关闭「只切换当前窗口」只是把列表合并展示，不会丢弃任何记录。
 
 ### 标签排序规则
 
