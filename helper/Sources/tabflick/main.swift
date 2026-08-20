@@ -165,15 +165,16 @@ MainActor.assumeIsolated {
         settings.onHotkeyChange = applyHotkeys
         applyHotkeys()
 
-        // 扩展与 app 按 major.minor 配套发布，不一致时提示一次
-        controller.onExtensionOutdated = { extVersion, appVersion in
+        // 扩展低于本版 app 的最低兼容版本时提示一次。
+        // 只认「过旧」不认「不一致」—— app 发版没动协议时不骚扰用户。
+        controller.onExtensionOutdated = { extVersion, requiredVersion in
             MainActor.assumeIsolated {
                 let alert = NSAlert()
                 alert.alertStyle = .warning
-                alert.messageText = L10n.t("扩展版本不匹配", "Extension version mismatch")
+                alert.messageText = L10n.t("扩展需要更新", "Extension update required")
                 alert.informativeText = L10n.t(
-                    "当前扩展 v\(extVersion)，应用 v\(appVersion)。两者按版本配套发布，不一致时部分功能会失效。\n\n请下载新的扩展包替换原文件夹后，在 chrome://extensions 重新加载。",
-                    "Extension v\(extVersion), app v\(appVersion). They ship in matched versions; features may break when they differ.\n\nDownload the new extension package, replace your folder, then reload it in chrome://extensions."
+                    "当前扩展 v\(extVersion)，本版应用需要 v\(requiredVersion) 或更新的扩展（协议有变化，旧扩展部分功能会失效）。\n\n请下载新的扩展包替换原文件夹后，在 chrome://extensions 重新加载。",
+                    "Extension v\(extVersion) is installed, but this app version needs extension v\(requiredVersion) or newer (the protocol changed; older extensions lose features).\n\nDownload the new extension package, replace your folder, then reload it in chrome://extensions."
                 )
                 alert.addButton(withTitle: L10n.t("查看升级说明", "Open Upgrade Guide"))
                 alert.addButton(withTitle: L10n.t("稍后", "Later"))

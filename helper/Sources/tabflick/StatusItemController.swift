@@ -131,11 +131,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let logs = NSMenuItem(title: L10n.t("打开日志文件", "Open Log File"), action: #selector(openLog), keyEquivalent: "")
-        logs.target = self
-        logs.image = Self.symbol("doc.text")
-        menu.addItem(logs)
-
         let updates = NSMenuItem(title: L10n.t("检查更新…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
         updates.image = Self.symbol("arrow.triangle.2.circlepath")
@@ -419,10 +414,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func toggleFavorite() {
         onToggleFavorite?()
-    }
-
-    @objc private func openLog() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: kLogPath))
     }
 
     @objc private func checkForUpdates() {

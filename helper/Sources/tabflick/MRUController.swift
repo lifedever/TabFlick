@@ -235,15 +235,23 @@ final class MRUController {
     var onExtensionOutdated: ((String, String) -> Void)?
     private var reportedExtensionMismatch = false
 
-    /// app 自身版本。swift run 开发态没有 Info.plist，为 nil（跳过所有版本核对）。
-    static let appVersionString: String? = {
-        guard let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-              !v.isEmpty else { return nil }
-        return v
-    }()
+    /// 本版 app 要求的扩展**最低兼容版本**。
+    ///
+    /// ⚠️ 不是「和 app 版本号保持一致」：只在**协议发生不兼容变化**时才手动
+    /// 提升。app 发版没动扩展/协议 → 这里不动，老扩展继续用，不骚扰用户。
+    /// （扩展 manifest 的 version 则是「扩展内容变了就升」，两者语义不同。）
+    static let requiredExtensionVersion = "0.5"
 
-    private static func majorMinor(_ v: String) -> String {
-        v.split(separator: ".").prefix(2).joined(separator: ".")
+    /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
+    private static func isOlder(_ v: String, than required: String) -> Bool {
+        let a = v.split(separator: ".").compactMap { Int($0) }
+        let b = required.split(separator: ".").compactMap { Int($0) }
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0
+            let y = i < b.count ? b[i] : 0
+            if x != y { return x < y }
+        }
+        return false
     }
 
     /// 每个已知浏览器的连接与扩展版本状态（设置页列表 + 菜单警告的数据源）。
@@ -269,8 +277,8 @@ final class MRUController {
         return known.sorted().map { bundleID in
             let client = connectedByBrowser[bundleID]
             let needsUpdate: Bool = {
-                guard let ext = client?.extVersion, let app = Self.appVersionString else { return false }
-                return Self.majorMinor(ext) != Self.majorMinor(app)
+                guard let ext = client?.extVersion else { return false }
+                return Self.isOlder(ext, than: Self.requiredExtensionVersion)
             }()
             return BrowserStatus(bundleID: bundleID,
                                  name: BrowserSupport.displayName(bundleID),
@@ -280,17 +288,16 @@ final class MRUController {
         }
     }
 
-    /// 扩展和 app 按 major.minor 成对发布（patch 可各自独立）。
-    /// 记录版本供状态列表展示；首次发现不匹配额外弹一次提醒。
+    /// 记录扩展上报的版本供状态列表展示；低于最低兼容版本时弹一次提醒。
+    /// 回调参数是 (扩展版本, 要求的最低版本)。
     private func recordExtensionVersion(_ clientID: UUID, _ version: String) {
         clients[clientID]?.extVersion = version
         publishStatus()
-        guard let appVersion = Self.appVersionString,
-              Self.majorMinor(version) != Self.majorMinor(appVersion) else { return }
+        guard Self.isOlder(version, than: Self.requiredExtensionVersion) else { return }
         guard !reportedExtensionMismatch else { return }   // 每次启动只弹一次
         reportedExtensionMismatch = true
-        log("⚠️  extension \(version) ≠ app \(appVersion) (major.minor) — prompting update")
-        onExtensionOutdated?(version, appVersion)
+        log("⚠️  extension \(version) < required \(Self.requiredExtensionVersion) — prompting update")
+        onExtensionOutdated?(version, Self.requiredExtensionVersion)
     }
 
     /// 设置变化后向所有客户端各推各的 —— 收藏按浏览器过滤，

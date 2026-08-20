@@ -53,6 +53,23 @@ private struct GeneralPane: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             }
+
+            Section {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.t("日志文件", "Log file"))
+                        Text(kLogPath)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Button(L10n.t("打开", "Open")) {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: kLogPath))
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(width: 460)
@@ -162,8 +179,8 @@ private struct BrowserPane: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             } else if browser.needsUpdate {
-                Label(L10n.t("已连接 · 扩展 v\(browser.extVersion ?? "?") 需更新到 v\(MRUController.appVersionString ?? "?")",
-                             "Connected · extension v\(browser.extVersion ?? "?"), update to v\(MRUController.appVersionString ?? "?")"),
+                Label(L10n.t("已连接 · 扩展 v\(browser.extVersion ?? "?") 需更新到 v\(MRUController.requiredExtensionVersion) 以上",
+                             "Connected · extension v\(browser.extVersion ?? "?"), needs v\(MRUController.requiredExtensionVersion)+"),
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
