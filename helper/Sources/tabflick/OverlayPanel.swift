@@ -653,17 +653,101 @@ final class OverlayPanel {
     }
 }
 
-// MARK: - Chrome 窗口定位
+// MARK: - 浏览器识别
 
+/// 浏览器识别。**主路径是动态的**：per-client 识别出的「已连接扩展的
+/// 浏览器」集合（connected）—— 任何 Chromium 浏览器装上扩展、连上 helper
+/// 就自动获得支持，不靠维护名单。静态名单只是识别失败时的兜底，
+/// 用户还可以追加：
+///   defaults write com.lifedever.TabFlick extraBrowsers -array-add "<bundle id>"
+/// bundle id 用 `osascript -e 'id of app "浏览器名"'` 查询。
+@MainActor
+enum BrowserSupport {
+    /// 已连接扩展的浏览器（由 MRUController 随连接识别/断开维护）。
+    static var connected: Set<String> = []
+
+    static let builtin: Set<String> = [
+        "com.google.Chrome",
+        "com.google.Chrome.beta",
+        "com.google.Chrome.canary",
+        "com.google.Chrome.dev",
+        "com.microsoft.edgemac",        // Edge
+        "com.brave.Browser",            // Brave
+        "company.thebrowser.Browser",   // Arc
+        "com.vivaldi.Vivaldi",          // Vivaldi
+        "com.operasoftware.Opera",      // Opera
+        "net.imput.helium",             // Helium（按开发者 imput 的反向域名推定，未实测；
+                                        // 不对就走 extraBrowsers 追加）
+    ]
+
+    static var all: Set<String> {
+        builtin.union(UserDefaults.standard.stringArray(forKey: "extraBrowsers") ?? [])
+    }
+
+    static func isSupported(_ bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return connected.contains(bundleID) || all.contains(bundleID)
+    }
+
+    /// 浏览器的显示名（本地化的 App 名，仅用于展示，不做任何判断）。
+    /// Finder 设置为「显示扩展名」时 displayName 会带 .app 后缀，剥掉。
+    static func displayName(_ bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return bundleID
+        }
+        var name = FileManager.default.displayName(atPath: url.path)
+        if name.hasSuffix(".app") { name = String(name.dropLast(4)) }
+        return name
+    }
+
+    private static var installedCache: (at: Date, ids: [String])?
+
+    /// 系统里已安装的 Chromium 系浏览器（bundle id）。运行时发现，不靠名单：
+    /// 枚举 http(s) 的处理程序，再按「Contents/Frameworks 里有
+    /// `* Framework.framework`」识别 Chromium 家族 —— Chrome/Edge/Brave/
+    /// Arc/Helium 都是这个打包布局；Safari/Firefox 不是，它们本来也装不了
+    /// 我们的扩展。磁盘扫描不便宜，缓存 60 秒。
+    static func installedBrowsers() -> [String] {
+        if let cache = installedCache, Date().timeIntervalSince(cache.at) < 60 {
+            return cache.ids
+        }
+        var result: [String] = []
+        if let probe = URL(string: "https://example.com") {
+            for appURL in NSWorkspace.shared.urlsForApplications(toOpen: probe) {
+                guard let id = Bundle(url: appURL)?.bundleIdentifier,
+                      !result.contains(id) else { continue }
+                if all.contains(id) || connected.contains(id) || looksChromium(appURL) {
+                    result.append(id)
+                }
+            }
+        }
+        installedCache = (Date(), result)
+        return result
+    }
+
+    private static func looksChromium(_ appURL: URL) -> Bool {
+        let frameworks = appURL.appendingPathComponent("Contents/Frameworks")
+        guard let items = try? FileManager.default.contentsOfDirectory(atPath: frameworks.path) else {
+            return false
+        }
+        return items.contains { $0.hasSuffix(" Framework.framework") }
+    }
+}
+
+// MARK: - 浏览器窗口定位
+
+@MainActor
 enum ChromeWindowLocator {
 
-    static let bundleID = "com.google.Chrome"
+    /// 最近一次处于前台的受支持浏览器。EventTap 的前台跟踪负责更新；
+    /// 窗口定位、菜单栏激活浏览器都以它为准。
+    static var activeBundleID = "com.google.Chrome"
 
     /// 最前面那个 Chrome 窗口的 frame，AppKit 坐标系（左下原点）。
     ///
     /// 只读窗口几何，不需要屏幕录制权限。
     static func frontmostWindowFrame() -> NSRect? {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: activeBundleID)
         guard let pid = running.first?.processIdentifier else { return nil }
 
         guard let list = CGWindowListCopyWindowInfo(

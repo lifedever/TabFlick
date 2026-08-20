@@ -11,15 +11,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
-    /// 状态行的二级菜单：列出当前所有标签（MRU 顺序），点击直接切过去。
-    /// 内容在每次展开时现取现建（menuNeedsUpdate），不做增量维护 ——
+    /// 浏览器行（每个已连接浏览器一行，各带自己的标签子菜单）。
+    /// 每次菜单展开时现拆现建（menuNeedsUpdate），不做增量维护 ——
     /// 标签随时在变，缓存一份反而要操心失效。
-    private let tabsSubmenu = NSMenu()
+    private var browserItems: [NSMenuItem] = []
 
-    /// 子菜单的数据源（MRU 顺序 + 已缓存的 favicon）。
-    var tabsProvider: (() -> [(tab: TabInfo, icon: NSImage?)])?
-    /// 点了子菜单里的某个标签（参数 tab.id）。
-    var onPickTab: ((Int) -> Void)?
+    /// 浏览器行的数据源（活动浏览器排最前）。
+    var menuBrowsersProvider: (() -> [MRUController.MenuBrowser])?
+    /// 点了某浏览器子菜单里的标签。参数 (tab.id, 浏览器 bundle id)。
+    var onPickTabInBrowser: ((Int, String) -> Void)?
 
     /// 「收藏当前标签」菜单项。标题/图标随当前标签的收藏状态切换。
     private let favoriteItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -29,6 +29,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onToggleFavorite: (() -> Void)?
     /// 置顶快捷键（菜单项右侧显示用）。nil = 未设置，不显示。
     var pinHotkeyProvider: (() -> (key: String, modifiers: NSEvent.ModifierFlags)?)?
+
+    /// 「扩展需要更新」警告项。文案由 provider 给，nil = 隐藏。
+    private let warningItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    var extensionWarning: (() -> String?)?
+    var onExtensionWarningClick: (() -> Void)?
 
     /// 打开 app 的设置窗口。
     var onOpenSettings: (() -> Void)?
@@ -61,12 +66,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private var connected = false
     private var lastTabCount = 0
+    private var lastBrowserName: String?
 
     override init() {
         super.init()
-        tabsSubmenu.autoenablesItems = false
         buildMenu()
-        render(connected: false, tabCount: 0)
+        render(connected: false, tabCount: 0, browserName: nil)
     }
 
     // MARK: - 菜单
@@ -78,6 +83,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // NSInternalInconsistencyException 直接崩掉。
         statusLine.menu?.removeItem(statusLine)
         favoriteItem.menu?.removeItem(favoriteItem)
+        warningItem.menu?.removeItem(warningItem)
 
         let menu = NSMenu()
         // 自动启用会把「子菜单还是空的」的状态行判成禁用（子菜单在展开时才
@@ -88,6 +94,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         statusLine.isEnabled = false
         menu.addItem(statusLine)
+
+        // 扩展版本警告（橙色），menuNeedsUpdate 时按实际状态显隐
+        warningItem.target = self
+        warningItem.action = #selector(warningClicked)
+        warningItem.isHidden = true
+        menu.addItem(warningItem)
+
         menu.addItem(.separator())
 
         // 菜单项图标要么全有要么全无 —— 系统会给个别标准项（如「设置」）
@@ -116,13 +129,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         favoriteItem.isEnabled = false   // menuNeedsUpdate 时按当前标签刷新
         menu.addItem(favoriteItem)
 
-        let settings = NSMenuItem(title: L10n.t("设置…", "Settings…"),
-                                  action: #selector(openSettings),
-                                  keyEquivalent: ",")
-        settings.target = self
-        settings.image = Self.symbol("gearshape")
-        menu.addItem(settings)
-
         menu.addItem(.separator())
 
         let logs = NSMenuItem(title: L10n.t("打开日志文件", "Open Log File"), action: #selector(openLog), keyEquivalent: "")
@@ -134,6 +140,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         updates.target = self
         updates.image = Self.symbol("arrow.triangle.2.circlepath")
         menu.addItem(updates)
+
+        let settings = NSMenuItem(title: L10n.t("设置…", "Settings…"),
+                                  action: #selector(openSettings),
+                                  keyEquivalent: ",")
+        settings.target = self
+        settings.image = Self.symbol("gearshape")
+        menu.addItem(settings)
 
         menu.addItem(.separator())
 
@@ -152,40 +165,96 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 语言变了要重建菜单：菜单项标题是创建时写死的，不会自己更新。
     func rebuildMenu() {
         buildMenu()
-        render(connected: connected, tabCount: lastTabCount)
+        render(connected: connected, tabCount: lastTabCount, browserName: lastBrowserName)
     }
 
     // MARK: - 状态
 
-    func render(connected: Bool, tabCount: Int) {
+    /// browserName：活动浏览器的显示名。多浏览器时账本随前台切换，
+    /// 名字必须点明这是谁的标签。
+    func render(connected: Bool, tabCount: Int, browserName: String?) {
         self.connected = connected
         self.lastTabCount = tabCount
+        self.lastBrowserName = browserName
 
         statusItem.button?.image = Self.cardIcon
         // 断开时压暗图标：不换符号，位置和形状保持稳定，只是"灰掉"
         statusItem.button?.alphaValue = connected ? 1.0 : 0.45
 
-        statusLine.title = connected
-            ? L10n.t("已连接 · \(tabCount) 个标签", "Connected · \(tabCount) tab\(tabCount == 1 ? "" : "s")")
-            : L10n.t("扩展未连接", "Extension not connected")
-        statusLine.image = Self.symbol(connected ? "checkmark.circle" : "exclamationmark.circle")
-
-        // 连接且有标签时给状态行挂子菜单，hover 展开标签列表；
-        // 断开时摘掉，恢复成灰色的纯状态行。
-        let showTabs = connected && tabCount > 0 && !unauthorized
-        statusLine.submenu = showTabs ? tabsSubmenu : nil
-        statusLine.isEnabled = showTabs
+        // 连接时状态行被浏览器行取代（menuNeedsUpdate 时构建），
+        // 只有未连接时它才出场
+        statusLine.title = L10n.t("扩展未连接", "Extension not connected")
+        statusLine.image = Self.symbol("exclamationmark.circle")
+        statusLine.isEnabled = false
     }
 
     // MARK: - 标签子菜单
 
-    /// 主菜单每次打开时把子菜单填好 —— 不能等子菜单自己展开时再填：
-    /// 空子菜单的父项会被判成禁用，永远展不开（2026-08-20 实测截图）。
-    /// 「收藏当前标签」的标题/状态也在这时按当前标签刷新。
+    /// 主菜单每次打开时把浏览器行和它们的子菜单一次性建好 —— 不能等
+    /// 子菜单自己展开时再填：空子菜单的父项会被判成禁用，永远展不开
+    /// （2026-08-20 实测截图）。「置顶当前标签」等动态项也在这时刷新。
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard menu === statusItem.menu else { return }
+        refreshBrowserLines(in: menu)
         refreshFavoriteItem()
-        if statusLine.submenu != nil { rebuildTabsSubmenu() }
+        refreshWarningItem()
+    }
+
+    /// 每个已连接浏览器一行：「Chrome · 5 个标签 ▸」，行首是浏览器图标，
+    /// 子菜单是它自己的标签列表。未连接时一行都没有，statusLine 顶上。
+    private func refreshBrowserLines(in menu: NSMenu) {
+        for item in browserItems { menu.removeItem(item) }
+        browserItems.removeAll()
+
+        let browsers = menuBrowsersProvider?() ?? []
+        statusLine.isHidden = !browsers.isEmpty
+        guard !browsers.isEmpty else { return }
+
+        var insertIndex = menu.index(of: statusLine) + 1
+        for browser in browsers {
+            let count = browser.entries.count
+            let item = NSMenuItem(title: L10n.t("\(browser.name) · \(count) 个标签",
+                                                "\(browser.name) · \(count) tab\(count == 1 ? "" : "s")"),
+                                  action: nil, keyEquivalent: "")
+            item.image = Self.browserIcon(browser.bundleID)
+            let submenu = NSMenu()
+            submenu.autoenablesItems = false
+            fillTabsMenu(submenu, browser: browser)
+            item.submenu = submenu
+            item.isEnabled = true
+            menu.insertItem(item, at: insertIndex)
+            insertIndex += 1
+            browserItems.append(item)
+        }
+    }
+
+    /// 浏览器 App 图标缩到菜单标准的 16pt。
+    private static func browserIcon(_ bundleID: String) -> NSImage? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return symbol("globe")
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 16, height: 16)
+        return icon
+    }
+
+    private func refreshWarningItem() {
+        guard let text = extensionWarning?() else {
+            warningItem.isHidden = true
+            return
+        }
+        warningItem.isHidden = false
+        warningItem.attributedTitle = NSAttributedString(
+            string: text,
+            attributes: [.foregroundColor: NSColor.systemOrange,
+                         .font: NSFont.menuFont(ofSize: 0)])
+        warningItem.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
+                                    accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(paletteColors: [.systemOrange]))
+    }
+
+    @objc private func warningClicked() {
+        onExtensionWarningClick?()
     }
 
     private func refreshFavoriteItem() {
@@ -210,10 +279,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
-    private func rebuildTabsSubmenu() {
-        let menu = tabsSubmenu
+    private func fillTabsMenu(_ menu: NSMenu, browser: MRUController.MenuBrowser) {
         menu.removeAllItems()
-        let entries = tabsProvider?() ?? []
+        let entries = browser.entries
 
         // 多窗口时按窗口分组（组头小灰字），组的顺序 = 窗口在 MRU 里首次
         // 出现的顺序，当前窗口天然排最前；单窗口不加组头，保持干净。
@@ -236,7 +304,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 let title = raw.count > 60 ? String(raw.prefix(60)) + "…" : raw
                 let item = NSMenuItem(title: title, action: #selector(pickTab(_:)), keyEquivalent: "")
                 item.target = self
-                item.representedObject = entry.tab.id
+                // 标签 id 在不同浏览器间会撞号，必须连浏览器身份一起带上
+                item.representedObject = ["tabId": entry.tab.id, "browser": browser.bundleID] as [String: Any]
                 item.image = Self.faviconIcon(entry.icon)
                 if entry.tab.id == entries.first?.tab.id {
                     item.state = .on   // MRU 首位就是当前标签
@@ -275,8 +344,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func pickTab(_ sender: NSMenuItem) {
-        guard let tabId = sender.representedObject as? Int else { return }
-        onPickTab?(tabId)
+        guard let info = sender.representedObject as? [String: Any],
+              let tabId = info["tabId"] as? Int,
+              let browser = info["browser"] as? String else { return }
+        onPickTabInBrowser?(tabId, browser)
     }
 
     // MARK: - 图标

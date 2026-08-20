@@ -24,6 +24,32 @@ const RETRY_MS = 700;
 let ws = null;
 let retryTimer = null;
 
+// 诊断探针 + 降噪：夸克等分支浏览器会把未捕获的 promise 拒绝渲染成扩展
+// 错误卡片，且归因粗糙（offscreen.html:0 匿名函数），从卡片上根本看不出
+// 元凶。这里统一截获：完整堆栈经 WebSocket 写进 helper 日志（tabflick.log
+// 里搜 "offscreen unhandled"），并 preventDefault 阻止浏览器再弹卡片。
+self.addEventListener("unhandledrejection", (event) => {
+  event.preventDefault();
+  const reason = event.reason;
+  const detail = (reason && (reason.stack || reason.message)) || String(reason);
+  try {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "log", message: `offscreen unhandled rejection: ${detail}` }));
+    }
+  } catch {}
+});
+
+self.addEventListener("error", (event) => {
+  try {
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: "log",
+        message: `offscreen error: ${event.message} @ ${event.filename}:${event.lineno}`,
+      }));
+    }
+  } catch {}
+});
+
 function toWorker(message) {
   // SW 若已被回收，这条消息会把它唤醒。没有接收方时 sendMessage 会 reject，
   // 属正常情况（比如扩展正在卸载），吞掉即可。

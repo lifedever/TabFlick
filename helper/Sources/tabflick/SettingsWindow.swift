@@ -63,7 +63,6 @@ private struct GeneralPane: View {
 
 private struct SwitcherPane: View {
     @ObservedObject var settings: AppSettings
-    let connected: Bool
 
     var body: some View {
         Form {
@@ -100,20 +99,95 @@ private struct SwitcherPane: View {
                 Text(L10n.t("布局", "Layout"))
             }
 
+        }
+        .formStyle(.grouped)
+        .frame(width: 460)
+    }
+}
+
+// MARK: - 浏览器
+
+/// 每个已安装的 Chromium 系浏览器一行，显示连接与扩展版本状态。
+/// 这是多浏览器状态的唯一完整视图 —— 连接是按浏览器分账的。
+private struct BrowserPane: View {
+    let browsers: [MRUController.BrowserStatus]
+
+    var body: some View {
+        Form {
             Section {
-                Label(
-                    connected
-                        ? L10n.t("扩展已连接", "Extension connected")
-                        : L10n.t("扩展未连接 —— 设置会在重新连接后生效",
-                                 "Extension not connected — settings apply once it reconnects"),
-                    systemImage: connected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-                )
+                if browsers.isEmpty {
+                    Text(L10n.t("没有发现已安装的 Chromium 系浏览器。",
+                                "No Chromium-based browsers found."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(browsers) { browser in
+                        browserRow(browser)
+                    }
+                }
+            } header: {
+                Text(L10n.t("已安装的浏览器", "Installed browsers"))
+            }
+
+            Section {
+                Text(L10n.t(
+                    "「未连接」= 该浏览器没装扩展，或者没有在运行。每个浏览器都要单独装一次扩展。",
+                    "\u{201C}Not connected\u{201D} means the extension isn't installed there, or the browser isn't running. Each browser needs its own copy of the extension."
+                ))
                 .font(.system(size: 11))
-                .foregroundStyle(connected ? .green : .orange)
+                .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    Button(L10n.t("下载扩展", "Download Extension")) {
+                        NSWorkspace.shared.open(URL(string: "https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip")!)
+                    }
+                    Link(L10n.t("安装说明", "Install Guide"),
+                         destination: URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
+                        .font(.system(size: 11))
+                }
             }
         }
         .formStyle(.grouped)
         .frame(width: 460)
+    }
+
+    @ViewBuilder
+    private func browserRow(_ browser: MRUController.BrowserStatus) -> some View {
+        HStack(spacing: 8) {
+            appIcon(browser.bundleID)
+            Text(browser.name)
+            Spacer()
+            if !browser.connected {
+                Label(L10n.t("未连接", "Not connected"), systemImage: "circle.dashed")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else if browser.needsUpdate {
+                Label(L10n.t("已连接 · 扩展 v\(browser.extVersion ?? "?") 需更新到 v\(MRUController.appVersionString ?? "?")",
+                             "Connected · extension v\(browser.extVersion ?? "?"), update to v\(MRUController.appVersionString ?? "?")"),
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+            } else {
+                Label(L10n.t("已连接", "Connected") + (browser.extVersion.map { " · v\($0)" } ?? ""),
+                      systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.green)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func appIcon(_ bundleID: String) -> some View {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+        } else {
+            Image(systemName: "globe")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -202,6 +276,14 @@ private struct TabManagementPane: View {
         .frame(width: 460)
     }
 
+    private var hasMultipleBrowsers: Bool {
+        Set(settings.favorites.map(\.browser)).count > 1
+    }
+
+    private func browserName(_ bundleID: String) -> String {
+        BrowserSupport.displayName(bundleID)
+    }
+
     @ViewBuilder
     private func favoriteRow(_ fav: FavoriteTab) -> some View {
         HStack(spacing: 8) {
@@ -209,8 +291,10 @@ private struct TabManagementPane: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(fav.title.isEmpty ? fav.url : fav.title)
                     .lineLimit(1)
-                // 显示「最后访问」而不是原始收藏地址 —— 恢复时开的就是它
-                Text(settings.favoriteCurrentUrls[fav.id] ?? fav.url)
+                // 显示「最后访问」而不是原始收藏地址 —— 恢复时开的就是它。
+                // 收藏跨多个浏览器时（按浏览器分账），前缀标注归属。
+                Text((hasMultipleBrowsers ? browserName(fav.browser) + " · " : "")
+                     + (settings.favoriteCurrentUrls[fav.id] ?? fav.url))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -277,38 +361,29 @@ private struct FaviconView: View {
 
 private struct HotkeyPane: View {
     @ObservedObject var settings: AppSettings
-    @State private var recording = false
+
+    private enum Target { case switcher, pin }
+    @State private var recording: Target?
     @State private var monitor: Any?
 
     var body: some View {
         Form {
             Section {
-                HStack {
-                    Text(L10n.t("置顶 / 取消置顶当前标签", "Pin / unpin current tab"))
-                    Spacer()
-                    Button {
-                        recording ? stopRecording() : startRecording()
-                    } label: {
-                        Text(recording
-                             ? L10n.t("按下快捷键…", "Press shortcut…")
-                             : (settings.pinHotkey?.display ?? L10n.t("点击录制", "Record")))
-                            .frame(minWidth: 96)
-                    }
-                    if settings.pinHotkey != nil && !recording {
-                        Button {
-                            settings.pinHotkey = nil
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help(L10n.t("清除", "Clear"))
-                    }
-                }
+                row(label: L10n.t("唤出切换器（按住修饰键循环）", "Open the switcher (hold to cycle)"),
+                    target: .switcher,
+                    current: settings.switcherHotkey?.display,
+                    placeholder: "⌃⇥",
+                    clear: { settings.switcherHotkey = nil })
+
+                row(label: L10n.t("置顶 / 取消置顶当前标签", "Pin / unpin current tab"),
+                    target: .pin,
+                    current: settings.pinHotkey?.display,
+                    placeholder: nil,
+                    clear: { settings.pinHotkey = nil })
 
                 Text(L10n.t(
-                    "需包含 ⌘ / ⌃ / ⌥ 至少一个修饰键，仅在 Chrome 前台生效，Esc 取消录制。注意避开 Chrome 自带的快捷键（如 ⌘T 新建标签、⌘D 收藏书签）。",
-                    "Include at least one of ⌘ / ⌃ / ⌥. Works only while Chrome is frontmost; Esc cancels recording. Avoid Chrome's own shortcuts (⌘T new tab, ⌘D bookmark)."
+                    "需包含 ⌘ / ⌃ / ⌥ 至少一个修饰键，仅在浏览器前台生效，Esc 取消录制。切换器键不含 ⇧（⇧ 用于反向切换），清除即恢复默认 ⌃⇥。注意避开浏览器自带快捷键（⌘T 新建标签、⌘D 收藏书签）。",
+                    "Include at least one of ⌘ / ⌃ / ⌥; active only while the browser is frontmost; Esc cancels recording. The switcher key ignores ⇧ (reserved for reverse); clearing restores the default ⌃⇥. Avoid the browser's own shortcuts (⌘T, ⌘D)."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -321,17 +396,51 @@ private struct HotkeyPane: View {
         .onDisappear { stopRecording() }
     }
 
-    private func startRecording() {
-        recording = true
+    /// placeholder 非空表示「清除后有默认值」（切换器 ⌃⇥）；nil 表示清除即禁用。
+    @ViewBuilder
+    private func row(label: String, target: Target,
+                     current: String?, placeholder: String?,
+                     clear: @escaping () -> Void) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Button {
+                recording == target ? stopRecording() : startRecording(target)
+            } label: {
+                Text(recording == target
+                     ? L10n.t("按下快捷键…", "Press shortcut…")
+                     : (current ?? placeholder.map { L10n.t("\($0)（默认）", "\($0) (default)") }
+                        ?? L10n.t("点击录制", "Record")))
+                    .frame(minWidth: 96)
+            }
+            if current != nil && recording != target {
+                Button(action: clear) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(placeholder == nil ? L10n.t("清除", "Clear")
+                                         : L10n.t("恢复默认", "Reset to default"))
+            }
+        }
+    }
+
+    private func startRecording(_ target: Target) {
+        stopRecording()
+        recording = target
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             defer { stopRecording() }
             if event.keyCode == 53 { return nil }   // Esc 取消
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             guard !mods.intersection([.command, .control, .option]).isEmpty,
                   let chars = event.charactersIgnoringModifiers, !chars.isEmpty else { return nil }
-            settings.pinHotkey = HotkeyConfig(keyCode: event.keyCode,
-                                              modifiers: mods.rawValue,
-                                              character: chars.lowercased())
+            let config = HotkeyConfig(keyCode: event.keyCode,
+                                      modifiers: mods.rawValue,
+                                      character: chars.lowercased())
+            switch target {
+            case .switcher: settings.switcherHotkey = config
+            case .pin:      settings.pinHotkey = config
+            }
             return nil   // 这次按键被录制吃掉，不下发
         }
     }
@@ -339,7 +448,7 @@ private struct HotkeyPane: View {
     private func stopRecording() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
-        recording = false
+        recording = nil
     }
 }
 
@@ -437,8 +546,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var generalHost: NSHostingController<GeneralPane>?
     private var switcherHost: NSHostingController<SwitcherPane>?
     private var tabManagementHost: NSHostingController<TabManagementPane>?
+    private var browserHost: NSHostingController<BrowserPane>?
     private var hotkeyHost: NSHostingController<HotkeyPane>?
     private var aboutHost: NSHostingController<AboutPane>?
+
+    private var browserStatuses: [MRUController.BrowserStatus] = []
+
+    func setBrowserStatuses(_ statuses: [MRUController.BrowserStatus]) {
+        guard statuses != browserStatuses else { return }
+        browserStatuses = statuses
+        refreshContentIfVisible()
+    }
     private var tabController: NSTabViewController?
 
     init(settings: AppSettings, updates: UpdateChecker) {
@@ -467,6 +585,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         [L10n.t("通用", "General"),
          L10n.t("切换器", "Switcher"),
          L10n.t("标签管理", "Tabs"),
+         L10n.t("浏览器", "Browsers"),
          L10n.t("快捷键", "Shortcuts"),
          L10n.t("关于", "About")]
     }
@@ -474,8 +593,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func refreshContentIfVisible() {
         guard let window, window.isVisible else { return }
         generalHost?.rootView = GeneralPane(settings: settings)
-        switcherHost?.rootView = SwitcherPane(settings: settings, connected: connected)
+        switcherHost?.rootView = SwitcherPane(settings: settings)
         tabManagementHost?.rootView = TabManagementPane(settings: settings)
+        browserHost?.rootView = BrowserPane(browsers: browserStatuses)
         hotkeyHost?.rootView = HotkeyPane(settings: settings)
         aboutHost?.rootView = AboutPane(updates: updates)
     }
@@ -490,8 +610,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         if window == nil {
             let general = NSHostingController(rootView: GeneralPane(settings: settings))
-            let switcher = NSHostingController(rootView: SwitcherPane(settings: settings, connected: connected))
+            let switcher = NSHostingController(rootView: SwitcherPane(settings: settings))
             let tabManagement = NSHostingController(rootView: TabManagementPane(settings: settings))
+            let browser = NSHostingController(rootView: BrowserPane(browsers: browserStatuses))
             let hotkey = NSHostingController(rootView: HotkeyPane(settings: settings))
             let about = NSHostingController(rootView: AboutPane(updates: updates))
             // 让 preferredContentSize 跟随 SwiftUI 内容：NSTabViewController
@@ -499,18 +620,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             general.sizingOptions = [.preferredContentSize]
             switcher.sizingOptions = [.preferredContentSize]
             tabManagement.sizingOptions = [.preferredContentSize]
+            browser.sizingOptions = [.preferredContentSize]
             hotkey.sizingOptions = [.preferredContentSize]
             about.sizingOptions = [.preferredContentSize]
             generalHost = general
             switcherHost = switcher
             tabManagementHost = tabManagement
+            browserHost = browser
             hotkeyHost = hotkey
             aboutHost = about
 
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
-            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "rectangle.stack", "command", "info.circle"]
-            for (index, controller) in ([general, switcher, tabManagement, hotkey, about] as [NSViewController]).enumerated() {
+            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "rectangle.stack", "globe", "command", "info.circle"]
+            for (index, controller) in ([general, switcher, tabManagement, browser, hotkey, about] as [NSViewController]).enumerated() {
                 let item = NSTabViewItem(viewController: controller)
                 item.label = Self.paneTitles[index]
                 item.image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: nil)

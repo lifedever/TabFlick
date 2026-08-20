@@ -57,22 +57,28 @@ struct FavoriteTab: Codable, Identifiable, Equatable {
     let title: String
     /// 站点图标地址（置顶时的 tab.favIconUrl），设置列表展示用。
     let favIconUrl: String?
+    /// 归属浏览器的 bundle id。浏览器是物理隔离的主体：置顶列表按浏览器
+    /// 分账，恢复/取消只作用于自己的浏览器。
+    let browser: String
 
-    init(url: String, title: String, favIconUrl: String? = nil) {
+    init(url: String, title: String, favIconUrl: String? = nil, browser: String) {
         self.id = UUID().uuidString
         self.url = url
         self.title = title
         self.favIconUrl = favIconUrl
+        self.browser = browser
     }
 
     /// 旧版本存的数据没有 id 字段（当时以 url 为身份），用 url 补位，
     /// 顺便让旧的 favoriteCurrentUrls（也是按 url 键的）继续对得上。
+    /// browser 字段之前也不存在 —— 旧数据只可能来自 Chrome。
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         url = try c.decode(String.self, forKey: .url)
         title = try c.decode(String.self, forKey: .title)
         id = try c.decodeIfPresent(String.self, forKey: .id) ?? url
         favIconUrl = try c.decodeIfPresent(String.self, forKey: .favIconUrl)
+        browser = try c.decodeIfPresent(String.self, forKey: .browser) ?? "com.google.Chrome"
     }
 }
 
@@ -97,7 +103,12 @@ struct HotkeyConfig: Codable, Equatable {
         if mods.contains(.option) { s += "⌥" }
         if mods.contains(.shift) { s += "⇧" }
         if mods.contains(.command) { s += "⌘" }
-        return s + character.uppercased()
+        switch character {
+        case "\t":     return s + "⇥"
+        case " ":      return s + "Space"
+        case "\r":     return s + "↩"
+        default:       return s + character.uppercased()
+        }
     }
 
     /// event tap 匹配用的 CGEventFlags。
@@ -186,6 +197,8 @@ final class AppSettings: ObservableObject {
         static let favorites = "favoriteTabs"
         static let favoriteCurrentUrls = "favoriteCurrentUrls"
         static let pinHotkey = "pinHotkey"
+        static let switcherHotkey = "switcherHotkey"
+        static let knownBrowsers = "knownBrowsers"
     }
 
     /// 切换器相关配置变化时通知外部（用来推给扩展）。
@@ -264,6 +277,28 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 切换器的触发键。nil = 默认 ⌃⇥。修饰键里的 ⇧ 会被忽略（留给反向切换）。
+    @Published var switcherHotkey: HotkeyConfig? {
+        didSet {
+            guard oldValue != switcherHotkey else { return }
+            if let hk = switcherHotkey, let data = try? JSONEncoder().encode(hk) {
+                UserDefaults.standard.set(data, forKey: Key.switcherHotkey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Key.switcherHotkey)
+            }
+            onHotkeyChange?()
+        }
+    }
+
+    /// 连接过的浏览器（bundle id）。设置页的浏览器状态列表用 ——
+    /// 没连着的浏览器我们无从探测，只能记住见过谁。
+    @Published var knownBrowsers: [String] {
+        didSet {
+            guard oldValue != knownBrowsers else { return }
+            UserDefaults.standard.set(knownBrowsers, forKey: Key.knownBrowsers)
+        }
+    }
+
     /// 收藏的标签。变更即持久化并推给扩展（扩展收到后立即核对补齐）。
     @Published var favorites: [FavoriteTab] {
         didSet {
@@ -336,6 +371,9 @@ final class AppSettings: ObservableObject {
             .flatMap { try? JSONDecoder().decode([FavoriteTab].self, from: $0) } ?? []
         pinHotkey = defaults.data(forKey: Key.pinHotkey)
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
+        switcherHotkey = defaults.data(forKey: Key.switcherHotkey)
+            .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
+        knownBrowsers = defaults.stringArray(forKey: Key.knownBrowsers) ?? []
         favoriteCurrentUrls = defaults.dictionary(forKey: Key.favoriteCurrentUrls) as? [String: String] ?? [:]
         updateCheckFrequency = UpdateCheckFrequency(rawValue: defaults.string(forKey: Key.updateCheckFrequency) ?? "") ?? .daily
 
@@ -361,12 +399,13 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// 传给扩展的配置字典。
-    var payload: [String: Any] {
+    /// 传给某个客户端的配置字典。收藏只下发**它自己浏览器**的那份 ——
+    /// 浏览器是隔离主体，别的浏览器的置顶不该在这里恢复。
+    func payload(favoritesFor browser: String) -> [String: Any] {
         ["type": "settings",
          "scopeToWindow": scopeToWindow,
          "tabLifetimeHours": tabLifetime.hours,
-         "favorites": favorites.map {
+         "favorites": favorites.filter { $0.browser == browser }.map {
              ["id": $0.id,
               "url": $0.url,
               "title": $0.title,

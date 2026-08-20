@@ -12,8 +12,40 @@ import Carbon.HIToolbox
 // 这些变量的读写都发生在主线程：run loop source 挂在 main run loop 上，
 // NSWorkspace 通知也投递到主队列。
 
-// bundle ID 只在 ChromeWindowLocator 里定义一份，别在这儿再抄一个
-private var gFrontIsChrome = false
+// 支持的浏览器集合在 BrowserSupport 里定义一份，别在这儿再抄
+private var gFrontIsBrowser = false
+
+/// 前台的受支持浏览器变化时通知上层（就绪状态/菜单计数要换账本）。
+private var gOnActiveBrowserChange: (() -> Void)?
+
+func setActiveBrowserChangeHandler(_ handler: (() -> Void)?) {
+    gOnActiveBrowserChange = handler
+}
+
+/// 重算「前台是不是受支持浏览器」。除了 App 切换时调用，
+/// BrowserSupport.connected 变化后也必须调一次：扩展连上并识别出身份时，
+/// 用户可能早已站在那个浏览器里 —— 等下一次 App 切换才生效，
+/// 表现就是「第一次按没反应」。
+@MainActor
+func refreshFrontmostBrowserState() {
+    let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    let previous = ChromeWindowLocator.activeBundleID
+    gFrontIsBrowser = BrowserSupport.isSupported(front)
+    if gFrontIsBrowser, let front { ChromeWindowLocator.activeBundleID = front }
+    if ChromeWindowLocator.activeBundleID != previous { gOnActiveBrowserChange?() }
+}
+
+/// 切换器快捷键（默认 ⌃⇥）。修饰键不含 ⇧ —— ⇧ 保留给反向切换。
+private var gSwitchKeyCode: Int64 = Int64(kVK_Tab)
+private var gSwitchModifiers: CGEventFlags = .maskControl
+
+/// 切换器快捷键设置变化时由主线程调用。nil = 恢复默认 ⌃⇥。
+/// flags 会剥掉 ⇧（反向语义需要它空着），剥完为空则退回 ⌃。
+func configureSwitcherHotkey(keyCode: Int64?, flags: CGEventFlags) {
+    gSwitchKeyCode = keyCode ?? Int64(kVK_Tab)
+    let stripped = flags.intersection([.maskCommand, .maskControl, .maskAlternate])
+    gSwitchModifiers = stripped.isEmpty ? .maskControl : stripped
+}
 private var gCycling = false
 private var gTap: CFMachPort?
 
@@ -115,20 +147,20 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
         let code = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
-        // 自愈：Ctrl 已经不在按下状态，cycling 却还挂着 —— 说明我们漏收了
-        // 那次 flagsChanged（tap 被系统 timeout 禁用、按住 Ctrl 时切走再松手、
+        // 自愈：切换键的修饰键已经不在按下状态，cycling 却还挂着 —— 说明我们
+        // 漏收了那次 flagsChanged（tap 被系统 timeout 禁用、按住时切走再松手、
         // 系统弹窗抢焦点，都会造成事件丢失）。这里必须清掉，否则下面的方向键
         // 分支会把网页里所有 ←/→ 一直吞掉，表现为「键盘坏了」。
-        if gCycling && !flags.contains(.maskControl) {
+        if gCycling && !flags.contains(gSwitchModifiers) {
             gCycling = false
             gOnCommit?()
         }
 
         // 切换过程中，左右方向键也移动游标。
-        // 必须同时要求 Ctrl 仍按着：只看 gCycling 的话，一旦状态残留就会
+        // 必须同时要求修饰键仍按着：只看 gCycling 的话，一旦状态残留就会
         // 无差别吞掉方向键，而这个标志是靠一个可能丢失的事件来清零的。
         if gCycling,
-           flags.contains(.maskControl),
+           flags.contains(gSwitchModifiers),
            code == Int64(kVK_LeftArrow) || code == Int64(kVK_RightArrow) {
             gOnStep?(code == Int64(kVK_LeftArrow))
             return nil
@@ -138,27 +170,27 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
         // ⌃↑/⌃↓ 是系统调度中心（Mission Control）的快捷键，切换到一半
         // 整个桌面飞走，比「按了没反应」糟糕得多。
         if gCycling,
-           flags.contains(.maskControl),
+           flags.contains(gSwitchModifiers),
            code == Int64(kVK_UpArrow) || code == Int64(kVK_DownArrow) {
             gOnRowStep?(code == Int64(kVK_UpArrow))
             return nil
         }
 
         // 用户自定义的置顶快捷键。未设置时 gPinHotkeyCode 为 -1，永不命中；
-        // 只在 Chrome 前台吞键，其余场合原样放行。
+        // 只在受支持浏览器前台时吞键，其余场合原样放行。
         if gPinHotkeyCode >= 0,
            code == gPinHotkeyCode,
-           gFrontIsChrome,
+           gFrontIsBrowser,
            flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]) == gPinHotkeyFlags {
             gOnPinHotkey?()
             return nil
         }
 
-        // Tab 是非字符键，kVK_Tab 在任何键盘布局下都是同一个物理键位，
-        // 用 Carbon 常量而不是裸数字。
-        guard code == Int64(kVK_Tab),
-              flags.contains(.maskControl),
-              gFrontIsChrome,
+        // 切换器快捷键（默认 ⌃⇥，可在设置中自定义）。keyCode 是用户录制或
+        // Carbon 常量，不是裸数字。加 ⇧ 表示反向。
+        guard code == gSwitchKeyCode,
+              flags.contains(gSwitchModifiers),
+              gFrontIsBrowser,
               gReady else { break }
 
         gCycling = true
@@ -166,7 +198,7 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
         return nil   // 吞掉，Chrome 收不到
 
     case .flagsChanged:
-        if gCycling && !event.flags.contains(.maskControl) {
+        if gCycling && !event.flags.contains(gSwitchModifiers) {
             gCycling = false
             gOnCommit?()
         }
@@ -293,24 +325,24 @@ final class EventTap {
         permissionTimer = timer
     }
 
-    /// 前台 App 用 bundle identifier 判定。
+    /// 前台 App 用 bundle identifier 判定（BrowserSupport 集合）。
     /// 绝不能用 localizedName —— 那是本地化字符串，中文系统下 Chrome 之外的
     /// 很多 App 名字都不一样，白名单会静默 0 命中。
     private func startTrackingFrontmostApp() {
-        gFrontIsChrome = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == ChromeWindowLocator.bundleID
+        refreshFrontmostBrowserState()
 
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { note in
-            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            let isChrome = app?.bundleIdentifier == ChromeWindowLocator.bundleID
-            gFrontIsChrome = isChrome
-            // 切走时若还在 cycling，丢弃这一轮，避免状态卡住
-            if !isChrome && gCycling {
-                gCycling = false
-                gOnCommit?()
+        ) { _ in
+            MainActor.assumeIsolated {
+                refreshFrontmostBrowserState()
+                // 切走时若还在 cycling，丢弃这一轮，避免状态卡住
+                if !gFrontIsBrowser && gCycling {
+                    gCycling = false
+                    gOnCommit?()
+                }
             }
         }
     }

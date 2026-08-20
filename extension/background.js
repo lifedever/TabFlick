@@ -27,6 +27,17 @@ const DEFAULT_SETTINGS = {
   favorites: [],
 };
 
+// 诊断探针 + 降噪（与 offscreen.js 同款）：未捕获的 promise 拒绝把完整
+// 堆栈写进 helper 日志，并阻止分支浏览器（夸克）把它渲染成错误卡片。
+self.addEventListener("unhandledrejection", (event) => {
+  event.preventDefault();
+  const reason = event.reason;
+  const detail = (reason && (reason.stack || reason.message)) || String(reason);
+  // 浏览器退出时挂起的 API 调用会成批拒绝，属正常噪音，不进日志
+  if (detail.includes("browser is shutting down")) return;
+  send({ type: "log", message: `sw unhandled rejection: ${detail}` });
+});
+
 let connected = false;   // offscreen 报上来的连接状态
 let mru = [];          // tabId 数组，最近使用的在前，跨窗口全局维护
 let mruLoaded = false;
@@ -312,9 +323,14 @@ async function ensureFavorites() {
           send({ type: "favoriteBound", id: fav.id, tabId: match.id });
         } else {
           const created = await chrome.tabs.create({ url: targetUrl, pinned: true, active: false });
-          selfPinned.add(created.id);
-          claimed.add(created.id);
-          send({ type: "favoriteBound", id: fav.id, tabId: created.id });
+          // 部分 Chromium 分支（实测：夸克）的 tabs.create 可能不按规范
+          // 返回 Tab 对象 —— 读 created.id 会抛 undefined 错。拿不到 id
+          // 就跳过绑定，下次核对再收编。
+          if (created?.id !== undefined) {
+            selfPinned.add(created.id);
+            claimed.add(created.id);
+            send({ type: "favoriteBound", id: fav.id, tabId: created.id });
+          }
           send({ type: "log", message: `favorite restored: ${targetUrl}` });
         }
       } catch (e) {
@@ -511,7 +527,8 @@ chrome.runtime.onMessage.addListener((message) => {
       if (!connected) {
         connected = true;
         console.log("[TabFlick] 已连接 helper");
-        send({ type: "requestSettings" });
+        // 附带扩展版本：helper 核对 major.minor 配套，不一致会提示用户更新扩展
+        send({ type: "requestSettings", extVersion: chrome.runtime.getManifest().version });
         pushMRU();
         chrome.tabs
           .query({ active: true, lastFocusedWindow: true })

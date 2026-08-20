@@ -110,13 +110,55 @@ final class MRUController {
     /// 只存内存的话 helper 一重启就退化成一排空卡片。
     private let thumbnails = ThumbnailStore()
 
-    /// 扩展推来的实时 MRU 顺序，最近使用的在前。index 0 就是当前标签页。
-    /// 这是**全量**列表（所有窗口）—— 状态栏菜单直接用它；切换器按设置
-    /// 走 `switcherTabs` 过滤。
-    private var tabs: [TabInfo] = []
+    /// 每个已连接客户端（浏览器）的独立状态。浏览器是物理隔离的主体：
+    /// 标签列表、命令路由、置顶恢复都按客户端分账，绝不互串。
+    struct ClientState {
+        /// 该浏览器的实时 MRU 顺序，最近使用的在前，index 0 是当前标签。
+        var tabs: [TabInfo] = []
+        /// 随每次 mru 推送附带的「当前窗口」id，-1 表示未知。
+        var currentWindowId = -1
+        /// 归属浏览器的 bundle id；连接建立后由 pid 反查异步补上，nil = 未识别。
+        var browser: String?
+        /// 扩展上报的自身版本（requestSettings 握手带来）。
+        var extVersion: String?
+    }
 
-    /// 扩展随每次 mru 推送附带的「当前窗口」id，-1 表示未知。
-    private var currentWindowId = -1
+    private var clients: [UUID: ClientState] = [:]
+    /// 最近一次推送 MRU 的客户端 —— 多连接且身份都没识别出来时的兜底路由。
+    private var lastPushClient: UUID?
+
+    /// 当前应该服务的客户端：前台浏览器对应的连接优先；只有一个连接时
+    /// 直接用它（单浏览器用户完全不依赖 pid 识别这条链路）；多连接身份
+    /// 不明时退回最近推送者。
+    private var activeClientID: UUID? {
+        if let match = clients.first(where: { $0.value.browser == ChromeWindowLocator.activeBundleID })?.key {
+            return match
+        }
+        if clients.count == 1 { return clients.keys.first }
+        if let last = lastPushClient, clients[last] != nil { return last }
+        return clients.keys.first
+    }
+
+    /// 活动客户端（前台浏览器）的标签列表。切换器/菜单/命令都只看它。
+    private var tabs: [TabInfo] {
+        activeClientID.flatMap { clients[$0]?.tabs } ?? []
+    }
+
+    private var currentWindowId: Int {
+        activeClientID.flatMap { clients[$0]?.currentWindowId } ?? -1
+    }
+
+    /// 客户端的记账浏览器：识别成功用识别结果；失败退回「最近前台的
+    /// 受支持浏览器」—— 单浏览器场景两者必然一致。
+    private func effectiveBrowser(of clientID: UUID) -> String {
+        clients[clientID]?.browser ?? ChromeWindowLocator.activeBundleID
+    }
+
+    /// 命令只发给活动客户端 —— 广播会命中其他浏览器里碰巧同号的 tabId。
+    private func sendToActive(_ object: [String: Any]) {
+        guard let id = activeClientID else { return }
+        server.send(object, to: id)
+    }
 
     /// 收藏 → 活标签的绑定（favorite.id → tabId）。
     /// 置顶标签会在站内外漂移，域名判定随时失真；绑定是唯一稳定的对应。
@@ -143,7 +185,7 @@ final class MRUController {
     /// 落点会和面板高亮对不上。切到本来就活跃的标签是无害的幂等操作。
     private var closedTabThisRound = false
 
-    private var connected = false
+    private var connected: Bool { !clients.isEmpty }
     private var pingTimer: Timer?
 
     /// cycling 卡死看门狗。
@@ -179,11 +221,8 @@ final class MRUController {
         overlay.hide()
     }
 
-    /// 连接状态或标签数变化，供菜单栏更新显示。
+    /// 连接状态或标签数变化，供菜单栏更新显示。计数是活动浏览器的。
     var onStatusChange: ((Bool, Int) -> Void)?
-
-    /// 需要向扩展补推一份设置。
-    var onNeedSettingsPush: (() -> Void)?
 
     private func publishStatus() {
         onStatusChange?(connected, tabs.count)
@@ -192,9 +231,76 @@ final class MRUController {
     /// 扩展请求打开 app 的设置窗口（点了浏览器工具栏图标）。
     var onExtensionRequestedSettings: (() -> Void)?
 
-    /// 把当前设置推给扩展。扩展不持久化配置，只执行 —— 事实源在 app。
-    func pushSettings(_ payload: [String: Any]) {
-        server.broadcast(payload)
+    /// 扩展版本与 app 不配套（major.minor 不同）。参数 (扩展版本, 应用版本)。
+    var onExtensionOutdated: ((String, String) -> Void)?
+    private var reportedExtensionMismatch = false
+
+    /// app 自身版本。swift run 开发态没有 Info.plist，为 nil（跳过所有版本核对）。
+    static let appVersionString: String? = {
+        guard let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+              !v.isEmpty else { return nil }
+        return v
+    }()
+
+    private static func majorMinor(_ v: String) -> String {
+        v.split(separator: ".").prefix(2).joined(separator: ".")
+    }
+
+    /// 每个已知浏览器的连接与扩展版本状态（设置页列表 + 菜单警告的数据源）。
+    /// 「已知」= 连接过的（knownBrowsers 持久化）∪ 有置顶记录的 ∪ 当前连着的。
+    struct BrowserStatus: Identifiable, Equatable {
+        var id: String { bundleID }
+        let bundleID: String
+        let name: String
+        let connected: Bool
+        let extVersion: String?
+        let needsUpdate: Bool
+    }
+
+    var browserStatuses: [BrowserStatus] {
+        var connectedByBrowser: [String: ClientState] = [:]
+        for (id, client) in clients {
+            connectedByBrowser[effectiveBrowser(of: id)] = client
+        }
+        let known = Set(BrowserSupport.installedBrowsers())
+            .union(settings.knownBrowsers)
+            .union(settings.favorites.map(\.browser))
+            .union(connectedByBrowser.keys)
+        return known.sorted().map { bundleID in
+            let client = connectedByBrowser[bundleID]
+            let needsUpdate: Bool = {
+                guard let ext = client?.extVersion, let app = Self.appVersionString else { return false }
+                return Self.majorMinor(ext) != Self.majorMinor(app)
+            }()
+            return BrowserStatus(bundleID: bundleID,
+                                 name: BrowserSupport.displayName(bundleID),
+                                 connected: client != nil,
+                                 extVersion: client?.extVersion,
+                                 needsUpdate: needsUpdate)
+        }
+    }
+
+    /// 扩展和 app 按 major.minor 成对发布（patch 可各自独立）。
+    /// 记录版本供状态列表展示；首次发现不匹配额外弹一次提醒。
+    private func recordExtensionVersion(_ clientID: UUID, _ version: String) {
+        clients[clientID]?.extVersion = version
+        publishStatus()
+        guard let appVersion = Self.appVersionString,
+              Self.majorMinor(version) != Self.majorMinor(appVersion) else { return }
+        guard !reportedExtensionMismatch else { return }   // 每次启动只弹一次
+        reportedExtensionMismatch = true
+        log("⚠️  extension \(version) ≠ app \(appVersion) (major.minor) — prompting update")
+        onExtensionOutdated?(version, appVersion)
+    }
+
+    /// 设置变化后向所有客户端各推各的 —— 收藏按浏览器过滤，
+    /// 别的浏览器的置顶绝不会在这个浏览器里恢复。
+    func pushSettingsToAll() {
+        for id in clients.keys { pushSettings(to: id) }
+    }
+
+    private func pushSettings(to id: UUID) {
+        server.send(settings.payload(favoritesFor: effectiveBrowser(of: id)), to: id)
     }
 
     /// 数据没就绪时让 event tap 放行 Ctrl+Tab，降级到 Chrome 的原生切换。
@@ -262,13 +368,15 @@ final class MRUController {
 
         let target = snapshot[index]
         log("✕ close [\(index)] → \(target.title.prefix(50)) (tabId \(target.id))")
-        server.broadcast(["type": "close", "tabId": target.id])
+        sendToActive(["type": "close", "tabId": target.id])
         closedTabThisRound = true
 
         snapshot.remove(at: index)
         // 本地同步剔除，不等扩展的 onRemoved 推送 —— 窗口期里如果开始
         // 新一轮 cycling，快照里不该出现已关掉的标签。
-        tabs.removeAll { $0.id == target.id }
+        if let id = activeClientID {
+            clients[id]?.tabs.removeAll { $0.id == target.id }
+        }
         publishStatus()
 
         // 关的在游标前面 → 游标跟着前移一位；关的是游标那张且它是末尾 →
@@ -285,25 +393,27 @@ final class MRUController {
 
     // MARK: - 来自 WebSocket
 
-    func handleMessage(_ data: Data) {
+    func handleMessage(_ data: Data, from clientID: UUID) {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = root["type"] as? String else { return }
 
         switch type {
         case "mru":
-            guard let raw = root["tabs"],
+            guard clients[clientID] != nil,
+                  let raw = root["tabs"],
                   let payload = try? JSONSerialization.data(withJSONObject: raw),
                   let decoded = try? JSONDecoder().decode([TabInfo].self, from: payload) else { return }
-            tabs = decoded
-            currentWindowId = (root["currentWindowId"] as? NSNumber)?.intValue ?? -1
-            syncFavoriteBindings()
+            clients[clientID]?.tabs = decoded
+            clients[clientID]?.currentWindowId = (root["currentWindowId"] as? NSNumber)?.intValue ?? -1
+            lastPushClient = clientID
+            syncFavoriteBindings(for: clientID)
             icons.prefetch(decoded.map(\.favIconUrl)) { [weak self] in
                 self?.refreshOverlayImages()
             }
             updateReadiness()
             publishStatus()
-            if !cycling {
-                log("MRU updated: \(tabs.count) tabs, current: \(tabs.first?.title.prefix(40) ?? "?")")
+            if !cycling, clientID == activeClientID {
+                log("MRU updated: \(decoded.count) tabs, current: \(decoded.first?.title.prefix(40) ?? "?")")
             }
 
         case "thumb":
@@ -322,13 +432,16 @@ final class MRUController {
             guard let tabId = (root["tabId"] as? NSNumber)?.intValue,
                   let url = root["url"] as? String, url.hasPrefix("http"),
                   let host = URL(string: url)?.host else { return }
+            // 只在**这个浏览器**的账本里去重/认领 —— 隔离主体原则
+            let browser = effectiveBrowser(of: clientID)
+            let mine = settings.favorites.filter { $0.browser == browser }
             // 已绑定这个标签的收藏 → 无事
-            if settings.favorites.contains(where: { favoriteTabBindings[$0.id] == tabId }) {
+            if mine.contains(where: { favoriteTabBindings[$0.id] == tabId }) {
                 return
             }
             // 无活绑定、且最后访问/原始 URL 与之精确相同的收藏 → 认领
             // （浏览器重启后的收编落在这里）
-            if let orphan = settings.favorites.first(where: { fav in
+            if let orphan = mine.first(where: { fav in
                 favoriteTabBindings[fav.id] == nil
                     && (settings.favoriteCurrentUrls[fav.id] ?? fav.url) == url
             }) {
@@ -336,9 +449,10 @@ final class MRUController {
                 return
             }
             let title = root["title"] as? String ?? ""
-            log("★ browser pin → favorite: \(title.prefix(50)) (\(host))")
+            log("★ browser pin → favorite: \(title.prefix(50)) (\(host)) [\(browser)]")
             let fav = FavoriteTab(url: url, title: title,
-                                  favIconUrl: root["favIconUrl"] as? String)
+                                  favIconUrl: root["favIconUrl"] as? String,
+                                  browser: browser)
             favoriteTabBindings[fav.id] = tabId
             settings.favorites.append(fav)
 
@@ -348,7 +462,9 @@ final class MRUController {
             // 收藏一并移除。绑定命中优先 —— 漂移后按域名已经判不准了。
             let tabId = (root["tabId"] as? NSNumber)?.intValue
             let host = root["host"] as? String
+            let reporter = effectiveBrowser(of: clientID)
             let index = settings.favorites.firstIndex { fav in
+                guard fav.browser == reporter else { return false }   // 只动自己浏览器的账
                 if let tabId, favoriteTabBindings[fav.id] == tabId { return true }
                 guard let host, !host.isEmpty else { return false }
                 return URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
@@ -366,8 +482,11 @@ final class MRUController {
             favoriteTabBindings[favId] = tabId
 
         case "requestSettings":
-            // 扩展（重）连上了，向我们要一份当前配置
-            onNeedSettingsPush?()
+            // 扩展（重）连上了，向我们要一份当前配置（按它的浏览器过滤收藏）
+            pushSettings(to: clientID)
+            // 顺带核对版本配套：扩展和 app 按 major.minor 成对发布。
+            // 旧扩展不带 extVersion 字段 → 按 0.1.0 处理，必然提示。
+            recordExtensionVersion(clientID, root["extVersion"] as? String ?? "0.1.0")
 
         case "openSettings":
             // 用户点了浏览器工具栏的 TabFlick 图标
@@ -385,18 +504,54 @@ final class MRUController {
         }
     }
 
-    func handleClientCountChange(_ count: Int) {
-        connected = count > 0
-        if connected {
-            log("✅ Extension connected (\(count) client(s))")
-            startPinging()
-        } else {
-            log("⚠️  Extension disconnected — ⌃⇥ now falls through to Chrome")
+    func handleClientConnected(_ id: UUID) {
+        clients[id] = ClientState()
+        log("✅ Extension connected (\(clients.count) client(s))")
+        startPinging()
+        updateReadiness()
+        publishStatus()
+    }
+
+    /// 连接归属的浏览器识别完成。识别结果同时喂给 BrowserSupport 的
+    /// 动态集合 —— 「装了扩展的浏览器自动获得支持」就是靠这里。
+    func handleClientIdentified(_ id: UUID, browser: String) {
+        guard clients[id] != nil else { return }
+        clients[id]?.browser = browser
+        BrowserSupport.connected = Set(clients.values.compactMap(\.browser))
+        // 记住这个浏览器：设置页的浏览器列表要能显示「未连接」的老朋友
+        if !settings.knownBrowsers.contains(browser) {
+            settings.knownBrowsers.append(browser)
+        }
+        // 用户可能此刻就站在这个浏览器里 —— 立刻重算前台判定，
+        // 否则要等下一次 App 切换才生效（表现为「第一次按没反应」）
+        refreshFrontmostBrowserState()
+        // 身份确定后把**属于它的**收藏推过去（初次 requestSettings 时
+        // 身份可能还没解析出来，发的是兜底浏览器那份）
+        pushSettings(to: id)
+        updateReadiness()
+        publishStatus()
+    }
+
+    func handleClientDisconnected(_ id: UUID) {
+        let wasActive = (id == activeClientID)
+        clients.removeValue(forKey: id)
+        BrowserSupport.connected = Set(clients.values.compactMap(\.browser))
+        if clients.isEmpty {
+            log("⚠️  Extension disconnected — 快捷键放行给浏览器原生行为")
             stopPinging()
-            tabs = []
+        } else {
+            log("⚠️  Client disconnected (\(clients.count) left)")
+        }
+        if wasActive {
             cycling = false
             overlay.hide()
         }
+        updateReadiness()
+        publishStatus()
+    }
+
+    /// 前台浏览器变化（EventTap 跟踪回调）：就绪状态和菜单计数换账本。
+    func activeBrowserChanged() {
         updateReadiness()
         publishStatus()
     }
@@ -471,7 +626,7 @@ final class MRUController {
 
         let target = snapshot[cursor]
         log("⌃ released → switching to: \(target.title.prefix(50)) (tabId \(target.id))")
-        server.broadcast(["type": "switch", "tabId": target.id])
+        sendToActive(["type": "switch", "tabId": target.id])
     }
 
     // MARK: - 收藏标签
@@ -479,61 +634,88 @@ final class MRUController {
     /// 当前标签（MRU 首位）。状态栏「收藏当前标签」用。
     var currentTab: TabInfo? { tabs.first }
 
+    /// 活动浏览器的记账身份（收藏的读写都以它为账本）。
+    private var activeBrowser: String {
+        activeClientID.map { effectiveBrowser(of: $0) } ?? ChromeWindowLocator.activeBundleID
+    }
+
+    /// 活动浏览器的显示名（状态栏第一行用；未连接时 nil）。
+    var activeBrowserDisplayName: String? {
+        guard connected else { return nil }
+        return BrowserSupport.displayName(activeBrowser)
+    }
+
     /// 当前标签是否已收藏（nil = 没有当前标签）。绑定优先 ——
     /// 置顶标签可能已漂到别的域名，光看域名会误判成「未收藏」。
+    /// 只查活动浏览器自己的账本。
     var currentTabFavorited: Bool? {
         guard let tab = tabs.first else { return nil }
-        if favoriteTabBindings.values.contains(tab.id) { return true }
+        let browser = activeBrowser
+        let mine = settings.favorites.filter { $0.browser == browser }
+        if mine.contains(where: { favoriteTabBindings[$0.id] == tab.id }) { return true }
         guard let host = URL(string: tab.url)?.host else { return nil }
-        return settings.favorites.contains { fav in
+        return mine.contains { fav in
             URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
                 || URL(string: fav.url)?.host == host
         }
     }
 
     /// 收藏被移除后撤销对应域名的置顶。取消收藏 = 恢复普通标签。
-    /// 域名按「最后访问」取 —— 置顶标签可能已漂离原始域名。
+    /// unpin 只发给该收藏归属浏览器的连接 —— 发错浏览器会把人家
+    /// 同域名的置顶也撤了。域名按「最后访问」取（可能已漂移）。
     func unpinRemovedFavorites(_ removed: [FavoriteTab]) {
-        let hosts = removed.compactMap {
-            URL(string: settings.favoriteCurrentUrls[$0.id] ?? $0.url)?.host
-                ?? URL(string: $0.url)?.host
+        for fav in removed {
+            favoriteTabBindings.removeValue(forKey: fav.id)
+            guard let host = URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host
+                    ?? URL(string: fav.url)?.host else { continue }
+            guard let clientID = clients.first(where: { effectiveBrowser(of: $0.key) == fav.browser })?.key else {
+                log("☆ unpin skipped (\(fav.browser) 未连接): \(host)")
+                continue
+            }
+            log("☆ unpin \(host) [\(fav.browser)]")
+            server.send(["type": "unpin", "hosts": [host]], to: clientID)
         }
-        removed.forEach { favoriteTabBindings.removeValue(forKey: $0.id) }
-        guard !hosts.isEmpty else { return }
-        log("☆ unpin hosts: \(hosts.joined(separator: ", "))")
-        server.broadcast(["type": "unpin", "hosts": hosts])
     }
 
-    /// 收藏 / 取消收藏当前标签。
+    /// 收藏 / 取消收藏当前标签（活动浏览器的账本）。
     func toggleFavoriteCurrentTab() {
         guard let current = tabs.first else { return }
+        let browser = activeBrowser
+        let mine = settings.favorites.filter { $0.browser == browser }
 
         // 取消：绑定命中优先（漂移后域名对不上，绑定还在）
-        if let bound = favoriteTabBindings.first(where: { $0.value == current.id }),
-           let index = settings.favorites.firstIndex(where: { $0.id == bound.key }) {
+        if let bound = mine.first(where: { favoriteTabBindings[$0.id] == current.id }),
+           let index = settings.favorites.firstIndex(where: { $0.id == bound.id }) {
             log("☆ unfavorite: \(settings.favorites[index].title.prefix(50))")
             settings.favorites.remove(at: index)
             return
         }
         guard let host = URL(string: current.url)?.host else { return }
-        if let index = settings.favorites.firstIndex(where: { URL(string: $0.url)?.host == host }) {
+        if let match = mine.first(where: { URL(string: $0.url)?.host == host }),
+           let index = settings.favorites.firstIndex(where: { $0.id == match.id }) {
             log("☆ unfavorite: \(settings.favorites[index].title.prefix(50))")
             settings.favorites.remove(at: index)
         } else {
-            log("★ favorite: \(current.title.prefix(50)) (\(host))")
+            log("★ favorite: \(current.title.prefix(50)) (\(host)) [\(browser)]")
             let fav = FavoriteTab(url: current.url, title: current.title,
-                                  favIconUrl: current.favIconUrl)
+                                  favIconUrl: current.favIconUrl, browser: browser)
             favoriteTabBindings[fav.id] = current.id
             settings.favorites.append(fav)
         }
         // favorites 的 didSet → onChange → 推给扩展，扩展立即核对补齐
     }
 
-    /// 每次 MRU 推送后维护绑定：把绑定标签的最新 URL 记为「最后访问」；
+    /// 某客户端推送 MRU 后维护绑定：把绑定标签的最新 URL 记为「最后访问」；
     /// 标签没了就解绑（tabId 不复用，失效即永久失效）。
-    private func syncFavoriteBindings() {
+    /// 只处理**该客户端浏览器**账下的收藏 —— tabId 在不同浏览器间会撞号，
+    /// 拿别的浏览器的推送对账必然张冠李戴。
+    private func syncFavoriteBindings(for clientID: UUID) {
+        guard let client = clients[clientID] else { return }
+        let browser = effectiveBrowser(of: clientID)
         for (favId, tabId) in favoriteTabBindings {
-            guard let tab = tabs.first(where: { $0.id == tabId }) else {
+            guard let fav = settings.favorites.first(where: { $0.id == favId }),
+                  fav.browser == browser else { continue }
+            guard let tab = client.tabs.first(where: { $0.id == tabId }) else {
                 favoriteTabBindings.removeValue(forKey: favId)
                 continue
             }
@@ -545,24 +727,45 @@ final class MRUController {
 
     // MARK: - 状态栏子菜单
 
-    /// 子菜单的数据源：当前列表（MRU 顺序，首位即当前标签）+ 已缓存的 favicon。
-    var menuTabs: [(tab: TabInfo, icon: NSImage?)] {
-        tabs.map { ($0, icons.image(for: $0.favIconUrl)?.image) }
+    /// 状态栏菜单里的一个浏览器条目：名称 + 它的全部标签（MRU 顺序）。
+    struct MenuBrowser {
+        let bundleID: String
+        let name: String
+        let entries: [(tab: TabInfo, icon: NSImage?)]
     }
 
-    /// 状态栏子菜单点选：把 Chrome 带到前台并切到该标签。
+    /// 每个已连接浏览器一份菜单数据，活动浏览器排最前。
+    var menuBrowsers: [MenuBrowser] {
+        let activeID = activeClientID
+        let ordered = clients.keys.sorted { a, b in
+            if a == activeID { return true }
+            if b == activeID { return false }
+            return effectiveBrowser(of: a) < effectiveBrowser(of: b)
+        }
+        return ordered.compactMap { id in
+            guard let client = clients[id], !client.tabs.isEmpty else { return nil }
+            let bundleID = effectiveBrowser(of: id)
+            return MenuBrowser(
+                bundleID: bundleID,
+                name: BrowserSupport.displayName(bundleID),
+                entries: client.tabs.map { ($0, icons.image(for: $0.favIconUrl)?.image) })
+        }
+    }
+
+    /// 状态栏子菜单点选：激活对应浏览器并切到该标签。
     ///
-    /// 和 ⌃⇥ 的 commit 不同，走到这里时 Chrome 多半不在前台：扩展的
-    /// windows.update(focused:) 只管 Chrome 自己窗口之间的焦点，跨 App 的
-    /// 激活必须由 helper 在 macOS 层面做。
-    func activateFromMenu(tabId: Int) {
-        guard let target = tabs.first(where: { $0.id == tabId }) else { return }
+    /// 和 ⌃⇥ 的 commit 不同，走到这里时浏览器多半不在前台：扩展的
+    /// windows.update(focused:) 只管浏览器自己窗口之间的焦点，跨 App 的
+    /// 激活必须由 helper 在 macOS 层面做。命令点对点发给该浏览器的连接。
+    func activateFromMenu(tabId: Int, browser bundleID: String) {
+        guard let clientID = clients.first(where: { effectiveBrowser(of: $0.key) == bundleID })?.key,
+              let target = clients[clientID]?.tabs.first(where: { $0.id == tabId }) else { return }
         _ = NSRunningApplication
-            .runningApplications(withBundleIdentifier: ChromeWindowLocator.bundleID)
+            .runningApplications(withBundleIdentifier: bundleID)
             .first?
             .activate(options: [])
-        log("📎 menu pick → \(target.title.prefix(50)) (tabId \(target.id))")
-        server.broadcast(["type": "switch", "tabId": target.id])
+        log("📎 menu pick → \(target.title.prefix(50)) [\(bundleID)]")
+        server.send(["type": "switch", "tabId": tabId], to: clientID)
     }
 
     private func refreshOverlayImages() {

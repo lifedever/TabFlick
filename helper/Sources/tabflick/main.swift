@@ -71,13 +71,10 @@ MainActor.assumeIsolated {
         updates.frequency = { MainActor.assumeIsolated { settings.updateCheckFrequency } }
         updates.startPeriodicChecks()
 
-        // 设置的事实源在 app：改动后立刻推给扩展，扩展只执行不持久化。
+        // 设置的事实源在 app：改动后立刻推给所有客户端（收藏按浏览器分发），
+        // 扩展只执行不持久化。SW 重启后自己会来 requestSettings。
         settings.onChange = { [weak controller] in
-            MainActor.assumeIsolated { controller?.pushSettings(settings.payload) }
-        }
-        // 扩展的 service worker 被回收重启后会来要一次配置
-        controller.onNeedSettingsPush = { [weak controller] in
-            MainActor.assumeIsolated { controller?.pushSettings(settings.payload) }
+            MainActor.assumeIsolated { controller?.pushSettingsToAll() }
         }
         // 取消收藏（菜单或设置页删除）要连带撤销置顶
         settings.onFavoritesRemoved = { [weak controller] removed in
@@ -94,9 +91,24 @@ MainActor.assumeIsolated {
 
         controller.onStatusChange = { connected, tabCount in
             MainActor.assumeIsolated {
-                statusItem.render(connected: connected, tabCount: tabCount)
+                statusItem.render(connected: connected, tabCount: tabCount,
+                                  browserName: controller.activeBrowserDisplayName)
                 settingsWindow.setConnected(connected)
+                settingsWindow.setBrowserStatuses(controller.browserStatuses)
             }
+        }
+
+        // 状态栏的扩展版本警告（橙色项，点击直达升级说明）
+        statusItem.extensionWarning = {
+            MainActor.assumeIsolated {
+                let outdated = controller.browserStatuses.filter(\.needsUpdate)
+                guard !outdated.isEmpty else { return nil }
+                let names = outdated.map(\.name).joined(separator: "、")
+                return L10n.t("扩展需要更新：\(names)", "Extension update needed: \(names)")
+            }
+        }
+        statusItem.onExtensionWarningClick = {
+            NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
         }
 
         // 两个入口通向同一个窗口：菜单栏的「设置…」和浏览器工具栏的图标
@@ -110,12 +122,13 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated { updates.check(userInitiated: true) }
         }
 
-        // 状态行的二级菜单：hover 展开全部标签，点击把 Chrome 带到前台并切过去
-        statusItem.tabsProvider = {
-            MainActor.assumeIsolated { controller.menuTabs }
+        // 浏览器行：每个已连接浏览器一行，各带自己的标签子菜单，
+        // 点击把对应浏览器带到前台并切过去
+        statusItem.menuBrowsersProvider = {
+            MainActor.assumeIsolated { controller.menuBrowsers }
         }
-        statusItem.onPickTab = { tabId in
-            MainActor.assumeIsolated { controller.activateFromMenu(tabId: tabId) }
+        statusItem.onPickTabInBrowser = { tabId, browser in
+            MainActor.assumeIsolated { controller.activateFromMenu(tabId: tabId, browser: browser) }
         }
 
         // 收藏当前标签（绑定优先 + 域名兜底的判定在 MRUController）
@@ -133,7 +146,7 @@ MainActor.assumeIsolated {
                 return (hotkey.character, hotkey.modifierFlags)
             }
         }
-        let applyPinHotkey = {
+        let applyHotkeys = {
             MainActor.assumeIsolated {
                 if let hotkey = settings.pinHotkey {
                     configurePinHotkey(keyCode: Int64(hotkey.keyCode), flags: hotkey.cgFlags) {
@@ -142,16 +155,50 @@ MainActor.assumeIsolated {
                 } else {
                     configurePinHotkey(keyCode: nil, flags: [], handler: nil)
                 }
+                if let hotkey = settings.switcherHotkey {
+                    configureSwitcherHotkey(keyCode: Int64(hotkey.keyCode), flags: hotkey.cgFlags)
+                } else {
+                    configureSwitcherHotkey(keyCode: nil, flags: [])   // 默认 ⌃⇥
+                }
             }
         }
-        settings.onHotkeyChange = applyPinHotkey
-        applyPinHotkey()
+        settings.onHotkeyChange = applyHotkeys
+        applyHotkeys()
 
-        server.onText = { data in
-            MainActor.assumeIsolated { controller.handleMessage(data) }
+        // 扩展与 app 按 major.minor 配套发布，不一致时提示一次
+        controller.onExtensionOutdated = { extVersion, appVersion in
+            MainActor.assumeIsolated {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = L10n.t("扩展版本不匹配", "Extension version mismatch")
+                alert.informativeText = L10n.t(
+                    "当前扩展 v\(extVersion)，应用 v\(appVersion)。两者按版本配套发布，不一致时部分功能会失效。\n\n请下载新的扩展包替换原文件夹后，在 chrome://extensions 重新加载。",
+                    "Extension v\(extVersion), app v\(appVersion). They ship in matched versions; features may break when they differ.\n\nDownload the new extension package, replace your folder, then reload it in chrome://extensions."
+                )
+                alert.addButton(withTitle: L10n.t("查看升级说明", "Open Upgrade Guide"))
+                alert.addButton(withTitle: L10n.t("稍后", "Later"))
+                NSApp.activate(ignoringOtherApps: true)
+                if alert.runModal() == .alertFirstButtonReturn {
+                    NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
+                }
+            }
         }
-        server.onClientCountChange = { count in
-            MainActor.assumeIsolated { controller.handleClientCountChange(count) }
+
+        server.onText = { data, clientID in
+            MainActor.assumeIsolated { controller.handleMessage(data, from: clientID) }
+        }
+        server.onClientConnected = { clientID in
+            MainActor.assumeIsolated { controller.handleClientConnected(clientID) }
+        }
+        server.onClientDisconnected = { clientID in
+            MainActor.assumeIsolated { controller.handleClientDisconnected(clientID) }
+        }
+        server.onClientIdentified = { clientID, browser in
+            MainActor.assumeIsolated { controller.handleClientIdentified(clientID, browser: browser) }
+        }
+        // 前台浏览器变化时切换账本（多浏览器场景）
+        setActiveBrowserChangeHandler {
+            MainActor.assumeIsolated { controller.activeBrowserChanged() }
         }
 
         do {
@@ -183,7 +230,7 @@ MainActor.assumeIsolated {
                 onGaveUp: {
                     MainActor.assumeIsolated {
                         log("⚠️  Keyboard hook gave up after repeated timeouts — ⌃⇥ now passes through")
-                        statusItem.render(connected: false, tabCount: 0)
+                        statusItem.render(connected: false, tabCount: 0, browserName: nil)
                         let alert = NSAlert()
                         alert.alertStyle = .warning
                         alert.messageText = L10n.t("TabFlick 已停止拦截快捷键",
@@ -212,7 +259,7 @@ MainActor.assumeIsolated {
                 onPermissionLost: {
                     MainActor.assumeIsolated {
                         log("⚠️  Accessibility permission revoked — keyboard hook disabled")
-                        statusItem.render(connected: false, tabCount: 0)
+                        statusItem.render(connected: false, tabCount: 0, browserName: nil)
                         let alert = NSAlert()
                         alert.alertStyle = .warning
                         alert.messageText = L10n.t("辅助功能权限已被移除",
