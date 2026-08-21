@@ -256,6 +256,11 @@ const selfPinned = new Set();
 /// 跳过「用户取消置顶」上报，防止误删同域名的其他置顶记录。
 const selfUnpinned = new Set();
 
+/// 是否已经收到过带 favorites 字段的配置。
+/// 身份识别完成前 helper 不下发 favorites，这段时间不能跑自动清理 ——
+/// 见 sweepExpiredTabs。SW 重启后归零，等下一份完整配置。
+let favoritesKnown = false;
+
 /// helper 下发的「待补做取消置顶」域名：用户在 app 里删掉置顶记录时，
 /// 这个浏览器不在线，命令没能发出来。下一次核对前先补做。
 let pendingUnpinHosts = [];
@@ -399,9 +404,10 @@ async function ensureFavorites() {
 // （最近一次激活的时刻，Chrome 121+；拿不到该字段的标签一律不动）。
 //
 // 保护名单（宁可漏清不可错杀）：
+//   · pinned  —— 用户固定 = 明确要留。收藏 ⟺ 置顶，所以这条也是收藏的主防线
+//   · 收藏域名 —— 收藏此刻没有对应置顶标签时的兜底，见 sweepExpiredTabs
 //   · active  —— 各窗口的当前标签。附带效果：每个窗口至少保住一个标签，
 //                绝不会把窗口/浏览器整个关掉
-//   · pinned  —— 用户固定 = 明确要留
 //   · audible —— 正在出声（后台放歌算「在用」）
 //   · 分组内的标签 —— 进了 tab group 是刻意整理过的
 // 另外只在连着 helper 时清理：TabFlick 没在运行就不该动用户的标签。
@@ -411,12 +417,39 @@ const LIFETIME_SWEEP_MINUTES = 5;
 
 async function sweepExpiredTabs() {
   const hours = settings.tabLifetimeHours;
-  if (!hours || !connected) return;
+  // favoritesKnown：helper 在**浏览器身份还没识别出来**时下发的配置**不含**
+  // favorites 字段（那是防止把别家浏览器的置顶恢复进来），但 tabLifetimeHours
+  // 是带着的 —— 中间约 150ms 里我们知道「要清理」却还不知道「哪些是收藏」。
+  // 清理是破坏性动作，失败方向必须是「不动手」。
+  if (!hours || !connected || !favoritesKnown) return;
 
   const cutoff = Date.now() - hours * 3600 * 1000;
   const allTabs = await chrome.tabs.query({});
+
+  // 收藏的第二道防线。
+  //
+  // 主防线是 !t.pinned —— 收藏 ⟺ 浏览器置顶，读的是浏览器自己的标志而不是
+  // 另存的一份清单，不会有两份账本漂移。但收藏的标签**确实存在未置顶的瞬间**：
+  // ensureFavorites 正要给恢复回来的标签补置顶（re-pinned 那一步）、分支浏览器
+  // 的 tabs.create 没照做 pinned、上一轮 ensure 抛错留下个普通标签。清理每 5
+  // 分钟跑一次，撞上就把它关了。
+  //
+  // 关掉不会丢收藏（关闭不算取消置顶，unpinned 上报有 400ms 存活核验），下一轮
+  // ensure 会按最后访问的 URL 重开 —— 但「置顶标签自己消失又冒出来」已经够吓人。
+  // 只护**当前没有对应置顶标签**的收藏所属域名：收藏正常置顶时它本尊由 !t.pinned
+  // 管着，同域名的其他标签该清就清，不搞无差别豁免。
+  const pinnedHosts = new Set(
+    allTabs.filter((t) => t.pinned).map((t) => hostOf(t.url ?? "")).filter(Boolean)
+  );
+  const guardedHosts = new Set(
+    (settings.favorites ?? [])
+      .flatMap((f) => [hostOf(f.currentUrl ?? ""), hostOf(f.url ?? "")])
+      .filter((h) => h && !pinnedHosts.has(h))
+  );
+
   const victims = allTabs.filter((t) =>
     !t.active && !t.pinned && !t.audible &&
+    !guardedHosts.has(hostOf(t.url ?? "")) &&
     (t.groupId === undefined || t.groupId === -1) &&
     typeof t.lastAccessed === "number" && t.lastAccessed > 0 &&
     t.lastAccessed < cutoff
@@ -424,10 +457,15 @@ async function sweepExpiredTabs() {
   if (victims.length === 0) return;
 
   // 清理留痕：哪些标签、多久没用，都写进 helper 日志，
-  // 「我标签怎么没了」必须有处可查
+  // 「我标签怎么没了」必须有处可查。
+  // 列到 40 条为止：存活时间可以设到一年，头一次清理可能一口气关掉几百个，
+  // 全列出来就是一行几十 KB 的日志，反而没法看。
+  const LOG_LIMIT = 40;
   const detail = victims
+    .slice(0, LOG_LIMIT)
     .map((t) => `${(t.title || t.url || "?").slice(0, 40)} (idle ${Math.round((Date.now() - t.lastAccessed) / 3600000)}h)`)
-    .join("; ");
+    .join("; ")
+    + (victims.length > LOG_LIMIT ? `; …另有 ${victims.length - LOG_LIMIT} 个` : "");
   send({ type: "log", message: `lifetime sweep: closing ${victims.length} tab(s) > ${hours}h idle: ${detail}` });
 
   try {
@@ -553,6 +591,7 @@ async function handleHelperMessage(raw) {
       }
       if (Array.isArray(msg.favorites)) {
         settings.favorites = msg.favorites;
+        favoritesKnown = true;
         ensureFavorites();
       }
       break;

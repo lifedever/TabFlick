@@ -8,34 +8,72 @@ enum CursorSource {
     case mouse
 }
 
+/// 切换器里的一项。
+///
+/// 身份是 `id` 而不是 `tab.id`：全局切换器把多个浏览器的标签放进同一张列表，
+/// 而 tabId 只在**单个浏览器内**唯一 —— 拿它当身份，点夸克的卡片可能切到
+/// Chrome 里同号的标签。`clientID` 让每一项都自带「命令发给谁」。
+struct SwitcherItem: Identifiable {
+    let id: String
+    let tab: TabInfo
+    /// 归属浏览器 bundle id。nil = 当前浏览器切换器（只有一个浏览器，
+    /// 不画分组头）。视图据此决定要不要分组。
+    let browser: String?
+    /// 这一项的命令要发给哪条连接。
+    let clientID: UUID
+
+    init(tab: TabInfo, browser: String?, clientID: UUID) {
+        // 用连接 id 而不是 bundle id 做前缀：同一个浏览器多开 profile 时
+        // 是两条连接，各有各的 tabId 空间。ForEach 撞 id 会让 SwiftUI
+        // 渲染错乱，这里用构造保证唯一，不靠「大概不会撞」。
+        self.id = "\(clientID.uuidString)#\(tab.id)"
+        self.tab = tab
+        self.browser = browser
+        self.clientID = clientID
+    }
+}
+
+/// 浮层的呈现方式。四种排布共用同一个视图，由它分派。
+enum SwitcherPresentation: Equatable {
+    /// 当前浏览器：横向长条。
+    case strip
+    /// 当前浏览器：宫格，参数为列数。
+    case grid(columns: Int)
+    /// 全局：Raycast 式纵向列表，浏览器做分组标题。
+    case globalList
+    /// 全局：每个浏览器一段缩略图卡片，参数为列数。
+    case globalCards(columns: Int)
+
+}
+
 @MainActor
 final class SwitcherModel: ObservableObject {
-    @Published var tabs: [TabInfo] = []
+    @Published var items: [SwitcherItem] = []
     @Published private(set) var cursor: Int = 0
-    @Published var icons: [Int: IconInfo] = [:]
-    @Published var thumbs: [Int: NSImage] = [:]
+    @Published var icons: [String: IconInfo] = [:]
+    @Published var thumbs: [String: NSImage] = [:]
 
     /// 游标这次是被谁移动的。决定要不要自动滚动 —— 见 SwitcherView 里的说明。
     private(set) var cursorSource: CursorSource = .keyboard
 
-    // 三个鼠标回调的参数都是 tab.id，不是位置 index。
+    // 三个鼠标回调的参数都是 item.id，不是位置 index。
     //
     // 必须是 id：连续关闭标签时数组不断变短、卡片视图不断位移/重建，
     // 位置索引在渲染与点击之间存在失真窗口 —— 拿旧位置去索引新数组就会
     // 关错标签（2026-08-20 实测：连关几张后开始错位）。id 让动作载荷和
-    // 卡片渲染的是同一份 TabInfo，「点谁就是谁」在构造上成立。
+    // 卡片渲染的是同一项，「点谁就是谁」在构造上成立。
 
-    /// 鼠标点选了某张卡片（参数 tab.id）。是回调不是状态，所以不加 @Published。
-    var onPick: ((Int) -> Void)?
+    /// 鼠标点选了某一项（参数 item.id）。是回调不是状态，所以不加 @Published。
+    var onPick: ((String) -> Void)?
 
-    /// 鼠标悬停到了某张卡片（参数 tab.id）。必须回调给 MRUController 而不是
+    /// 鼠标悬停到了某一项（参数 item.id）。必须回调给 MRUController 而不是
     /// 在视图里直接 setCursor —— 游标的事实源在状态机那边，视图私自改自己的
     /// 那份会造成「高亮在 A、⌃⇥ 却从 B 继续、松开切到 B」的失步。
-    var onHover: ((Int) -> Void)?
+    var onHover: ((String) -> Void)?
 
-    /// 鼠标点了卡片上的 ✕，要求关掉这个标签（参数 tab.id）。同样只回调给
+    /// 鼠标点了 ✕，要求关掉这个标签（参数 item.id）。同样只回调给
     /// MRUController，快照怎么改、游标落到哪都由状态机决定，视图只是投影。
-    var onClose: ((Int) -> Void)?
+    var onClose: ((String) -> Void)?
 
     /// 是否允许在卡片上关标签。设置项（AppSettings.allowTabClose）的投影，
     /// 浮层每次弹出时读入。
@@ -51,47 +89,73 @@ final class SwitcherModel: ObservableObject {
 
 // MARK: - 尺寸
 
-private let kThumbWidth: CGFloat = 140
-private let kThumbHeight: CGFloat = 88
-private let kTitleRowHeight: CGFloat = 20
-private let kCardPadding: CGFloat = 7
-private let kCardWidth = kThumbWidth + kCardPadding * 2
-private let kCardHeight = kThumbHeight + kTitleRowHeight + kCardPadding * 2 + 4
+/// 卡片的一套尺寸。全局切换器要在同一屏里装下好几个浏览器，卡片得比
+/// 当前浏览器切换器小一档 —— 缩略图是用来认版式的，不是用来读内容的，
+/// 压到 100pt 宽仍然一眼能认出是哪个页面。
+private struct CardMetrics {
+    let thumbWidth: CGFloat
+    let thumbHeight: CGFloat
+    let titleRowHeight: CGFloat
+    let padding: CGFloat
+    let titleFont: CGFloat
+    let faviconSize: CGFloat
+    let thumbCorner: CGFloat
+    let cardCorner: CGFloat
+    /// ✕ 和置顶星标的直径。
+    let badgeSize: CGFloat
+
+    var width: CGFloat { thumbWidth + padding * 2 }
+    var height: CGFloat { thumbHeight + titleRowHeight + padding * 2 + 4 }
+
+    static let standard = CardMetrics(thumbWidth: 140, thumbHeight: 88, titleRowHeight: 20,
+                                      padding: 7, titleFont: 11, faviconSize: 13,
+                                      thumbCorner: 7, cardCorner: 10, badgeSize: 20)
+
+    static let compact = CardMetrics(thumbWidth: 100, thumbHeight: 63, titleRowHeight: 16,
+                                     padding: 5, titleFont: 10, faviconSize: 11,
+                                     thumbCorner: 6, cardCorner: 8, badgeSize: 16)
+}
+
 private let kCardSpacing: CGFloat = 8
 private let kOuterPadding: CGFloat = 12
-private let kPanelCornerRadius: CGFloat = 22
+private let kPanelCornerRadius: CGFloat = 14
+
+// 全局切换器（列表样式）的行高与分组头。列表比卡片信息密度高，
+// 跨浏览器一屏能装下的标签多得多。
+private let kListWidth: CGFloat = 520
+/// 全局卡片样式的目标面板宽度（屏幕更窄时按屏幕来）。
+private let kGlobalCardsTargetWidth: CGFloat = 880
+/// 全局切换器的面板高度上限，超出的部分滚动。
+///
+/// 不能只按屏幕算：跨浏览器的标签动辄几十个，94% 屏高的面板从上顶到下，
+/// 眼睛要扫一整屏才找得到高亮那行。宁可滚。
+private let kGlobalMaxHeight: CGFloat = 520
+/// 两行行高：标题一行、域名一行。
+private let kRowHeight: CGFloat = 42
+private let kRowSpacing: CGFloat = 1
+private let kGroupHeaderHeight: CGFloat = 22
+/// 分组头和它下面第一行之间的空档，含那道 1px 分隔线。
+/// 视图和尺寸计算必须用同一个值，否则面板高度和实际内容对不上。
+private let kGroupRuleSpace: CGFloat = 7
+private let kGroupSpacing: CGFloat = 14
+
+/// 行内左边距。分组头用同一个值，并让它的图标和行 favicon 同宽同位 ——
+/// 这样分组名和标签名落在同一条竖线上（不对齐是第一版最扎眼的毛病）。
+private let kRowInset: CGFloat = 10
+/// favicon 与文字之间的间距。分组头同样沿用。
+private let kRowIconGap: CGFloat = 9
+private let kRowIconSize: CGFloat = 17
 
 // MARK: - SwiftUI 内容
 
 private struct SwitcherView: View {
     @ObservedObject var model: SwitcherModel
-    /// 宫格模式的列数；0 表示横向长条。
-    let gridColumns: Int
+    let presentation: SwitcherPresentation
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ScrollViewReader { proxy in
-            Group {
-                if gridColumns > 0 {
-                    // 宫格：面板尺寸在 presentNow 里已按「一屏放得下」算好，
-                    // 只有标签多到连整屏宫格都装不下时才会真的纵向滚动。
-                    ScrollView(.vertical, showsIndicators: false) {
-                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(kCardWidth), spacing: kCardSpacing),
-                                                 count: gridColumns),
-                                  spacing: kCardSpacing) {
-                            cards
-                        }
-                        .padding(kOuterPadding)
-                    }
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: kCardSpacing) {
-                            cards
-                        }
-                        .padding(kOuterPadding)
-                    }
-                }
-            }
+            content
             // 只有键盘移动游标时才自动滚动。
             //
             // hover 也触发滚动的话会形成正反馈环：滚动让卡片在屏幕上位移 →
@@ -100,19 +164,22 @@ private struct SwitcherView: View {
             // 卡片必然已经在可视区内。
             .onChange(of: model.cursor) { newValue in
                 guard model.cursorSource == .keyboard,
-                      model.tabs.indices.contains(newValue) else { return }
+                      model.items.indices.contains(newValue) else { return }
                 withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(model.tabs[newValue].id, anchor: .center)
+                    proxy.scrollTo(model.items[newValue].id, anchor: .center)
                 }
             }
         }
-        // 「玻璃·浅调」（mockups/switcher-redesign.html 方案 01）：
-        // 材质（.hudWindow）负责「透」，这里的叠色只负责把色调拉向暖灰/烟灰，
-        // 透明度必须低 —— 样张里的 62%/50% 是叠在纯模糊上的等效值，
-        // 材质自带底色，叠太多两层一乘就成铁板（第一版就是这么翻的车）。
+        // 材质（.hudWindow）负责「透」，叠色负责定调。
+        //
+        // 深色沿用低透明度的烟灰，通透感靠材质透出来。**浅色不能照抄这个思路**：
+        // 半透明面板的最终亮度由**背后的内容**主导 —— 浅色外观浮在深色终端上
+        // 时，材质怎么调都是一块中灰，代码覆盖不了（PasteMemo 那轮玻璃实验
+        // 屏上实测过）。全局切换器恰恰会浮在任何 App 之上，所以浅色这层叠色
+        // 必须够厚，先把底子压成白的；少掉的那点通透是这笔交易的代价。
         .background {
             scheme == .dark ? Color(red: 64/255, green: 64/255, blue: 72/255).opacity(0.35)
-                            : Color(red: 226/255, green: 223/255, blue: 218/255).opacity(0.25)
+                            : Color(red: 253/255, green: 252/255, blue: 251/255).opacity(0.88)
         }
         // 浮层边缘的 hairline。按外观分开给：浅色极淡黑描边，深色白高光边。
         .overlay {
@@ -132,31 +199,196 @@ private struct SwitcherView: View {
         }
     }
 
-    /// 两种排布共用同一组卡片。`.id(tab.id)` 供 ScrollViewReader 按游标定位。
+    @ViewBuilder
+    private var content: some View {
+        switch presentation {
+        case .strip:
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: kCardSpacing) { cards(model.items) }
+                    .padding(kOuterPadding)
+            }
+
+        case .grid(let columns):
+            // 宫格：面板尺寸在 presentNow 里已按「一屏放得下」算好，
+            // 只有标签多到连整屏宫格都装不下时才会真的纵向滚动。
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVGrid(columns: gridItems(columns), spacing: kCardSpacing) {
+                    cards(model.items)
+                }
+                .padding(kOuterPadding)
+            }
+
+        case .globalCards(let columns):
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: kGroupSpacing) {
+                    ForEach(groups, id: \.browser) { group in
+                        VStack(alignment: .leading, spacing: 0) {
+                            // 分组头对齐缩略图左缘（卡片自身还有一圈内边距）
+                            groupHeader(group, inset: metrics.padding)
+                            LazyVGrid(columns: gridItems(columns),
+                                      alignment: .leading,
+                                      spacing: kCardSpacing) {
+                                cards(group.items)
+                            }
+                        }
+                    }
+                }
+                .padding(kOuterPadding)
+            }
+
+        case .globalList:
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: kGroupSpacing) {
+                    ForEach(groups, id: \.browser) { group in
+                        VStack(alignment: .leading, spacing: 0) {
+                            groupHeader(group, inset: kRowInset)
+                            VStack(alignment: .leading, spacing: kRowSpacing) {
+                                ForEach(group.items) { item in
+                                    TabRow(item: item,
+                                           icon: model.icons[item.id],
+                                           selected: item.id == selectedID,
+                                           onHover: { model.onHover?(item.id) },
+                                           onPick: { model.onPick?(item.id) })
+                                        .id(item.id)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(kOuterPadding)
+            }
+        }
+    }
+
+    /// 这个排布用哪套卡片尺寸。全局卡片压小一档，同屏才装得下多个浏览器。
+    private var metrics: CardMetrics {
+        if case .globalCards = presentation { return .compact }
+        return .standard
+    }
+
+    /// 开关默认关；开了之后剩 2 项时也不给 ✕：再关 1 个就只剩单标签，
+    /// 而切换器本来就不为单标签出现，关到那一步面板就没意义了。
     ///
-    /// 身份必须用 tab.id 而不是 index：用位置当身份的话，删掉一张卡后
-    /// 右侧所有卡片的 index 全变 → SwiftUI 把它们当「销毁 + 新建」处理，
-    /// 移除动画期间新旧视图并存，点击可能落在携带旧位置的残影上。
-    /// 用 tab.id 卡片只是「移动」，视图和数据的对应关系全程不断。
-    private var cards: some View {
-        ForEach(Array(model.tabs.enumerated()), id: \.element.id) { index, tab in
-            TabCard(tab: tab,
-                    icon: model.icons[tab.id],
-                    thumb: model.thumbs[tab.id],
-                    selected: index == model.cursor,
-                    // 开关默认关；开了之后剩 2 张时也不给 ✕：再关 1 张就只剩
-                    // 单标签，而切换器本来就不为单标签出现，关到那一步面板就没意义了。
-                    closable: model.allowClose && model.tabs.count > 2,
-                    onHover: { model.onHover?(tab.id) },
-                    onPick: { model.onPick?(tab.id) },
-                    onClose: { model.onClose?(tab.id) })
-                .id(tab.id)
+    /// 全局切换器一律不给：跨浏览器的列表里关的是**别的浏览器**里、
+    /// 此刻根本不在你眼前的标签，误点的代价和"切过去"完全不对等。
+    /// 少了这个槽位，行尾的时间也能齐齐地贴住右边。
+    private var closable: Bool {
+        switch presentation {
+        case .globalList, .globalCards: return false
+        case .strip, .grid:             return model.allowClose && model.items.count > 2
+        }
+    }
+
+    /// 当前选中项的 id。用它比对而不是让每张卡片去 firstIndex 反查位置 ——
+    /// 后者是 O(n) × n 张卡片，标签一多每帧都在做无谓的线性扫描。
+    private var selectedID: String? {
+        model.items.indices.contains(model.cursor) ? model.items[model.cursor].id : nil
+    }
+
+    private func gridItems(_ columns: Int) -> [GridItem] {
+        Array(repeating: GridItem(.fixed(metrics.width), spacing: kCardSpacing), count: max(1, columns))
+    }
+
+    /// 按浏览器切段。items 进来时同一浏览器的项已经连在一起（MRUController
+    /// 就是按组拼的），这里只做**连续切分**、不重排 —— 排序权归状态机。
+    private var groups: [(browser: String, items: [SwitcherItem])] {
+        var result: [(browser: String, items: [SwitcherItem])] = []
+        for item in model.items {
+            let key = item.browser ?? ""
+            if result.last?.browser == key {
+                result[result.count - 1].items.append(item)
+            } else {
+                result.append((key, [item]))
+            }
+        }
+        return result
+    }
+
+    /// 分组头：浏览器图标 + 名字 + 标签数。
+    ///
+    /// 图标占的格子和下面每一行的 favicon **同宽同位**，名字自然就和标签名
+    /// 落在同一条竖线上。图标本身画得比格子小一圈，让它读起来是「表头」
+    /// 而不是又一行标签。
+    /// 分组头 + 一道发丝分隔线。
+    ///
+    /// 光靠「图标 + 加粗名字」分不开：那个组合和下面的标签行长得太像，
+    /// 读起来只是「又一行」。所以头部反过来做——**字更小、更淡、字距拉开**，
+    /// 明确是标签而不是内容；真正划清界限的是那道横线。
+    private func groupHeader(_ group: (browser: String, items: [SwitcherItem]),
+                             inset: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: kRowIconGap) {
+                Group {
+                    if let icon = BrowserSupport.icon(group.browser) {
+                        Image(nsImage: icon).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: "globe").resizable().scaledToFit().foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: kRowIconSize - 3, height: kRowIconSize - 3)
+                .frame(width: kRowIconSize, height: kRowIconSize)
+                .opacity(0.85)
+
+                Text(BrowserSupport.displayName(group.browser))
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(Color.primary.opacity(0.45))
+
+                Spacer(minLength: 8)
+
+                countBadge(group.items.count)
+            }
+            .frame(height: kGroupHeaderHeight)
+            .padding(.horizontal, inset)
+
+            Rectangle()
+                .fill(scheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08))
+                .frame(height: 1)
+                .padding(.bottom, kGroupRuleSpace - 1)
+        }
+    }
+
+    /// 分组头右端的数量徽标。靠右放而不是紧跟在浏览器名后面 ——
+    /// 名字长度参差，跟在后面时每一组的数字位置都不一样，扫一眼比不出来；
+    /// 右对齐后几组的数量自然排成一列。
+    private func countBadge(_ count: Int) -> some View {
+        Text(L10n.t("\(count) 个标签", count == 1 ? "1 tab" : "\(count) tabs"))
+            .font(.system(size: 9.5, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(Color.primary.opacity(0.45))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background {
+                Capsule().fill(scheme == .dark ? Color.white.opacity(0.11)
+                                               : Color.black.opacity(0.06))
+            }
+    }
+
+    /// 各排布共用同一组卡片。`.id(item.id)` 供 ScrollViewReader 按游标定位。
+    ///
+    /// 身份必须用 item.id 而不是位置：用位置当身份的话，删掉一张卡后右侧所有
+    /// 卡片的 index 全变 → SwiftUI 把它们当「销毁 + 新建」处理，移除动画期间
+    /// 新旧视图并存，点击可能落在携带旧位置的残影上。用 item.id 卡片只是
+    /// 「移动」，视图和数据的对应关系全程不断。
+    private func cards(_ items: [SwitcherItem]) -> some View {
+        ForEach(items) { item in
+            TabCard(tab: item.tab,
+                    metrics: metrics,
+                    icon: model.icons[item.id],
+                    thumb: model.thumbs[item.id],
+                    selected: item.id == selectedID,
+                    closable: closable,
+                    onHover: { model.onHover?(item.id) },
+                    onPick: { model.onPick?(item.id) },
+                    onClose: { model.onClose?(item.id) })
+                .id(item.id)
         }
     }
 }
 
 private struct TabCard: View {
     let tab: TabInfo
+    let metrics: CardMetrics
     let icon: IconInfo?
     let thumb: NSImage?
     let selected: Bool
@@ -179,15 +411,15 @@ private struct TabCard: View {
     @State private var lastMouseScreenPoint: CGPoint?
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: metrics.padding - 1) {
             thumbnail
-                .frame(width: kThumbWidth, height: kThumbHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .frame(width: metrics.thumbWidth, height: metrics.thumbHeight)
+                .clipShape(RoundedRectangle(cornerRadius: metrics.thumbCorner, style: .continuous))
                 // 「玻璃·浅调」的立体卡处理:1px 描边划清边界(0.5px·7% 那条
                 // 发丝线撑不住白卡贴灰面板)。选中 = accent 蓝框(2px)+ 底下灰底,
                 // 两种外观下都醒目。
                 .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    RoundedRectangle(cornerRadius: metrics.thumbCorner, style: .continuous)
                         .strokeBorder(selected ? Color.accentColor
                                                : (scheme == .dark ? Color.white.opacity(0.14)
                                                                   : Color.black.opacity(0.12)),
@@ -219,7 +451,7 @@ private struct TabCard: View {
                     }
                 }
 
-            HStack(spacing: 5) {
+            HStack(spacing: metrics.padding - 2) {
                 Group {
                     if let icon {
                         Image(nsImage: icon.image).resizable().interpolation(.high)
@@ -228,14 +460,14 @@ private struct TabCard: View {
                     }
                 }
                 .scaledToFit()
-                .frame(width: 13, height: 13)
-                .padding(icon == nil ? 0 : 1.5)
+                .frame(width: metrics.faviconSize, height: metrics.faviconSize)
+                .padding(icon == nil ? 0 : metrics.faviconSize * 0.115)
                 .background {
-                    if let icon { faviconBacking(isLight: icon.isLight, radius: 3) }
+                    if let icon { faviconBacking(isLight: icon.isLight, radius: metrics.thumbCorner - 4) }
                 }
 
                 Text(tab.title.isEmpty ? tab.url : tab.title)
-                    .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                    .font(.system(size: metrics.titleFont, weight: selected ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     // 未选中不是"淡出"而是"不加粗"。.secondary 太浅了,
@@ -244,17 +476,17 @@ private struct TabCard: View {
 
                 Spacer(minLength: 0)
             }
-            .frame(width: kThumbWidth, height: kTitleRowHeight)
+            .frame(width: metrics.thumbWidth, height: metrics.titleRowHeight)
         }
-        .padding(kCardPadding)
-        .frame(width: kCardWidth, height: kCardHeight)
+        .padding(metrics.padding)
+        .frame(width: metrics.width, height: metrics.height)
         // 选中态就是一块灰底，没有边框 —— Arc 的做法。
         // 之前那圈 1.5px 蓝框和它整体的克制感格格不入。
         // 未选中完全透明；语义色 primary 自动适配深浅色外观。
         // 深色选中底从白 18% 提到 28%:未选中缩略图底本身就是白 14%,
         // 只差 4 个百分点的话整块面板都挤在一条窄灰带里,选中格看不出来。
         .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: metrics.cardCorner, style: .continuous)
                 .fill(selected ? (scheme == .dark ? Color.white.opacity(0.28)
                                                   : Color.black.opacity(0.15))
                                : Color.clear)
@@ -289,9 +521,9 @@ private struct TabCard: View {
     /// 左上角的置顶星标。金黄星形在深色磨砂圆底上，亮暗缩略图都立得住。
     private var pinBadge: some View {
         Image(systemName: "star.fill")
-            .font(.system(size: 8, weight: .bold))
+            .font(.system(size: metrics.badgeSize * 0.44, weight: .bold))
             .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.20))
-            .frame(width: 18, height: 18)
+            .frame(width: metrics.badgeSize - 2, height: metrics.badgeSize - 2)
             .background {
                 ZStack {
                     Circle().fill(.ultraThinMaterial)
@@ -310,9 +542,9 @@ private struct TabCard: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: metrics.badgeSize * 0.45, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 20, height: 20)
+                .frame(width: metrics.badgeSize, height: metrics.badgeSize)
                 .background {
                     ZStack {
                         Circle().fill(.ultraThinMaterial)
@@ -382,17 +614,149 @@ private struct TabCard: View {
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .frame(width: 32, height: 32)
-                    .padding(11)
+                    .frame(width: metrics.thumbHeight * 0.36, height: metrics.thumbHeight * 0.36)
+                    .padding(metrics.thumbHeight * 0.125)
                     .background {
-                        faviconBacking(isLight: icon.isLight, radius: 11)
+                        faviconBacking(isLight: icon.isLight, radius: metrics.thumbHeight * 0.125)
                             .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.14),
                                     radius: 5, y: 2)
                     }
             } else {
                 Image(systemName: "globe")
-                    .font(.system(size: 26))
+                    .font(.system(size: metrics.thumbHeight * 0.3))
                     .foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+/// favicon + 反差底板。
+///
+/// 亮图标（GitHub 深色模式那只白猫）垫深底，暗图标（多数品牌 logo）垫浅底。
+/// 不跟随系统外观 —— 决定可见性的是图标自己的颜色，不是界面的明暗。
+private struct FaviconChip: View {
+    let icon: IconInfo?
+    var size: CGFloat = 13
+    var radius: CGFloat = 3
+    /// 是否垫反差底板。缩略图上必须垫（图标要压在截图上），
+    /// 列表里不垫（一列白方块会盖过标题）。
+    var plate: Bool = true
+
+    var body: some View {
+        Group {
+            if let icon {
+                Image(nsImage: icon.image).resizable().interpolation(.high)
+            } else {
+                Image(systemName: "globe").resizable().foregroundStyle(.secondary)
+            }
+        }
+        .scaledToFit()
+        .frame(width: size, height: size)
+        .padding(icon == nil || !plate ? 0 : size * 0.115)
+        .background {
+            if let icon, plate {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(icon.isLight ? Color(white: 0.16) : Color(white: 0.99))
+            }
+        }
+    }
+}
+
+/// 全局切换器「列表」样式的一行。
+///
+/// 不放缩略图：跨浏览器的列表本来就长，一行一个标题的信息密度才撑得住
+/// 「先定浏览器、再扫标题」这个用法（想要图就切「卡片」样式）。
+private struct TabRow: View {
+    let item: SwitcherItem
+    let icon: IconInfo?
+    let selected: Bool
+    let onHover: () -> Void
+    let onPick: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    /// 上一次的鼠标**屏幕**坐标。理由与 TabCard 相同：列表滚动时视图局部
+    /// 坐标会变，用它判断「鼠标动没动」会把滚动误判成移动。
+    @State private var lastMouseScreenPoint: CGPoint?
+
+    /// 右侧的域名。剥掉 www.，超长的从头部截断（保留能认出站点的尾部）——
+    /// 交给 SwiftUI 去挤压的话，长标题一来域名就被压成一个孤零零的「…」。
+    private var host: String {
+        guard var host = URL(string: item.tab.url)?.host else { return "" }
+        if host.hasPrefix("www.") { host = String(host.dropFirst(4)) }
+        return host.count > 28 ? "…" + host.suffix(26) : host
+    }
+
+    var body: some View {
+        HStack(spacing: kRowIconGap) {
+            // 不垫反差底板：列表里 favicon 一列白方块太抢眼，压过了标题。
+            // 代价是纯白透明底的图标（GitHub 深色模式那只猫）在浅色面板上会淡，
+            // 真碍事的话把 plate 打开就行。
+            FaviconChip(icon: icon, size: kRowIconSize, radius: 4, plate: false)
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(item.tab.title.isEmpty ? item.tab.url : item.tab.title)
+                        .font(.system(size: 12.5, weight: selected ? .semibold : .regular))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(selected ? Color.primary : Color.primary.opacity(0.82))
+
+                    if item.tab.pinned == true {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.20))
+                    }
+                }
+
+                // 取不到域名（about:blank 之类）就不留空行，标题自己居中
+                if !host.isEmpty {
+                    Text(host)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.primary.opacity(0.42))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // 「多久之前打开」放行尾。fixedSize + 高优先级：长标题该让路的是
+            // 标题（它本来就会截断），不是这一栏 —— 让它挤成一个孤零零的
+            // 「…」比不显示还难看。
+            if let ago = item.tab.relativeLastAccessed {
+                Text(ago)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.primary.opacity(0.30))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
+            }
+
+        }
+        .padding(.horizontal, kRowInset)
+        .frame(height: kRowHeight)
+        .background {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(selected ? (scheme == .dark ? Color.white.opacity(0.20)
+                                                  : Color.black.opacity(0.10))
+                               : Color.clear)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onPick)
+        // 只有鼠标真的移动过才让 hover 接管游标（同 TabCard）。
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                let point = NSEvent.mouseLocation
+                if let last = lastMouseScreenPoint,
+                   abs(point.x - last.x) > 1 || abs(point.y - last.y) > 1 {
+                    onHover()
+                }
+                lastMouseScreenPoint = point
+            case .ended:
+                lastMouseScreenPoint = nil
+            @unknown default:
+                break
             }
         }
     }
@@ -416,9 +780,13 @@ final class OverlayPanel {
 
     private let settings: AppSettings
 
-    /// 宫格模式下当前显示的列数；长条模式为 0。
-    /// ⌃↑/⌃↓ 按行移动游标时以它为步长（见 MRUController.stepRow）。
-    private(set) var gridRowStride = 0
+    /// 本轮是不是全局切换器（内容跨浏览器）。MRUController 在起手拍快照时置位，
+    /// presentNow 用它决定用哪套排布、以及贴哪儿。
+    var isGlobal = false
+
+    /// 当前正在显示的排布。关标签后重算时用它判断要不要重建 rootView；
+    /// MRUController 也读它来决定方向键在这个排布下各自是什么意思。
+    private(set) var presentation: SwitcherPresentation = .strip
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<SwitcherView>?
@@ -445,8 +813,24 @@ final class OverlayPanel {
 
     // MARK: 显示 / 隐藏
 
+    /// 起手新一轮 cycling：模式和内容都换了，先决定还能不能复用上一轮的面板。
+    ///
+    /// 上一轮结束后面板要等最短可见时间才真的关掉（见 hide），这段窗口里
+    /// 又按一次就会复用它。同模式同尺寸复用没问题；**排布或尺寸变了**却
+    /// 复用，新内容会套着旧排布、旧尺寸、旧位置显示 —— 在浏览器里切一下
+    /// 再立刻按全局键，全局列表会被塞进上一轮那个长条面板里。
+    func beginCycle(isGlobal: Bool, items: [SwitcherItem]) {
+        self.isGlobal = isGlobal
+        guard let panel, !items.isEmpty else { return }
+        let (size, layout) = contentLayout(items: items,
+                                           maxWidth: panelMaxSize.width,
+                                           maxHeight: panelMaxSize.height)
+        if layout != presentation || size != panel.frame.size { closeNow() }
+    }
+
     func requestShow() {
-        // 上一轮还在等最短可见时间就又开始了新一轮 —— 直接复用同一个面板
+        // 上一轮还在等最短可见时间就又开始了新一轮 —— 面板还能用就复用
+        // （能不能用由 beginCycle 判过了）
         hideWorkItem?.cancel()
         hideWorkItem = nil
         guard panel == nil else { return }
@@ -482,20 +866,20 @@ final class OverlayPanel {
     /// 关掉了一个标签后的收尾：卡片带动画消失，面板中心不动往里收，
     /// 宫格列数按新数量重排。空列表不会走到这里 —— ✕ 只在 3 张以上时
     /// 出现（见 MRUController.closeTab 的守卫）。
-    func applyRemoval(tabs: [TabInfo], cursor: Int) {
+    func applyRemoval(items: [SwitcherItem], cursor: Int) {
         withAnimation(.easeOut(duration: 0.15)) {
-            model.tabs = tabs
+            model.items = items
             model.setCursor(cursor, source: .mouse)
         }
 
-        guard let panel, !tabs.isEmpty else { return }
+        guard let panel, !items.isEmpty else { return }
 
-        let (size, columns) = contentLayout(count: tabs.count,
-                                            maxWidth: panelMaxSize.width,
-                                            maxHeight: panelMaxSize.height)
-        if columns != gridRowStride {
-            gridRowStride = columns
-            hostingView?.rootView = SwitcherView(model: model, gridColumns: columns)
+        let (size, layout) = contentLayout(items: items,
+                                           maxWidth: panelMaxSize.width,
+                                           maxHeight: panelMaxSize.height)
+        if layout != presentation {
+            presentation = layout
+            hostingView?.rootView = SwitcherView(model: model, presentation: layout)
         }
         guard size != panel.frame.size else { return }
 
@@ -519,7 +903,7 @@ final class OverlayPanel {
     }
 
     private func presentNow() {
-        guard !model.tabs.isEmpty else { return }
+        guard !model.items.isEmpty else { return }
         model.allowClose = settings.allowTabClose
 
         let effect = NSVisualEffectView()
@@ -534,25 +918,26 @@ final class OverlayPanel {
         // vibrancy 材质,而且窗口阴影仍按直角矩形画,四角会漏出直角背景+直角阴影
         effect.maskImage = Self.roundedMask(radius: kPanelCornerRadius)
 
-        // 优先贴着 Chrome 窗口居中；拿不到窗口时退回主屏居中
-        let anchor = ChromeWindowLocator.frontmostWindowFrame()
-                  ?? (NSScreen.main ?? NSScreen.screens[0]).visibleFrame
-        let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) })
-                  ?? NSScreen.main ?? NSScreen.screens[0]
+        // 贴着浏览器窗口居中；全局切换器不属于任何一个浏览器窗口（前台多半
+        // 根本不是浏览器），改在当前屏幕居中。
+        let defaultScreen = NSScreen.main ?? NSScreen.screens[0]
+        let anchor = isGlobal ? defaultScreen.visibleFrame
+                              : (ChromeWindowLocator.frontmostWindowFrame() ?? defaultScreen.visibleFrame)
+        let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? defaultScreen
 
-        // 面板尺寸上限：不越出 Chrome 窗口，也不越出所在屏幕的可见区。
+        // 面板尺寸上限：不越出浏览器窗口，也不越出所在屏幕的可见区。
         let maxPanelWidth = min(anchor.width, screen.visibleFrame.width) * 0.94
         let maxPanelHeight = min(anchor.height, screen.visibleFrame.height) * 0.94
         panelMaxSize = NSSize(width: maxPanelWidth, height: maxPanelHeight)
 
-        let (contentSize, columns) = contentLayout(count: model.tabs.count,
-                                                   maxWidth: maxPanelWidth,
-                                                   maxHeight: maxPanelHeight)
-        gridRowStride = columns
+        let (contentSize, layout) = contentLayout(items: model.items,
+                                                  maxWidth: maxPanelWidth,
+                                                  maxHeight: maxPanelHeight)
+        presentation = layout
         let width = contentSize.width
         let height = contentSize.height
 
-        let hosting = NSHostingView(rootView: SwitcherView(model: model, gridColumns: gridRowStride))
+        let hosting = NSHostingView(rootView: SwitcherView(model: model, presentation: layout))
 
         let panel = NonActivatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: width, height: height),
@@ -607,32 +992,93 @@ final class OverlayPanel {
         self.shownAt = Date()
     }
 
-    /// 按标签数算面板内容尺寸。宫格模式同时返回列数（也是 ⌃↑/⌃↓ 的行步长），
-    /// 长条模式列数为 0。presentNow 和 applyRemoval 共用这一份，别各抄一套。
-    private func contentLayout(count: Int,
+    /// 算面板内容尺寸和排布。presentNow 和 applyRemoval 共用这一份，别各抄一套。
+    ///
+    /// 全局切换器走自己的两种排布（都按浏览器分组），与「切换器布局」设置无关 ——
+    /// 那个设置管的是当前浏览器切换器。
+    private func contentLayout(items: [SwitcherItem],
                                maxWidth: CGFloat,
-                               maxHeight: CGFloat) -> (size: NSSize, columns: Int) {
+                               maxHeight: CGFloat) -> (size: NSSize, presentation: SwitcherPresentation) {
+        let count = items.count
+        guard !isGlobal else {
+            return globalLayout(items: items, maxWidth: maxWidth, screenMaxHeight: maxHeight)
+        }
+
+        let card = CardMetrics.standard
         switch settings.switcherLayout {
         case .strip:
             let n = CGFloat(count)
-            let naturalWidth = n * kCardWidth + max(0, n - 1) * kCardSpacing + kOuterPadding * 2
+            let naturalWidth = n * card.width + max(0, n - 1) * kCardSpacing + kOuterPadding * 2
             return (NSSize(width: min(naturalWidth, maxWidth),
-                           height: kCardHeight + kOuterPadding * 2), 0)
+                           height: card.height + kOuterPadding * 2), .strip)
 
         case .grid:
             // 先按塞满宽度算至少要几行，再回头平衡列数：30 个标签在
             // 12 列上限下排成 10×3，而不是 12+12+6 那种最后一行孤零零的样子。
             // 只有标签多到整屏都放不下时才铺满宽度、纵向滚动。
             let maxCols = max(1, Int((maxWidth - kOuterPadding * 2 + kCardSpacing)
-                                     / (kCardWidth + kCardSpacing)))
+                                     / (card.width + kCardSpacing)))
             let maxRows = max(1, Int((maxHeight - kOuterPadding * 2 + kCardSpacing)
-                                     / (kCardHeight + kCardSpacing)))
+                                     / (card.height + kCardSpacing)))
             let neededRows = (count + maxCols - 1) / maxCols
             let cols = neededRows <= maxRows ? (count + neededRows - 1) / neededRows : maxCols
             let rows = min(neededRows, maxRows)
-            return (NSSize(width: CGFloat(cols) * kCardWidth + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2,
-                           height: CGFloat(rows) * kCardHeight + CGFloat(rows - 1) * kCardSpacing + kOuterPadding * 2),
-                    cols)
+            return (NSSize(width: CGFloat(cols) * card.width + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2,
+                           height: CGFloat(rows) * card.height + CGFloat(rows - 1) * kCardSpacing + kOuterPadding * 2),
+                    .grid(columns: cols))
+        }
+    }
+
+    /// 全局切换器的尺寸：按分组逐段累加，超过屏幕就纵向滚动。
+    private func globalLayout(items: [SwitcherItem],
+                              maxWidth: CGFloat,
+                              screenMaxHeight: CGFloat) -> (size: NSSize, presentation: SwitcherPresentation) {
+        // 两个上限取小的那个：小屏按屏幕来，大屏按可读高度来
+        let maxHeight = min(screenMaxHeight, kGlobalMaxHeight)
+        // 每个浏览器的标签数（顺序即 items 里的连续分段）
+        var groupSizes: [Int] = []
+        var lastBrowser: String?
+        for item in items {
+            if item.browser == lastBrowser, !groupSizes.isEmpty {
+                groupSizes[groupSizes.count - 1] += 1
+            } else {
+                groupSizes.append(1)
+                lastBrowser = item.browser
+            }
+        }
+        let groupCount = max(1, groupSizes.count)
+        let gaps = CGFloat(groupCount - 1) * kGroupSpacing
+
+        switch settings.globalSwitcherStyle {
+        case .list:
+            let rowsHeight = groupSizes.reduce(CGFloat.zero) { total, n in
+                total + kGroupHeaderHeight + kGroupRuleSpace
+                      + CGFloat(n) * kRowHeight + CGFloat(n - 1) * kRowSpacing
+            }
+            let height = min(rowsHeight + gaps + kOuterPadding * 2, maxHeight)
+            return (NSSize(width: min(kListWidth, maxWidth), height: height), .globalList)
+
+        case .cards:
+            // 列数取「最大的那组一行放得下」，再夹到目标宽度能给的上限。
+            // 每组独立换行，所以小组不会被大组撑出一堆空位。
+            //
+            // 上限用 kGlobalCardsTargetWidth 而不是整个屏幕：只夹屏幕的话，
+            // 某个浏览器开了十几个标签就会把面板拉成横跨整屏的一条 ——
+            // 卡片本身缩小了也没用，列数会把省下的宽度重新吃回去。
+            // 宁可多换一行，面板保持一块看得过来的方块。
+            let card = CardMetrics.compact
+            let targetWidth = min(maxWidth, kGlobalCardsTargetWidth)
+            let maxCols = max(1, Int((targetWidth - kOuterPadding * 2 + kCardSpacing)
+                                     / (card.width + kCardSpacing)))
+            let cols = max(1, min(maxCols, groupSizes.max() ?? 1))
+            let sectionsHeight = groupSizes.reduce(CGFloat.zero) { total, n in
+                let rows = CGFloat((n + cols - 1) / cols)
+                return total + kGroupHeaderHeight + kGroupRuleSpace
+                             + rows * card.height + (rows - 1) * kCardSpacing
+            }
+            let width = CGFloat(cols) * card.width + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2
+            let height = min(sectionsHeight + gaps + kOuterPadding * 2, maxHeight)
+            return (NSSize(width: min(width, maxWidth), height: height), .globalCards(columns: cols))
         }
     }
 
@@ -691,14 +1137,34 @@ enum BrowserSupport {
 
     /// 浏览器的显示名（本地化的 App 名，仅用于展示，不做任何判断）。
     /// Finder 设置为「显示扩展名」时 displayName 会带 .app 后缀，剥掉。
+    ///
+    /// 结果缓存：全局切换器的分组头每帧都要问一次名字和图标，而这两个查询
+    /// 都要走 Launch Services / 文件系统 —— 放进 SwiftUI 的 body 求值里
+    /// 就是每次重绘都做一次跨进程调用。
     static func displayName(_ bundleID: String) -> String {
+        if let hit = nameCache[bundleID] { return hit }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
             return bundleID
         }
         var name = FileManager.default.displayName(atPath: url.path)
         if name.hasSuffix(".app") { name = String(name.dropLast(4)) }
+        nameCache[bundleID] = name
         return name
     }
+
+    /// 浏览器的 App 图标（全局切换器的分组头、状态栏菜单用）。
+    static func icon(_ bundleID: String) -> NSImage? {
+        if let hit = iconCache[bundleID] { return hit }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let image = NSWorkspace.shared.icon(forFile: url.path)
+        iconCache[bundleID] = image
+        return image
+    }
+
+    private static var nameCache: [String: String] = [:]
+    private static var iconCache: [String: NSImage] = [:]
 
     private static var installedCache: (at: Date, ids: [String])?
 

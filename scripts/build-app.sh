@@ -92,8 +92,19 @@ EXT_STAGE="$BUILD_DIR/ext-stage"
 rm -rf "$EXT_STAGE"
 mkdir -p "$EXT_STAGE"
 cp -R extension "$EXT_STAGE/TabFlick-Extension"
+# 只留 Chrome 真正会加载的东西：manifest 里没引用的开发文件（测试等）
+# 混进去，用户解压后会看到一堆不知道干嘛的东西。用**排除清单**而不是
+# 白名单拷贝 —— 新增运行时文件（新 js、新图标）时不会被悄悄漏掉。
+rm -rf "$EXT_STAGE/TabFlick-Extension/tests"
 (cd "$EXT_STAGE" && zip -qr "$BUILD_DIR/TabFlick-Extension.zip" TabFlick-Extension -x "*.DS_Store")
 rm -rf "$EXT_STAGE"
+
+# 自检：manifest 引用的文件必须都在包里，包里不该有 manifest 之外的 .js
+missing=$(unzip -l "$BUILD_DIR/TabFlick-Extension.zip" | grep -c "manifest.json")
+[ "$missing" -eq 1 ] || { echo "❌ 扩展 zip 里没有 manifest.json"; exit 1; }
+if unzip -l "$BUILD_DIR/TabFlick-Extension.zip" | grep -qE "/(tests|checks|node_modules)/"; then
+    echo "❌ 扩展 zip 混入了开发文件"; exit 1
+fi
 
 # --install：把本机架构的包直接替换 /Applications 里的版本，省掉手动拖拽
 if [[ " $* " == *" --install "* ]]; then

@@ -308,26 +308,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 // 右侧灰字徽标：最近使用时间。Chrome 只给 lastAccessed
                 // （最近使用），不给创建时间 —— 最近使用也正好和 MRU 排序、
                 // 存活时间清理的判定口径一致。
-                if let rel = Self.relativeTime(entry.tab.lastAccessed) {
+                if let rel = entry.tab.relativeLastAccessed {
                     item.badge = NSMenuItemBadge(string: rel)
                 }
                 menu.addItem(item)
             }
         }
-    }
-
-    /// 「X 分钟前」。输入是 tab.lastAccessed（ms epoch），拿不到就返回 nil
-    /// （旧扩展 / 旧 Chrome），菜单项不带徽标。
-    private static func relativeTime(_ msEpoch: Double?) -> String? {
-        guard let msEpoch, msEpoch > 0 else { return nil }
-        let seconds = Date().timeIntervalSince1970 - msEpoch / 1000
-        guard seconds >= 0 else { return nil }
-        if seconds < 60 { return L10n.t("刚刚", "just now") }
-        let minutes = Int(seconds / 60)
-        if minutes < 60 { return L10n.t("\(minutes) 分钟前", "\(minutes)m ago") }
-        let hours = Int(seconds / 3600)
-        if hours < 24 { return L10n.t("\(hours) 小时前", "\(hours)h ago") }
-        return L10n.t("\(Int(seconds / 86400)) 天前", "\(Int(seconds / 86400))d ago")
     }
 
     /// favicon 统一缩到菜单标准的 16pt；没缓存到的用 globe 占位

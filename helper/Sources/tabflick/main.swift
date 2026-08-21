@@ -160,10 +160,23 @@ MainActor.assumeIsolated {
                 } else {
                     configureSwitcherHotkey(keyCode: nil, flags: [])   // 默认 ⌃⇥
                 }
+                // 必须排在切换器键之后 —— 没单独设置时它要跟随切换器键的结果
+                configureGlobalHotkey(keyCode: settings.globalHotkey.map { Int64($0.keyCode) },
+                                      flags: settings.globalHotkey?.cgFlags ?? [],
+                                      enabled: settings.globalSwitcher)
             }
         }
         settings.onHotkeyChange = applyHotkeys
         applyHotkeys()
+
+        // 全局切换器开关：拦截范围（tap 里的 enabled 标志）和就绪状态
+        // 都得当场重算，否则要等下一次 MRU 推送才生效。
+        settings.onInterceptScopeChange = { [weak controller] in
+            MainActor.assumeIsolated {
+                applyHotkeys()
+                controller?.refreshReadiness()
+            }
+        }
 
         // 扩展低于本版 app 的最低兼容版本时提示一次。
         // 只认「过旧」不认「不一致」—— app 发版没动协议时不骚扰用户。
@@ -222,8 +235,8 @@ MainActor.assumeIsolated {
                 onStep: { backward in
                     MainActor.assumeIsolated { controller.step(backward: backward) }
                 },
-                onRowStep: { up in
-                    MainActor.assumeIsolated { controller.stepRow(up: up) }
+                onArrow: { direction in
+                    MainActor.assumeIsolated { controller.arrow(direction) }
                 },
                 onCommit: {
                     MainActor.assumeIsolated { controller.commit() }

@@ -39,14 +39,53 @@ func refreshFrontmostBrowserState() {
 private var gSwitchKeyCode: Int64 = Int64(kVK_Tab)
 private var gSwitchModifiers: CGEventFlags = .maskControl
 
+/// 全局切换器快捷键。未单独设置时与切换器键相同（见 configureGlobalHotkey）。
+private var gGlobalKeyCode: Int64 = Int64(kVK_Tab)
+private var gGlobalModifiers: CGEventFlags = .maskControl
+/// 全局切换器是否开启（设置项，默认关）。关掉时全局键一概不参与匹配。
+private var gGlobalEnabled = false
+
+/// 修饰键归一化：剥掉 ⇧（反向语义需要它空着），剥完为空则退回 ⌃。
+private func normalizedHotkeyModifiers(_ flags: CGEventFlags) -> CGEventFlags {
+    let stripped = flags.intersection([.maskCommand, .maskControl, .maskAlternate])
+    return stripped.isEmpty ? .maskControl : stripped
+}
+
 /// 切换器快捷键设置变化时由主线程调用。nil = 恢复默认 ⌃⇥。
-/// flags 会剥掉 ⇧（反向语义需要它空着），剥完为空则退回 ⌃。
 func configureSwitcherHotkey(keyCode: Int64?, flags: CGEventFlags) {
     gSwitchKeyCode = keyCode ?? Int64(kVK_Tab)
-    let stripped = flags.intersection([.maskCommand, .maskControl, .maskAlternate])
-    gSwitchModifiers = stripped.isEmpty ? .maskControl : stripped
+    gSwitchModifiers = normalizedHotkeyModifiers(flags)
 }
+
+/// 全局切换器快捷键设置变化时由主线程调用。
+/// keyCode 传 nil = 跟随切换器键（此时两者同键，浏览器前台归当前浏览器切换器）。
+/// 必须在 configureSwitcherHotkey 之后调用 —— 跟随分支要读它的结果。
+func configureGlobalHotkey(keyCode: Int64?, flags: CGEventFlags, enabled: Bool) {
+    gGlobalEnabled = enabled
+    if let keyCode {
+        gGlobalKeyCode = keyCode
+        gGlobalModifiers = normalizedHotkeyModifiers(flags)
+    } else {
+        gGlobalKeyCode = gSwitchKeyCode
+        gGlobalModifiers = gSwitchModifiers
+    }
+}
+
 private var gCycling = false
+
+/// 本轮 cycling 是全局切换器（跨浏览器）还是当前浏览器切换器。
+/// 起手那一下就定死，中途前台怎么变都不改 —— 内容已经拍进快照了。
+private var gCyclingGlobal = false
+
+/// 本轮 cycling 要盯的修饰键：起手那个快捷键的。
+///
+/// 不能固定看切换器键 —— 全局键可以是另一套修饰键（⌥⇥），
+/// 用切换器的 ⌃ 去测松开时机，⌥ 松开时根本收不到提交信号。
+private var gCycleModifiers: CGEventFlags = .maskControl
+
+/// 本轮 cycling 是否为全局模式。MRUController 起手时读它决定拍哪份快照。
+var eventTapCyclingIsGlobal: Bool { gCyclingGlobal }
+
 private var gTap: CFMachPort?
 
 /// 扩展是否已连接、且有至少两个标签页可切。
@@ -55,6 +94,11 @@ private var gTap: CFMachPort?
 /// 或扩展断了的时候，Ctrl+Tab 会被吞掉又什么都不做 —— 表现为「快捷键彻底
 /// 失灵」，用户完全无从判断是哪一层坏了。宁可降级到原生行为。
 private var gReady = false
+
+/// 全局切换器的就绪状态：开关打开、有扩展连着、且所有浏览器合起来
+/// 至少两个标签。与 gReady 分开算 —— 后者是「当前浏览器（可能还按窗口
+/// 过滤）够不够切」，两者的分母根本不是一回事。
+private var gGlobalReady = false
 
 /// 已彻底放弃拦截（见 tapDisabledByTimeout 分支）。置位后一律放行。
 private var gDisabledPermanently = false
@@ -68,6 +112,11 @@ private var gOnPermissionLost: (() -> Void)?
 /// 由 MRUController 在连接状态或标签页数量变化时调用。
 func setEventTapReady(_ ready: Bool) {
     gReady = ready
+}
+
+/// 全局切换器的就绪状态，同样由 MRUController 维护。
+func setEventTapGlobalReady(_ ready: Bool) {
+    gGlobalReady = ready
 }
 
 /// 鼠标点选已经把这一轮切换提交掉了，清掉 tap 侧的 cycling 标志，
@@ -85,6 +134,7 @@ func stopEventTap() {
     if let tap = gTap { CGEvent.tapEnable(tap: tap, enable: false) }
     gCycling = false
     gReady = false
+    gGlobalReady = false
 }
 
 /// 用户自定义的「置顶/取消置顶当前标签」快捷键。-1 = 未设置（不吞任何键）。
@@ -100,10 +150,17 @@ func configurePinHotkey(keyCode: Int64?, flags: CGEventFlags, handler: (() -> Vo
     gOnPinHotkey = handler
 }
 
+/// cycling 中按下的方向键。
+///
+/// 具体含义（走列表 / 跳分组 / 按行移动）由 MRUController 按**当前排布**决定 ——
+/// 「哪个轴是列表、哪个轴是分组」只有它知道：纵向列表里 ↑↓ 是上一条下一条，
+/// 横向卡片里 ←→ 才是。tap 只负责把方向如实报上去。
+enum ArrowDirection { case left, right, up, down }
+
 /// 按下一步。参数为 true 表示反向（Ctrl+Shift+Tab）。
 private var gOnStep: ((Bool) -> Void)?
-/// 上下方向键按行移动（宫格布局用）。参数为 true 表示向上。
-private var gOnRowStep: ((Bool) -> Void)?
+/// cycling 中的方向键。
+private var gOnArrow: ((ArrowDirection) -> Void)?
 /// Ctrl 松开，提交本轮切换。
 private var gOnCommit: (() -> Void)?
 
@@ -117,6 +174,37 @@ private var gTapDisableCount = 0
 private var gLastTapDisable: CFAbsoluteTime = 0
 private let kMaxRapidDisables = 3
 private let kRapidWindow: CFAbsoluteTime = 10
+
+/// 这一下按键该唤出哪个切换器。
+private enum SwitchMode {
+    /// 当前浏览器的标签（原有行为）。
+    case browser
+    /// 所有已连接浏览器的标签，按浏览器分组。
+    case global
+}
+
+/// 把「按了哪个键 + 前台是不是浏览器」解析成切换器模式，nil = 与我们无关，放行。
+///
+/// 两条规则：
+///   - **不同键**：各归各的。全局键在浏览器前台也生效（想跨浏览器找标签时
+///     不必先切出浏览器）；切换器键只在浏览器前台生效。
+///   - **同一个键**（默认，两者都是 ⌃⇥）：浏览器在前台 → 当前浏览器切换器
+///     优先；前台不是浏览器 → 全局切换器。
+///
+/// 注意修饰键用 `contains` 而不是相等：⇧ 要能叠上去表示反向，所以 ⌃⇥ 和
+/// ⌃⇧⇥ 都算命中同一个键。这也意味着两个键的修饰键互为子集时会双命中
+/// （⌃⇥ 与 ⌃⌥⇥），此时按同键规则走 —— 让「浏览器优先」成为唯一的兜底答案，
+/// 比按定义顺序碰运气强。
+private func resolveSwitchMode(code: Int64, flags: CGEventFlags) -> SwitchMode? {
+    let hitsSwitcher = code == gSwitchKeyCode && flags.contains(gSwitchModifiers)
+    let hitsGlobal = gGlobalEnabled && code == gGlobalKeyCode && flags.contains(gGlobalModifiers)
+
+    if hitsSwitcher && hitsGlobal { return gFrontIsBrowser ? .browser : .global }
+    if hitsGlobal { return .global }
+    // 切换器键在非浏览器前台不属于我们 —— 放行给终端/编辑器自己的 ⌃⇥
+    if hitsSwitcher { return gFrontIsBrowser ? .browser : nil }
+    return nil
+}
 
 private func tabflickTapCallback(proxy: CGEventTapProxy,
                                  type: CGEventType,
@@ -147,33 +235,29 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
         let code = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
-        // 自愈：切换键的修饰键已经不在按下状态，cycling 却还挂着 —— 说明我们
+        // 自愈：本轮的修饰键已经不在按下状态，cycling 却还挂着 —— 说明我们
         // 漏收了那次 flagsChanged（tap 被系统 timeout 禁用、按住时切走再松手、
         // 系统弹窗抢焦点，都会造成事件丢失）。这里必须清掉，否则下面的方向键
         // 分支会把网页里所有 ←/→ 一直吞掉，表现为「键盘坏了」。
-        if gCycling && !flags.contains(gSwitchModifiers) {
+        if gCycling && !flags.contains(gCycleModifiers) {
             gCycling = false
             gOnCommit?()
         }
 
-        // 切换过程中，左右方向键也移动游标。
+        // 切换过程中的方向键。四个方向一律吞掉再上报，哪怕当前排布对某个
+        // 方向没有动作 —— ⌃↑/⌃↓ 是系统调度中心（Mission Control）的快捷键，
+        // 切换到一半整个桌面飞走，比「按了没反应」糟糕得多。
+        //
         // 必须同时要求修饰键仍按着：只看 gCycling 的话，一旦状态残留就会
         // 无差别吞掉方向键，而这个标志是靠一个可能丢失的事件来清零的。
-        if gCycling,
-           flags.contains(gSwitchModifiers),
-           code == Int64(kVK_LeftArrow) || code == Int64(kVK_RightArrow) {
-            gOnStep?(code == Int64(kVK_LeftArrow))
-            return nil
-        }
-
-        // 上下方向键：宫格布局按行移动。长条布局下没有动作，但同样要吞 ——
-        // ⌃↑/⌃↓ 是系统调度中心（Mission Control）的快捷键，切换到一半
-        // 整个桌面飞走，比「按了没反应」糟糕得多。
-        if gCycling,
-           flags.contains(gSwitchModifiers),
-           code == Int64(kVK_UpArrow) || code == Int64(kVK_DownArrow) {
-            gOnRowStep?(code == Int64(kVK_UpArrow))
-            return nil
+        if gCycling, flags.contains(gCycleModifiers) {
+            switch code {
+            case Int64(kVK_LeftArrow):  gOnArrow?(.left);  return nil
+            case Int64(kVK_RightArrow): gOnArrow?(.right); return nil
+            case Int64(kVK_UpArrow):    gOnArrow?(.up);    return nil
+            case Int64(kVK_DownArrow):  gOnArrow?(.down);  return nil
+            default: break
+            }
         }
 
         // 用户自定义的置顶快捷键。未设置时 gPinHotkeyCode 为 -1，永不命中；
@@ -186,19 +270,26 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
             return nil
         }
 
-        // 切换器快捷键（默认 ⌃⇥，可在设置中自定义）。keyCode 是用户录制或
-        // Carbon 常量，不是裸数字。加 ⇧ 表示反向。
-        guard code == gSwitchKeyCode,
-              flags.contains(gSwitchModifiers),
-              gFrontIsBrowser,
-              gReady else { break }
+        // 切换器 / 全局切换器快捷键（默认都是 ⌃⇥，可在设置中各自定义）。
+        // keyCode 是用户录制或 Carbon 常量，不是裸数字。加 ⇧ 表示反向。
+        guard let mode = resolveSwitchMode(code: code, flags: flags) else { break }
 
+        // 就绪判定按模式分开：没就绪时**不吞**，放行给前台应用自己处理
+        // （在浏览器里就是 Chrome 原生切换，在别的应用里就是它自家的 ⌃⇥）。
+        // 写成布尔而不是嵌套 switch —— 那里的 break 只跳内层 switch，
+        // 未就绪反而会继续往下走。
+        guard (mode == .global) ? gGlobalReady : gReady else { break }
+
+        if !gCycling {
+            gCyclingGlobal = (mode == .global)
+            gCycleModifiers = (mode == .global) ? gGlobalModifiers : gSwitchModifiers
+        }
         gCycling = true
         gOnStep?(flags.contains(.maskShift))
-        return nil   // 吞掉，Chrome 收不到
+        return nil   // 吞掉，前台应用收不到
 
     case .flagsChanged:
-        if gCycling && !event.flags.contains(gSwitchModifiers) {
+        if gCycling && !event.flags.contains(gCycleModifiers) {
             gCycling = false
             gOnCommit?()
         }
@@ -263,14 +354,14 @@ final class EventTap {
     private var permissionTimer: Timer?
 
     /// - Parameters:
-    ///   - onStep: 每次 Ctrl+Tab。参数 true 表示反向。
-    ///   - onRowStep: 切换中按 ⌃↑/⌃↓。参数 true 表示向上（宫格布局按行移动）。
-    ///   - onCommit: Ctrl 松开。
+    ///   - onStep: 每次按切换键。参数 true 表示反向。
+    ///   - onArrow: 切换中按方向键；含义由调用方按当前排布决定。
+    ///   - onCommit: 修饰键松开。
     /// - Parameters:
     ///   - onGaveUp: 钩子因反复超时被永久放弃时调用。
     ///   - onPermissionLost: 运行期间辅助功能权限被撤销时调用。
     func start(onStep: @escaping (Bool) -> Void,
-               onRowStep: @escaping (Bool) -> Void,
+               onArrow: @escaping (ArrowDirection) -> Void,
                onCommit: @escaping () -> Void,
                onGaveUp: @escaping () -> Void,
                onPermissionLost: @escaping () -> Void) throws {
@@ -281,7 +372,7 @@ final class EventTap {
         }
 
         gOnStep = onStep
-        gOnRowStep = onRowStep
+        gOnArrow = onArrow
         gOnCommit = onCommit
         gOnGaveUp = onGaveUp
         gOnPermissionLost = onPermissionLost
@@ -338,8 +429,10 @@ final class EventTap {
         ) { _ in
             MainActor.assumeIsolated {
                 refreshFrontmostBrowserState()
-                // 切走时若还在 cycling，丢弃这一轮，避免状态卡住
-                if !gFrontIsBrowser && gCycling {
+                // 从浏览器切走时若还在 cycling，丢弃这一轮，避免状态卡住。
+                // 全局切换器不受这条约束 —— 它起手时前台本来就不是浏览器，
+                // 按这个条件判会被自己的起手状态当场判死。
+                if !gFrontIsBrowser && gCycling && !gCyclingGlobal {
                     gCycling = false
                     gOnCommit?()
                 }

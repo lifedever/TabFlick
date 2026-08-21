@@ -45,6 +45,26 @@ enum SwitcherLayout: String, CaseIterable, Identifiable {
     }
 }
 
+/// 全局切换器（前台不是浏览器时唤出）的呈现样式。
+///
+/// 两种都按浏览器分组 —— 人在别的应用里想切标签时，脑子里先定「去哪个
+/// 浏览器」，再在里面找标签。合并成一条纯 MRU 反而要多扫一遍。
+enum GlobalSwitcherStyle: String, CaseIterable, Identifiable {
+    /// Raycast 式纵向列表：一行一个标签，浏览器做分组标题。
+    case list
+    /// 沿用切换器的缩略图卡片，每个浏览器一段。
+    case cards
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .list:  return L10n.t("列表", "List")
+        case .cards: return L10n.t("卡片", "Cards")
+        }
+    }
+}
+
 /// 收藏的标签：浏览器每次连上都保证它存在且置顶（Arc 收藏位的 Chrome 版）。
 ///
 /// 识别按**域名**而不是完整 URL —— 置顶型标签（Gmail、Notion 这类 webapp）
@@ -139,6 +159,10 @@ enum TabLifetime: String, CaseIterable, Identifiable {
     case h12
     case h24
     case d7
+    case m1
+    case m3
+    case m6
+    case y1
 
     var id: String { rawValue }
 
@@ -148,16 +172,24 @@ enum TabLifetime: String, CaseIterable, Identifiable {
         case .h12:     return L10n.t("12 小时", "12 hours")
         case .h24:     return L10n.t("24 小时", "24 hours")
         case .d7:      return L10n.t("7 天", "7 days")
+        case .m1:      return L10n.t("1 个月", "1 month")
+        case .m3:      return L10n.t("3 个月", "3 months")
+        case .m6:      return L10n.t("半年", "6 months")
+        case .y1:      return L10n.t("1 年", "1 year")
         }
     }
 
-    /// 推给扩展的小时数；0 = 不清理。
+    /// 推给扩展的小时数；0 = 不清理。月按 30 天、年按 365 天算。
     var hours: Int {
         switch self {
         case .forever: return 0
         case .h12:     return 12
         case .h24:     return 24
-        case .d7:      return 168
+        case .d7:      return 24 * 7
+        case .m1:      return 24 * 30
+        case .m3:      return 24 * 90
+        case .m6:      return 24 * 180
+        case .y1:      return 24 * 365
         }
     }
 }
@@ -208,6 +240,9 @@ final class AppSettings: ObservableObject {
         static let favoriteCurrentUrls = "favoriteCurrentUrls"
         static let pinHotkey = "pinHotkey"
         static let switcherHotkey = "switcherHotkey"
+        static let globalHotkey = "globalHotkey"
+        static let globalSwitcher = "globalSwitcher"
+        static let globalSwitcherStyle = "globalSwitcherStyle"
         static let knownBrowsers = "knownBrowsers"
         static let pendingUnpins = "pendingUnpins"
     }
@@ -268,6 +303,32 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 全局切换器：前台不是浏览器时也能唤出，列出**所有**已连接浏览器的标签。
+    ///
+    /// 默认关闭 —— 打开就意味着在终端、编辑器这些自己也用 ⌃⇥ 切标签的应用里
+    /// 把键抢过来，得由用户自己决定这笔交易划不划算。纯 helper 侧行为，
+    /// 不推给扩展；但它决定 event tap 要不要在非浏览器前台拦键，
+    /// 所以要立刻重算就绪状态。
+    @Published var globalSwitcher: Bool {
+        didSet {
+            guard oldValue != globalSwitcher else { return }
+            UserDefaults.standard.set(globalSwitcher, forKey: Key.globalSwitcher)
+            onInterceptScopeChange?()
+        }
+    }
+
+    /// 全局切换器的呈现样式。浮层每次弹出时读取。
+    @Published var globalSwitcherStyle: GlobalSwitcherStyle {
+        didSet {
+            guard oldValue != globalSwitcherStyle else { return }
+            UserDefaults.standard.set(globalSwitcherStyle.rawValue, forKey: Key.globalSwitcherStyle)
+        }
+    }
+
+    /// 影响 event tap 拦截范围的设置变了（目前只有全局切换器开关）。
+    /// 不走 onChange —— 那是推给扩展用的，这条纯 helper 侧。
+    var onInterceptScopeChange: (() -> Void)?
+
     /// 有收藏被移除（菜单取消收藏、设置页删除都走这里）。
     /// 消费方要把对应标签的置顶撤销 —— 核对逻辑只会「补齐」，不会「撤销」。
     var onFavoritesRemoved: (([FavoriteTab]) -> Void)?
@@ -296,6 +357,23 @@ final class AppSettings: ObservableObject {
                 UserDefaults.standard.set(data, forKey: Key.switcherHotkey)
             } else {
                 UserDefaults.standard.removeObject(forKey: Key.switcherHotkey)
+            }
+            onHotkeyChange?()
+        }
+    }
+
+    /// 全局切换器的触发键。nil = 跟随切换器快捷键。
+    ///
+    /// 和切换器**不同键**时，浏览器在前台也能用它唤出全局切换器（想跨浏览器
+    /// 找标签时不必先切出浏览器）；**同一个键**时，浏览器在前台归当前浏览器
+    /// 切换器，只有前台不是浏览器才落到全局。⇧ 同样被忽略（留给反向切换）。
+    @Published var globalHotkey: HotkeyConfig? {
+        didSet {
+            guard oldValue != globalHotkey else { return }
+            if let hk = globalHotkey, let data = try? JSONEncoder().encode(hk) {
+                UserDefaults.standard.set(data, forKey: Key.globalHotkey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Key.globalHotkey)
             }
             onHotkeyChange?()
         }
@@ -395,6 +473,10 @@ final class AppSettings: ObservableObject {
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
         switcherHotkey = defaults.data(forKey: Key.switcherHotkey)
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
+        globalHotkey = defaults.data(forKey: Key.globalHotkey)
+            .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
+        globalSwitcher = defaults.bool(forKey: Key.globalSwitcher)   // 未设置即默认 false
+        globalSwitcherStyle = GlobalSwitcherStyle(rawValue: defaults.string(forKey: Key.globalSwitcherStyle) ?? "") ?? .list
         knownBrowsers = defaults.stringArray(forKey: Key.knownBrowsers) ?? []
         pendingUnpins = defaults.data(forKey: Key.pendingUnpins)
             .flatMap { try? JSONDecoder().decode([PendingUnpin].self, from: $0) } ?? []

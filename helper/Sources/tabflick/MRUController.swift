@@ -15,6 +15,25 @@ struct TabInfo: Decodable {
     let pinned: Bool?
 }
 
+extension TabInfo {
+    /// 「X 分钟前」。lastAccessed 拿不到时（旧扩展 / 旧 Chrome）返回 nil，
+    /// 调用方就不显示这一栏。
+    ///
+    /// 状态栏菜单和全局切换器的列表共用这一份 —— 同样的东西写两遍，
+    /// 迟早在其中一处漏改（这个项目栽过好几次）。
+    var relativeLastAccessed: String? {
+        guard let msEpoch = lastAccessed, msEpoch > 0 else { return nil }
+        let seconds = Date().timeIntervalSince1970 - msEpoch / 1000
+        guard seconds >= 0 else { return nil }
+        if seconds < 60 { return L10n.t("刚刚", "just now") }
+        let minutes = Int(seconds / 60)
+        if minutes < 60 { return L10n.t("\(minutes) 分钟前", "\(minutes)m ago") }
+        let hours = Int(seconds / 3600)
+        if hours < 24 { return L10n.t("\(hours) 小时前", "\(hours)h ago") }
+        return L10n.t("\(Int(seconds / 86400)) 天前", "\(Int(seconds / 86400))d ago")
+    }
+}
+
 /// 一枚 favicon 及其视觉属性。
 struct IconInfo {
     let image: NSImage
@@ -154,12 +173,6 @@ final class MRUController {
         clients[clientID]?.browser ?? ChromeWindowLocator.activeBundleID
     }
 
-    /// 命令只发给活动客户端 —— 广播会命中其他浏览器里碰巧同号的 tabId。
-    private func sendToActive(_ object: [String: Any]) {
-        guard let id = activeClientID else { return }
-        server.send(object, to: id)
-    }
-
     /// 收藏 → 活标签的绑定（favorite.id → tabId）。
     /// 置顶标签会在站内外漂移，域名判定随时失真；绑定是唯一稳定的对应。
     /// tabId 随浏览器会话失效，绑定死了就等下一次 favoriteBound 重建。
@@ -174,10 +187,52 @@ final class MRUController {
         return scoped.isEmpty ? tabs : scoped
     }
 
+    /// 当前浏览器切换器的条目。browser 传 nil —— 只有一个浏览器，不分组。
+    private var switcherItems: [SwitcherItem] {
+        guard let id = activeClientID else { return [] }
+        return switcherTabs.map { SwitcherItem(tab: $0, browser: nil, clientID: id) }
+    }
+
+    /// 全局切换器的条目：所有已连接浏览器的标签，**按浏览器分组**。
+    ///
+    /// 组内保持该浏览器自己的 MRU 顺序；组间按「最近用过」排 —— 取组内
+    /// 最大的 lastAccessed，不额外记账。人在别的应用里想切标签时，脑子里
+    /// 先定「去哪个浏览器」再找标签，所以分组比一条纯 MRU 更好使。
+    ///
+    /// 「只切换当前窗口」在这里不适用：前台不是浏览器时根本没有「当前窗口」
+    /// 这个概念，全局模式一律列全部窗口。
+    private var globalItems: [SwitcherItem] {
+        // 同一个浏览器可能有多条连接（多开的 profile 各有一份扩展），
+        // 按 bundle id 合并成一组，免得列表里出现两个同名分区。
+        var byBrowser: [String: [(tab: TabInfo, clientID: UUID)]] = [:]
+        for (id, client) in clients where !client.tabs.isEmpty {
+            let browser = effectiveBrowser(of: id)
+            byBrowser[browser, default: []].append(contentsOf: client.tabs.map { ($0, id) })
+        }
+        return byBrowser
+            .map { browser, entries -> (browser: String, recency: Double, entries: [(tab: TabInfo, clientID: UUID)]) in
+                (browser, entries.compactMap(\.tab.lastAccessed).max() ?? 0, entries)
+            }
+            .sorted { a, b in
+                a.recency != b.recency ? a.recency > b.recency : a.browser < b.browser
+            }
+            .flatMap { group in
+                group.entries.map { SwitcherItem(tab: $0.tab, browser: group.browser, clientID: $0.clientID) }
+            }
+    }
+
+    /// 所有浏览器的标签总数。全局切换器的就绪判定用，不必真去拼条目。
+    private var globalTabCount: Int {
+        clients.values.reduce(0) { $0 + $1.tabs.count }
+    }
+
     /// 本轮 cycling 的快照，与 `tabs` 隔离。
-    private var snapshot: [TabInfo] = []
+    private var snapshot: [SwitcherItem] = []
     private var cursor = 0
     private var cycling = false
+
+    /// 本轮是全局切换器（跨浏览器）。起手时从 event tap 读一次就定死。
+    private var cyclingGlobal = false
 
     /// 本轮 cycling 中是否用 ✕ 关过标签。关过的话，松开 Ctrl 时即使游标
     /// 停在 0 也要提交切换 —— 原来的「起点」标签可能已经被关掉了，
@@ -213,11 +268,17 @@ final class MRUController {
     private func forceEndCycling() {
         guard cycling || eventTapIsCycling else { return }
         log("⚠️  Watchdog: cycling stuck for \(Int(cyclingTimeout))s — force reset")
+        endCycling()
+        resetEventTapCycling()
+    }
+
+    /// 收摊：清状态、收起浮层。不提交任何切换。
+    private func endCycling() {
         cycling = false
+        cyclingGlobal = false
         cursor = 0
         snapshot = []
         closedTabThisRound = false
-        resetEventTapCycling()
         overlay.hide()
     }
 
@@ -317,11 +378,33 @@ final class MRUController {
         server.send(settings.payload(favoritesFor: browser), to: id)
     }
 
-    /// 数据没就绪时让 event tap 放行 Ctrl+Tab，降级到 Chrome 的原生切换。
+    /// 数据没就绪时让 event tap 放行快捷键，降级到前台应用自己的行为。
     /// 判定基准是切换器视角的列表（按窗口过滤后）：当前窗口只有 1 个标签
     /// 时即便别的窗口还有标签，⌃⇥ 也该放行给 Chrome。
+    ///
+    /// 全局切换器的分母完全不同（所有浏览器的标签总数，不按窗口过滤），
+    /// 单独算一份。
     private func updateReadiness() {
         setEventTapReady(connected && switcherTabs.count > 1)
+
+        // 全局切换器「按了没反应」有两种完全不同的原因：拦截没开（就绪为 false，
+        // 键被放行）和路由判错（吞了却没弹）。日志里要能一眼分开，所以
+        // 状态翻转时记一笔。只在变化时写，不然每次 MRU 推送都刷一行。
+        let globalReady = settings.globalSwitcher && connected && globalTabCount > 1
+        if globalReady != lastGlobalReady {
+            lastGlobalReady = globalReady
+            log("🌐 global switcher \(globalReady ? "armed" : "idle") "
+                + "(开关 \(settings.globalSwitcher ? "开" : "关")，\(clients.count) 个浏览器，\(globalTabCount) 个标签)")
+        }
+        setEventTapGlobalReady(globalReady)
+    }
+
+    private var lastGlobalReady = false
+
+    /// 全局切换器开关变了 —— 立刻重算拦截范围，不然要等下一次 MRU 推送
+    /// 才生效（表现为「刚打开开关按了没反应」）。
+    func refreshReadiness() {
+        updateReadiness()
     }
 
     init(server: WebSocketServer, settings: AppSettings) {
@@ -329,14 +412,14 @@ final class MRUController {
         self.settings = settings
         self.overlay = OverlayPanel(settings: settings)
         thumbnails.warmUp()   // 磁盘上的图先读进来，第一次按 ⌃⇥ 就有画面
-        overlay.model.onPick = { [weak self] tabId in
-            self?.pick(tabId: tabId)
+        overlay.model.onPick = { [weak self] itemID in
+            self?.pick(itemID: itemID)
         }
-        overlay.model.onHover = { [weak self] tabId in
-            self?.hover(tabId: tabId)
+        overlay.model.onHover = { [weak self] itemID in
+            self?.hover(itemID: itemID)
         }
-        overlay.model.onClose = { [weak self] tabId in
-            self?.closeTab(tabId: tabId)
+        overlay.model.onClose = { [weak self] itemID in
+            self?.closeTab(itemID: itemID)
         }
     }
 
@@ -347,11 +430,11 @@ final class MRUController {
     /// 那张（高亮和实际切换对不上）。
     /// source 必须是 .mouse：hover 触发自动滚动会形成正反馈环（见 SwitcherView）。
     ///
-    /// 视图回调带来的都是 tab.id，这里按 id 在快照里反查位置 —— 位置索引在
+    /// 视图回调带来的都是 item.id，这里按 id 在快照里反查位置 —— 位置索引在
     /// 「渲染 → 点击」之间可能失真（连续关闭时数组在变），id 不会。
-    private func hover(tabId: Int) {
+    private func hover(itemID: String) {
         guard cycling,
-              let index = snapshot.firstIndex(where: { $0.id == tabId }),
+              let index = snapshot.firstIndex(where: { $0.id == itemID }),
               index != cursor else { return }
         cursor = index
         overlay.model.setCursor(index, source: .mouse)
@@ -359,13 +442,13 @@ final class MRUController {
     }
 
     /// 鼠标点选某张卡片：把游标直接定位过去并立即提交。
-    private func pick(tabId: Int) {
+    private func pick(itemID: String) {
         guard cycling,
-              let index = snapshot.firstIndex(where: { $0.id == tabId }) else { return }
+              let index = snapshot.firstIndex(where: { $0.id == itemID }) else { return }
         cursor = index
         // tap 侧的 cycling 也要清，否则用户松开 Ctrl 时会再 commit 一次
         resetEventTapCycling()
-        log("🖱 clicked [\(index)] → \(snapshot[index].title.prefix(50))")
+        log("🖱 clicked [\(index)] → \(snapshot[index].tab.title.prefix(50))")
         commit()
     }
 
@@ -375,22 +458,26 @@ final class MRUController {
     /// 这里是状态机侧的同一道门）。只在剩 3 张以上时可用：2 张关 1 张就
     /// 只剩单标签，切换器不为单标签出现，关到那一步面板就没意义了。
     /// 这条守卫同时保证 tabs 不会被关到触发 readiness 降级。
-    private func closeTab(tabId: Int) {
-        guard settings.allowTabClose,
+    private func closeTab(itemID: String) {
+        // 全局切换器不提供关闭：那里关的是别的浏览器里、此刻不在眼前的标签。
+        // 视图侧已经不画 ✕ 了，这里再挡一道 —— 这条路径是不可逆动作，
+        // 不能只靠「界面没有入口」来保证。
+        guard !cyclingGlobal,
+              settings.allowTabClose,
               cycling, snapshot.count > 2,
-              let index = snapshot.firstIndex(where: { $0.id == tabId }) else { return }
+              let index = snapshot.firstIndex(where: { $0.id == itemID }) else { return }
 
         let target = snapshot[index]
-        log("✕ close [\(index)] → \(target.title.prefix(50)) (tabId \(target.id))")
-        sendToActive(["type": "close", "tabId": target.id])
+        log("✕ close [\(index)] → \(target.tab.title.prefix(50)) (tabId \(target.tab.id))")
+        // 点对点发给这一项所属的连接 —— 全局模式下快照里混着多个浏览器，
+        // 发给「活动客户端」会去关别家浏览器里同号的标签。
+        server.send(["type": "close", "tabId": target.tab.id], to: target.clientID)
         closedTabThisRound = true
 
         snapshot.remove(at: index)
         // 本地同步剔除，不等扩展的 onRemoved 推送 —— 窗口期里如果开始
         // 新一轮 cycling，快照里不该出现已关掉的标签。
-        if let id = activeClientID {
-            clients[id]?.tabs.removeAll { $0.id == target.id }
-        }
+        clients[target.clientID]?.tabs.removeAll { $0.id == target.tab.id }
         publishStatus()
 
         // 关的在游标前面 → 游标跟着前移一位；关的是游标那张且它是末尾 →
@@ -401,7 +488,7 @@ final class MRUController {
             cursor = snapshot.count - 1
         }
 
-        overlay.applyRemoval(tabs: snapshot, cursor: cursor)
+        overlay.applyRemoval(items: snapshot, cursor: cursor)
         armWatchdog()
     }
 
@@ -531,6 +618,38 @@ final class MRUController {
         startPinging()
         updateReadiness()
         publishStatus()
+        scheduleIdentityFallback(for: id)
+    }
+
+    /// 身份识别（lsof → pid → 父进程链）**失败**时的兜底。
+    ///
+    /// 识别成功要不了 200ms。到点还是 nil 说明这条链路断了 —— 此时如果**只有
+    /// 一条连接**，猜错的余地本来就不存在，按前台浏览器认下来即可。
+    ///
+    /// 这个兜底不是可有可无的：配置里的收藏是按浏览器过滤下发的，身份不明
+    /// 就不下发（否则会把别家浏览器的置顶恢复进来）。少了这一层，识别失败的
+    /// 用户**收不到收藏、置顶不恢复、自动清理也不跑**，而且全程无报错。
+    /// WebSocketServer 那句「单浏览器场景不受影响」的日志靠这里才成立。
+    ///
+    /// 多连接时不兜底：那正是猜错会串台的场景，宁可功能不生效也不能填错账本。
+    private func scheduleIdentityFallback(for id: UUID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let client = self.clients[id], client.browser == nil else { return }
+                guard self.clients.count == 1 else {
+                    // 多连接下猜错会把别家浏览器的置顶恢复进来，只能不兜底。
+                    // 但这条连接从此收不到收藏、置顶不恢复、清理也不跑 ——
+                    // 不留一行日志的话，这个降级从外面完全看不出来。
+                    log("⚠️  client \(id.uuidString.prefix(8)) 身份始终未识别，且有多条连接 —— "
+                        + "该浏览器的收藏 / 置顶恢复 / 自动清理不会生效")
+                    return
+                }
+                let fallback = ChromeWindowLocator.activeBundleID
+                log("🔎 client \(id.uuidString.prefix(8)) 身份识别超时 → 单连接按前台浏览器兜底：\(fallback)")
+                self.handleClientIdentified(id, browser: fallback)
+            }
+        }
     }
 
     /// 连接归属的浏览器识别完成。识别结果同时喂给 BrowserSupport 的
@@ -563,9 +682,11 @@ final class MRUController {
         } else {
             log("⚠️  Client disconnected (\(clients.count) left)")
         }
-        if wasActive {
-            cycling = false
-            overlay.hide()
+        // 全局模式的快照里混着所有浏览器，任何一家掉线都可能让快照里出现
+        // 死连接（提交时命令发进空气）。收摊比留着安全。
+        if wasActive || cyclingGlobal {
+            endCycling()
+            resetEventTapCycling()
         }
         updateReadiness()
         publishStatus()
@@ -582,10 +703,15 @@ final class MRUController {
     func step(backward: Bool) {
         if !cycling {
             cycling = true
-            snapshot = switcherTabs
+            // 全局还是当前浏览器，由 event tap 在按下那一刻按「前台是不是
+            // 浏览器 + 按的是哪个键」定好，这里只取结果 —— 前台状态在
+            // cycling 期间还会变，晚一步读就可能拍错快照。
+            cyclingGlobal = eventTapCyclingIsGlobal
+            snapshot = cyclingGlobal ? globalItems : switcherItems
             cursor = 0
             closedTabThisRound = false
-            overlay.model.tabs = snapshot
+            overlay.beginCycle(isGlobal: cyclingGlobal, items: snapshot)
+            overlay.model.items = snapshot
             refreshOverlayImages()
         }
 
@@ -602,33 +728,128 @@ final class MRUController {
         overlay.requestShow()
         armWatchdog()
 
-        log("⌃\(backward ? "⇧" : "")⇥  [\(cursor)/\(snapshot.count - 1)] → \(snapshot[cursor].title.prefix(50))")
+        log("⌃\(backward ? "⇧" : "")⇥ \(cyclingGlobal ? "(global) " : "")[\(cursor)/\(snapshot.count - 1)] → \(snapshot[cursor].tab.title.prefix(50))")
     }
 
-    /// ⌃↑/⌃↓：宫格布局下按行移动游标。
+    /// cycling 中的方向键。
     ///
-    /// 长条布局（gridRowStride == 0）没有第二行，忽略；单行宫格同理会被
-    /// 下面的越界判断挡住。上下都不回绕 —— 宫格里「从顶行再往上」的预期
-    /// 是停住，不是跳到底部。最后一行不满时，从上一行按 ↓ 落到末尾一张。
-    func stepRow(up: Bool) {
+    /// 每种排布把**视觉上的主轴**给「走列表」，另一个轴给「跳分组 / 按行移动」：
+    /// 纵向列表里 ↑↓ 就该是上一条下一条（跟它跳浏览器会很别扭），横向卡片里
+    /// ←→ 才是。这个映射只有知道当前排布的人能做，所以 tap 只报方向。
+    func arrow(_ direction: ArrowDirection) {
         guard cycling, snapshot.count > 1 else { return }
-        let cols = overlay.gridRowStride
+
+        switch overlay.presentation {
+        case .globalList:
+            switch direction {
+            case .up:    step(backward: true)
+            case .down:  step(backward: false)
+            case .left:  stepBrowser(up: true)
+            case .right: stepBrowser(up: false)
+            }
+
+        case .globalCards(let columns):
+            switch direction {
+            case .left:  step(backward: true)
+            case .right: step(backward: false)
+            case .up:    stepCardRow(up: true, cols: columns)
+            case .down:  stepCardRow(up: false, cols: columns)
+            }
+
+        case .grid(let columns):
+            switch direction {
+            case .left:  step(backward: true)
+            case .right: step(backward: false)
+            case .up:    stepRow(up: true, cols: columns)
+            case .down:  stepRow(up: false, cols: columns)
+            }
+
+        case .strip:
+            switch direction {
+            case .left:  step(backward: true)
+            case .right: step(backward: false)
+            case .up, .down: break   // 单行没有上下，但键已经吞了（防调度中心）
+            }
+        }
+    }
+
+    /// 当前浏览器宫格：按行移动游标。整块是一个连续网格，直接按列数跨。
+    ///
+    /// 上下都不回绕 —— 宫格里「从顶行再往上」的预期是停住，不是跳到底部。
+    /// 最后一行不满时，从上一行按 ↓ 落到末尾一张。
+    private func stepRow(up: Bool, cols: Int) {
         guard cols > 0 else { return }
 
         let lastRowStart = (snapshot.count - 1) / cols * cols
         if up {
             guard cursor >= cols else { return }
-            cursor -= cols
+            moveCursor(to: cursor - cols, arrow: up ? "↑" : "↓")
         } else {
             guard cursor < lastRowStart else { return }
-            cursor = min(cursor + cols, snapshot.count - 1)
+            moveCursor(to: min(cursor + cols, snapshot.count - 1), arrow: "↓")
         }
+    }
 
+    /// 全局卡片：按**视觉上的行**移动游标，跨分组边界也照走。
+    ///
+    /// 不能像宫格那样直接 `cursor ± cols`：卡片是**每个浏览器各自换行**的，
+    /// 每组最后一行都可能不满，扁平的位置算术会算到别处去。比如 7 列、A 组
+    /// 12 个、B 组 2 个时，视觉上是
+    ///     行0  A0 … A6
+    ///     行1  A7 … A11        ← 只有 5 个
+    ///     行2  B0 B1
+    /// 从 A9（第 2 列）按 ↓ 应该落到 B 组同列——B 只有 2 个，夹到最后一个；
+    /// 扁平算术给出的 9+7=16 直接越界。
+    ///
+    /// 边界处**跨组**：在本组最后一行按 ↓ 进入下一组的第一行、同列（不够就
+    /// 夹到该行末尾）；反之亦然。方向键走的是"眼睛看到的相邻"，跟标签属于
+    /// 哪个浏览器无关。
+    private func stepCardRow(up: Bool, cols: Int) {
+        guard let target = GridGeometry.rowNeighbor(of: cursor,
+                                                    groupStarts: groupStarts(),
+                                                    total: snapshot.count,
+                                                    cols: cols,
+                                                    up: up) else { return }
+        moveCursor(to: target, arrow: up ? "↑" : "↓")
+    }
+
+    /// 全局列表里 ⌃←/⌃→ 换浏览器：跳到上/下一个分组的第一项
+    /// （= 该浏览器最近用过的标签）。纵向列表里左右没有空间含义，
+    /// 正好拿来跳组；卡片模式的四个方向都有空间含义，就不这么用。
+    private func stepBrowser(up: Bool) {
+        let starts = groupStarts()
+        guard starts.count > 1 else { return }
+
+        // 游标所在分组 = 最后一个不超过 cursor 的起点
+        let current = starts.lastIndex(where: { $0 <= cursor }) ?? 0
+        let target = up ? current - 1 : current + 1
+        guard starts.indices.contains(target) else { return }
+
+        let name = snapshot[starts[target]].browser.map { BrowserSupport.displayName($0) } ?? "?"
+        moveCursor(to: starts[target], arrow: up ? "←" : "→", note: name)
+    }
+
+    /// 快照里每个分组第一项的位置。globalItems 拼装时同一浏览器的项就是
+    /// 连在一起的，所以只需要找「与前一项浏览器不同」的位置。
+    private func groupStarts() -> [Int] {
+        var starts: [Int] = []
+        var lastBrowser: String?
+        for (index, item) in snapshot.enumerated() where item.browser != lastBrowser {
+            starts.append(index)
+            lastBrowser = item.browser
+        }
+        return starts
+    }
+
+    /// 方向键移动游标的统一收尾：越界一律不动（不回绕）。
+    private func moveCursor(to index: Int, arrow: String, note: String? = nil) {
+        guard snapshot.indices.contains(index), index != cursor else { return }
+        cursor = index
         overlay.model.setCursor(cursor, source: .keyboard)
         overlay.requestShow()
         armWatchdog()
-
-        log("⌃\(up ? "↑" : "↓")  [\(cursor)/\(snapshot.count - 1)] → \(snapshot[cursor].title.prefix(50))")
+        let suffix = note.map { " → \($0)" } ?? " → \(snapshot[cursor].tab.title.prefix(50))"
+        log("⌃\(arrow)  [\(cursor)/\(snapshot.count - 1)]\(suffix)")
     }
 
     func commit() {
@@ -637,17 +858,30 @@ final class MRUController {
         cycling = false
         overlay.hide()
 
-        defer { cursor = 0; snapshot = []; closedTabThisRound = false }
+        let wasGlobal = cyclingGlobal
+        defer { cursor = 0; snapshot = []; closedTabThisRound = false; cyclingGlobal = false }
 
-        // 关过标签的话 cursor == 0 也要提交（见 closedTabThisRound 的说明）
-        guard snapshot.indices.contains(cursor), cursor != 0 || closedTabThisRound else {
+        // 关过标签的话 cursor == 0 也要提交（见 closedTabThisRound 的说明）。
+        // 全局模式没有「原地不动」这回事：起手时前台可能根本不是浏览器，
+        // 停在第 0 项也是一次实实在在的跳转。
+        guard snapshot.indices.contains(cursor),
+              wasGlobal || cursor != 0 || closedTabThisRound else {
             log("⌃ released: cursor back at origin, no switch")
             return
         }
 
         let target = snapshot[cursor]
-        log("⌃ released → switching to: \(target.title.prefix(50)) (tabId \(target.id))")
-        sendToActive(["type": "switch", "tabId": target.id])
+        log("⌃ released → switching to: \(target.tab.title.prefix(50)) (tabId \(target.tab.id))")
+        // 全局模式下目标多半在另一个 App 里：扩展的 windows.update(focused:)
+        // 只管浏览器自家窗口之间的焦点，跨 App 的激活必须由 helper 在
+        // macOS 层面做（和状态栏菜单点选同一条路）。
+        if let browser = target.browser {
+            _ = NSRunningApplication
+                .runningApplications(withBundleIdentifier: browser)
+                .first?
+                .activate(options: [])
+        }
+        server.send(["type": "switch", "tabId": target.tab.id], to: target.clientID)
     }
 
     // MARK: - 收藏标签
@@ -797,11 +1031,11 @@ final class MRUController {
     }
 
     private func refreshOverlayImages() {
-        var iconMap: [Int: IconInfo] = [:]
-        var thumbMap: [Int: NSImage] = [:]
-        for tab in overlay.model.tabs {
-            if let info = icons.image(for: tab.favIconUrl) { iconMap[tab.id] = info }
-            if let thumb = thumbnails.image(for: tab.url) { thumbMap[tab.id] = thumb }
+        var iconMap: [String: IconInfo] = [:]
+        var thumbMap: [String: NSImage] = [:]
+        for item in overlay.model.items {
+            if let info = icons.image(for: item.tab.favIconUrl) { iconMap[item.id] = info }
+            if let thumb = thumbnails.image(for: item.tab.url) { thumbMap[item.id] = thumb }
         }
         overlay.model.icons = iconMap
         overlay.model.thumbs = thumbMap

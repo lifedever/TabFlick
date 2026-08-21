@@ -47,8 +47,8 @@ private struct GeneralPane: View {
                 }
 
                 Text(L10n.t(
-                    "发现新版本时会提示，确认后自动下载安装并重新启动。",
-                    "You'll be notified when an update is found; it downloads, installs, and relaunches automatically after you confirm."
+                    "有新版本时提示你，确认后自动装好重启。",
+                    "Prompts you when there's a new version, then installs and restarts."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -90,8 +90,8 @@ private struct SwitcherPane: View {
                 .toggleStyle(.switch)
 
                 Text(L10n.t(
-                    "关闭后，所有 Chrome 窗口的标签会合并成一张列表。两种模式下每个窗口都保留各自的使用历史。",
-                    "When off, tabs from every Chrome window appear in one list. Either way, each window keeps its own history."
+                    "关掉则合并所有窗口的标签。每个窗口的使用顺序都是独立记的。",
+                    "Off means all windows share one list. Each window keeps its own order either way."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -107,8 +107,8 @@ private struct SwitcherPane: View {
                 }
 
                 Text(L10n.t(
-                    "长条横向排成一行；宫格自动换行，尽量一屏放下所有标签。宫格下可以用 ⌃ + 方向键上下左右移动。",
-                    "Strip lays tabs out in a single row; grid wraps them to fit on one screen. In grid mode, hold ⌃ and use all four arrow keys to move."
+                    "长条排成一行，宫格换行铺满一屏。宫格下 ⌃ + 方向键可以四向移动。",
+                    "Strip is one row; grid wraps to fill the screen. In grid mode, ⌃ plus arrows moves in all four directions."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -116,6 +116,28 @@ private struct SwitcherPane: View {
                 Text(L10n.t("布局", "Layout"))
             }
 
+            Section {
+                Toggle(isOn: $settings.globalSwitcher) {
+                    Text(L10n.t("在浏览器之外也能唤出", "Open outside the browser"))
+                }
+                .toggleStyle(.switch)
+
+                Picker(L10n.t("样式", "Style"), selection: $settings.globalSwitcherStyle) {
+                    ForEach(GlobalSwitcherStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .disabled(!settings.globalSwitcher)
+
+                Text(L10n.t(
+                    "列出所有浏览器的标签，按浏览器分组。默认沿用切换器快捷键，只在浏览器之外唤出；想在浏览器里也能用，去「快捷键」单独给它设一个。",
+                    "Lists tabs from every browser, grouped by browser. It reuses the switcher shortcut and only opens outside a browser — give it its own key under Shortcuts to use it anywhere."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("全局切换器", "Global switcher"))
+            }
         }
         .formStyle(.grouped)
         .frame(width: 460)
@@ -148,8 +170,8 @@ private struct BrowserPane: View {
 
             Section {
                 Text(L10n.t(
-                    "「未连接」= 该浏览器没装扩展，或者没有在运行。每个浏览器都要单独装一次扩展。",
-                    "\u{201C}Not connected\u{201D} means the extension isn't installed there, or the browser isn't running. Each browser needs its own copy of the extension."
+                    "未连接说明这个浏览器没装扩展，或者没开着。扩展要每个浏览器装一次。",
+                    "Not connected means no extension there, or the browser isn't running. Install it once per browser."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -217,8 +239,8 @@ private struct TabManagementPane: View {
         Form {
             Section {
                 if settings.favorites.isEmpty {
-                    Text(L10n.t("还没有置顶。在 Chrome 里置顶任意标签，或在菜单栏选「置顶当前标签」。",
-                                "Nothing pinned yet. Pin any tab in Chrome, or use \u{201C}Pin Current Tab\u{201D} in the menu bar."))
+                    Text(L10n.t("还没有置顶。在浏览器里置顶任意标签即可。",
+                                "Nothing pinned yet. Pin any tab in your browser."))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 } else if settings.favorites.count > 6 {
@@ -243,8 +265,8 @@ private struct TabManagementPane: View {
                 }
 
                 Text(L10n.t(
-                    "与 Chrome 双向同步：置顶即加入、取消置顶即移除（⌘W 关闭不算）。Chrome 重启后自动恢复置顶，并带回最后访问的页面。",
-                    "Two-way sync with Chrome: pinning adds, unpinning removes (⌘W doesn't count). Pins come back after Chrome restarts, restored to the last page visited."
+                    "和浏览器双向同步：置顶即收藏，取消置顶即移除，⌘W 关掉不算。重启浏览器会自动恢复，停在你最后看的那一页。",
+                    "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -262,8 +284,8 @@ private struct TabManagementPane: View {
                 .toggleStyle(.switch)
 
                 Text(L10n.t(
-                    "悬停切换器卡片时显示 ✕，点击关闭标签。只剩 2 个标签时不显示。",
-                    "Hover a switcher card to reveal ✕. Hidden when only two tabs remain."
+                    "只剩两个标签时不显示。全局切换器没有这个按钮。",
+                    "Hidden when only two tabs are left. Not available in the global switcher."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -280,8 +302,8 @@ private struct TabManagementPane: View {
                 }
 
                 Text(L10n.t(
-                    "超时未使用的标签自动关闭。置顶、发声、标签组内及各窗口当前标签不受影响。",
-                    "Closes tabs unused past the limit. Pinned, audible, grouped, and current tabs are exempt."
+                    "超时没用过的标签会被关掉。置顶、正在放声音、在标签组里、以及各窗口当前那个都不动。",
+                    "Closes tabs you haven't used in that long. Pinned, audible, grouped, and current tabs stay."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -379,7 +401,7 @@ private struct FaviconView: View {
 private struct HotkeyPane: View {
     @ObservedObject var settings: AppSettings
 
-    private enum Target { case switcher, pin }
+    private enum Target { case switcher, global, pin }
     @State private var recording: Target?
     @State private var monitor: Any?
 
@@ -389,8 +411,15 @@ private struct HotkeyPane: View {
                 row(label: L10n.t("唤出切换器（按住修饰键循环）", "Open the switcher (hold to cycle)"),
                     target: .switcher,
                     current: settings.switcherHotkey?.display,
-                    placeholder: "⌃⇥",
+                    placeholder: L10n.t("⌃⇥（默认）", "⌃⇥ (default)"),
                     clear: { settings.switcherHotkey = nil })
+
+                row(label: L10n.t("唤出全局切换器（所有浏览器）", "Open the global switcher (all browsers)"),
+                    target: .global,
+                    current: settings.globalHotkey?.display,
+                    placeholder: L10n.t("同切换器键", "Same as switcher"),
+                    clear: { settings.globalHotkey = nil })
+                    .disabled(!settings.globalSwitcher)
 
                 row(label: L10n.t("置顶 / 取消置顶当前标签", "Pin / unpin current tab"),
                     target: .pin,
@@ -399,11 +428,18 @@ private struct HotkeyPane: View {
                     clear: { settings.pinHotkey = nil })
 
                 Text(L10n.t(
-                    "需包含 ⌘ / ⌃ / ⌥ 至少一个修饰键，仅在浏览器前台生效，Esc 取消录制。切换器键不含 ⇧（⇧ 用于反向切换），清除即恢复默认 ⌃⇥。注意避开浏览器自带快捷键（⌘T 新建标签、⌘D 收藏书签）。",
-                    "Include at least one of ⌘ / ⌃ / ⌥; active only while the browser is frontmost; Esc cancels recording. The switcher key ignores ⇧ (reserved for reverse); clearing restores the default ⌃⇥. Avoid the browser's own shortcuts (⌘T, ⌘D)."
+                    "至少带一个 ⌘ / ⌃ / ⌥，⇧ 留给反向切换。Esc 取消录制。\n除全局切换器外都只在浏览器前台生效。别撞上 ⌘T、⌘D，或终端和编辑器的 ⌃⇥。",
+                    "Use at least one of ⌘ / ⌃ / ⌥; ⇧ is reserved for reverse. Esc cancels.\nAll but the global switcher work only while a browser is frontmost. Watch out for ⌘T, ⌘D, and the ⌃⇥ in terminals and editors."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+
+                if !settings.globalSwitcher {
+                    Text(L10n.t("全局切换器还没开，去「切换器」里打开。",
+                                "The global switcher is off — turn it on under Switcher."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text(L10n.t("快捷键", "Shortcuts"))
             }
@@ -413,7 +449,8 @@ private struct HotkeyPane: View {
         .onDisappear { stopRecording() }
     }
 
-    /// placeholder 非空表示「清除后有默认值」（切换器 ⌃⇥）；nil 表示清除即禁用。
+    /// placeholder 是「没设置时按钮上显示什么」，非空即表示清除后有兜底行为；
+    /// nil 表示清除即禁用。
     @ViewBuilder
     private func row(label: String, target: Target,
                      current: String?, placeholder: String?,
@@ -426,9 +463,8 @@ private struct HotkeyPane: View {
             } label: {
                 Text(recording == target
                      ? L10n.t("按下快捷键…", "Press shortcut…")
-                     : (current ?? placeholder.map { L10n.t("\($0)（默认）", "\($0) (default)") }
-                        ?? L10n.t("点击录制", "Record")))
-                    .frame(minWidth: 96)
+                     : (current ?? placeholder ?? L10n.t("点击录制", "Record")))
+                    .frame(minWidth: 110)
             }
             if current != nil && recording != target {
                 Button(action: clear) {
@@ -456,6 +492,7 @@ private struct HotkeyPane: View {
                                       character: chars.lowercased())
             switch target {
             case .switcher: settings.switcherHotkey = config
+            case .global:   settings.globalHotkey = config
             case .pin:      settings.pinHotkey = config
             }
             return nil   // 这次按键被录制吃掉，不下发
