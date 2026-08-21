@@ -739,7 +739,7 @@ final class MRUController {
     func arrow(_ direction: ArrowDirection) {
         guard cycling, snapshot.count > 1 else { return }
 
-        switch overlay.presentation {
+        switch overlay.presentation.layout {
         case .globalList:
             switch direction {
             case .up:    step(backward: true)

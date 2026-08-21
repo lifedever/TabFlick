@@ -34,16 +34,44 @@ struct SwitcherItem: Identifiable {
 }
 
 /// 浮层的呈现方式。四种排布共用同一个视图，由它分派。
-enum SwitcherPresentation: Equatable {
-    /// 当前浏览器：横向长条。
-    case strip
-    /// 当前浏览器：宫格，参数为列数。
-    case grid(columns: Int)
-    /// 全局：Raycast 式纵向列表，浏览器做分组标题。
-    case globalList
-    /// 全局：每个浏览器一段缩略图卡片，参数为列数。
-    case globalCards(columns: Int)
+///
+/// 三个维度是**分开**的，不塞进枚举载荷：排布（哪种摆法）、卡片档位
+/// （一屏装不下就降一档）、画不画分组头（只有一个浏览器时不画）。
+/// 塞进载荷的话每加一个维度都要给四个 case 各改一遍签名，而 `grouped`
+/// 对 strip/grid 根本没意义。
+struct SwitcherPresentation: Equatable {
+    enum Layout: Equatable {
+        /// 当前浏览器：横向长条。
+        case strip
+        /// 当前浏览器：宫格，参数为列数。
+        case grid(columns: Int)
+        /// 全局：Raycast 式纵向列表，浏览器做分组标题。
+        case globalList
+        /// 全局：每个浏览器一段缩略图卡片，参数为列数。
+        case globalCards(columns: Int)
+    }
 
+    let layout: Layout
+
+    /// 卡片降一档。只在二维排布（宫格 / 全局卡片）里、且大卡片一屏装不下时置位。
+    var compact = false
+
+    /// 画分组头。**只有一个浏览器时不画** —— 唯一的那个组名是废话，
+    /// 还白占一行高度。视图和尺寸计算必须读同一个值，否则面板高度和内容对不上。
+    var grouped = false
+
+    /// 给日志用的一行摘要。布局算错的表现是「面板底部裁掉半行」这种
+    /// 只在标签数刚好卡边界时才看得出的事，日志里留一行实际用了几列几档，
+    /// 用户报「样子不对」时能直接对账。
+    func describe(count: Int) -> String {
+        let card = compact ? "小卡" : "大卡"
+        switch layout {
+        case .strip:                    return "长条 \(count) 张"
+        case .grid(let c):              return "宫格 \(c) 列 · \(card) · \(count) 张"
+        case .globalList:               return "全局列表\(grouped ? "·分组" : "") · \(count) 项"
+        case .globalCards(let c):       return "全局卡片 \(c) 列 · \(card)\(grouped ? "·分组" : "") · \(count) 张"
+        }
+    }
 }
 
 @MainActor
@@ -89,9 +117,11 @@ final class SwitcherModel: ObservableObject {
 
 // MARK: - 尺寸
 
-/// 卡片的一套尺寸。全局切换器要在同一屏里装下好几个浏览器，卡片得比
-/// 当前浏览器切换器小一档 —— 缩略图是用来认版式的，不是用来读内容的，
-/// 压到 100pt 宽仍然一眼能认出是哪个页面。
+/// 卡片的一套尺寸。**只有两档，`compact` 就是下限**：缩略图是用来认版式的，
+/// 再往下缩就只剩一块糊了，不如老实滚动。
+///
+/// 档位由「一屏装不装得下」决定（见 `fittedGrid`），不是按标签数卡阈值 ——
+/// 同样 40 个标签，27 寸屏上大卡片一屏就够，13 寸上才需要降档。
 private struct CardMetrics {
     let thumbWidth: CGFloat
     let thumbHeight: CGFloat
@@ -111,9 +141,11 @@ private struct CardMetrics {
                                       padding: 7, titleFont: 11, faviconSize: 13,
                                       thumbCorner: 7, cardCorner: 10, badgeSize: 20)
 
-    static let compact = CardMetrics(thumbWidth: 100, thumbHeight: 63, titleRowHeight: 16,
-                                     padding: 5, titleFont: 10, faviconSize: 11,
-                                     thumbCorner: 6, cardCorner: 8, badgeSize: 16)
+    /// 降档尺寸。曾经是 100×63（全局切换器专用），那一档小得没了气势；
+    /// 120×75 是「一屏多塞四成」和「还看得出是哪个页面」之间的折中。
+    static let compact = CardMetrics(thumbWidth: 120, thumbHeight: 75, titleRowHeight: 18,
+                                     padding: 6, titleFont: 10.5, faviconSize: 12,
+                                     thumbCorner: 6, cardCorner: 9, badgeSize: 18)
 }
 
 private let kCardSpacing: CGFloat = 8
@@ -124,12 +156,17 @@ private let kPanelCornerRadius: CGFloat = 14
 // 跨浏览器一屏能装下的标签多得多。
 private let kListWidth: CGFloat = 520
 /// 全局卡片样式的目标面板宽度（屏幕更窄时按屏幕来）。
-private let kGlobalCardsTargetWidth: CGFloat = 880
-/// 全局切换器的面板高度上限，超出的部分滚动。
 ///
-/// 不能只按屏幕算：跨浏览器的标签动辄几十个，94% 屏高的面板从上顶到下，
-/// 眼睛要扫一整屏才找得到高亮那行。宁可滚。
-private let kGlobalMaxHeight: CGFloat = 520
+/// 存在的理由是超宽屏：列数只夹屏幕的话，一个浏览器开二十个标签就排成
+/// 横贯整屏的一长条 —— 眼睛得转头才扫得完。宁可多换一行。
+/// 1440 这个值恰好给 8 列大卡片，和常见笔电全屏时浏览器内切换器的列数一致。
+private let kGlobalCardsTargetWidth: CGFloat = 1440
+/// 全局**列表**样式的面板高度上限，超出的部分滚动。
+///
+/// 不能只按屏幕算：跨浏览器的标签动辄几十个，94% 屏高的列表从上顶到下，
+/// 眼睛要扫一整屏才找得到高亮那行。卡片样式不受这个限制 —— 它靠降档
+/// （见 CardMetrics）把内容收进一屏，再夹高度只会让卡片白白变小还得滚。
+private let kGlobalListMaxHeight: CGFloat = 520
 /// 两行行高：标题一行、域名一行。
 private let kRowHeight: CGFloat = 42
 private let kRowSpacing: CGFloat = 1
@@ -201,7 +238,7 @@ private struct SwitcherView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch presentation {
+        switch presentation.layout {
         case .strip:
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: kCardSpacing) { cards(model.items) }
@@ -224,7 +261,9 @@ private struct SwitcherView: View {
                     ForEach(groups, id: \.browser) { group in
                         VStack(alignment: .leading, spacing: 0) {
                             // 分组头对齐缩略图左缘（卡片自身还有一圈内边距）
-                            groupHeader(group, inset: metrics.padding)
+                            if presentation.grouped {
+                                groupHeader(group, inset: metrics.padding)
+                            }
                             LazyVGrid(columns: gridItems(columns),
                                       alignment: .leading,
                                       spacing: kCardSpacing) {
@@ -241,7 +280,9 @@ private struct SwitcherView: View {
                 VStack(alignment: .leading, spacing: kGroupSpacing) {
                     ForEach(groups, id: \.browser) { group in
                         VStack(alignment: .leading, spacing: 0) {
-                            groupHeader(group, inset: kRowInset)
+                            if presentation.grouped {
+                                groupHeader(group, inset: kRowInset)
+                            }
                             VStack(alignment: .leading, spacing: kRowSpacing) {
                                 ForEach(group.items) { item in
                                     TabRow(item: item,
@@ -260,10 +301,10 @@ private struct SwitcherView: View {
         }
     }
 
-    /// 这个排布用哪套卡片尺寸。全局卡片压小一档，同屏才装得下多个浏览器。
+    /// 这个排布用哪套卡片尺寸。档位由布局计算定（一屏装不下才降），
+    /// 视图只照做 —— 两边各判一次的话，面板尺寸和卡片大小迟早对不上。
     private var metrics: CardMetrics {
-        if case .globalCards = presentation { return .compact }
-        return .standard
+        presentation.compact ? .compact : .standard
     }
 
     /// 开关默认关；开了之后剩 2 项时也不给 ✕：再关 1 个就只剩单标签，
@@ -273,7 +314,7 @@ private struct SwitcherView: View {
     /// 此刻根本不在你眼前的标签，误点的代价和"切过去"完全不对等。
     /// 少了这个槽位，行尾的时间也能齐齐地贴住右边。
     private var closable: Bool {
-        switch presentation {
+        switch presentation.layout {
         case .globalList, .globalCards: return false
         case .strip, .grid:             return model.allowClose && model.items.count > 2
         }
@@ -786,7 +827,7 @@ final class OverlayPanel {
 
     /// 当前正在显示的排布。关标签后重算时用它判断要不要重建 rootView；
     /// MRUController 也读它来决定方向键在这个排布下各自是什么意思。
-    private(set) var presentation: SwitcherPresentation = .strip
+    private(set) var presentation = SwitcherPresentation(layout: .strip)
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<SwitcherView>?
@@ -990,6 +1031,8 @@ final class OverlayPanel {
         self.panel = panel
         self.hostingView = hosting
         self.shownAt = Date()
+
+        log("浮层 \(layout.describe(count: model.items.count))  \(Int(width))×\(Int(height))  上限 \(Int(maxPanelWidth))×\(Int(maxPanelHeight))")
     }
 
     /// 算面板内容尺寸和排布。presentNow 和 applyRemoval 共用这一份，别各抄一套。
@@ -1004,37 +1047,74 @@ final class OverlayPanel {
             return globalLayout(items: items, maxWidth: maxWidth, screenMaxHeight: maxHeight)
         }
 
-        let card = CardMetrics.standard
         switch settings.switcherLayout {
         case .strip:
+            // 长条**不降档**：它本来就是横向滚动的排布，把卡片缩小并不能
+            // 让「一屏装下」变成真的（20 个标签缩到 120pt 宽照样超屏），
+            // 只是每张都变小了。标签多时它的答案就是滚动。
+            let card = CardMetrics.standard
             let n = CGFloat(count)
             let naturalWidth = n * card.width + max(0, n - 1) * kCardSpacing + kOuterPadding * 2
             return (NSSize(width: min(naturalWidth, maxWidth),
-                           height: card.height + kOuterPadding * 2), .strip)
+                           height: card.height + kOuterPadding * 2),
+                    SwitcherPresentation(layout: .strip))
 
         case .grid:
-            // 先按塞满宽度算至少要几行，再回头平衡列数：30 个标签在
-            // 12 列上限下排成 10×3，而不是 12+12+6 那种最后一行孤零零的样子。
-            // 只有标签多到整屏都放不下时才铺满宽度、纵向滚动。
-            let maxCols = max(1, Int((maxWidth - kOuterPadding * 2 + kCardSpacing)
-                                     / (card.width + kCardSpacing)))
-            let maxRows = max(1, Int((maxHeight - kOuterPadding * 2 + kCardSpacing)
-                                     / (card.height + kCardSpacing)))
-            let neededRows = (count + maxCols - 1) / maxCols
-            let cols = neededRows <= maxRows ? (count + neededRows - 1) / neededRows : maxCols
-            let rows = min(neededRows, maxRows)
-            return (NSSize(width: CGFloat(cols) * card.width + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2,
-                           height: CGFloat(rows) * card.height + CGFloat(rows - 1) * kCardSpacing + kOuterPadding * 2),
-                    .grid(columns: cols))
+            let (fit, compact) = fittedGrid(count: count, maxWidth: maxWidth, maxHeight: maxHeight)
+            return (fit.size, SwitcherPresentation(layout: .grid(columns: fit.columns), compact: compact))
         }
+    }
+
+    /// 一次网格试算的结果。
+    private struct GridFit {
+        let columns: Int
+        let rows: Int
+        /// 所有卡片都在可视区内（不需要纵向滚动）。
+        let fits: Bool
+        let size: NSSize
+    }
+
+    /// 连续网格（当前浏览器宫格 / 只有一个浏览器的全局卡片）的列数与面板尺寸。
+    ///
+    /// 先按塞满宽度算至少要几行，再回头平衡列数：30 个标签在 12 列上限下
+    /// 排成 10×3，而不是 12+12+6 那种最后一行孤零零的样子。
+    private func gridFit(count: Int, card: CardMetrics,
+                         maxWidth: CGFloat, maxHeight: CGFloat) -> GridFit {
+        let maxCols = max(1, Int((maxWidth - kOuterPadding * 2 + kCardSpacing)
+                                 / (card.width + kCardSpacing)))
+        let maxRows = max(1, Int((maxHeight - kOuterPadding * 2 + kCardSpacing)
+                                 / (card.height + kCardSpacing)))
+        let neededRows = (max(1, count) + maxCols - 1) / maxCols
+        let fits = neededRows <= maxRows
+        let cols = fits ? (max(1, count) + neededRows - 1) / neededRows : maxCols
+        let rows = min(neededRows, maxRows)
+        return GridFit(
+            columns: cols,
+            rows: rows,
+            fits: fits,
+            size: NSSize(width: CGFloat(cols) * card.width + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2,
+                         height: CGFloat(rows) * card.height + CGFloat(rows - 1) * kCardSpacing + kOuterPadding * 2))
+    }
+
+    /// 网格排布的卡片档位：一屏装得下就用大卡片，装不下降**一**档再试。
+    ///
+    /// 只有这两档 —— 再往下缩，缩略图就只剩一块糊，卡片模式的全部价值
+    /// （一眼认出是哪个页面）也就没了。compact 还装不下就老实纵向滚动，
+    /// 游标会自动滚到可视区中央（见 SwitcherView 的 onChange）。
+    ///
+    /// 判据是「装不装得下」而不是标签数阈值：同样 40 个标签，27 寸屏上
+    /// 大卡片一屏就够，13 寸上才需要降档 —— 阈值写死的话必然在某块屏上判错。
+    private func fittedGrid(count: Int, maxWidth: CGFloat, maxHeight: CGFloat)
+        -> (fit: GridFit, compact: Bool) {
+        let standard = gridFit(count: count, card: .standard, maxWidth: maxWidth, maxHeight: maxHeight)
+        guard !standard.fits else { return (standard, false) }
+        return (gridFit(count: count, card: .compact, maxWidth: maxWidth, maxHeight: maxHeight), true)
     }
 
     /// 全局切换器的尺寸：按分组逐段累加，超过屏幕就纵向滚动。
     private func globalLayout(items: [SwitcherItem],
                               maxWidth: CGFloat,
                               screenMaxHeight: CGFloat) -> (size: NSSize, presentation: SwitcherPresentation) {
-        // 两个上限取小的那个：小屏按屏幕来，大屏按可读高度来
-        let maxHeight = min(screenMaxHeight, kGlobalMaxHeight)
         // 每个浏览器的标签数（顺序即 items 里的连续分段）
         var groupSizes: [Int] = []
         var lastBrowser: String?
@@ -1048,37 +1128,59 @@ final class OverlayPanel {
         }
         let groupCount = max(1, groupSizes.count)
         let gaps = CGFloat(groupCount - 1) * kGroupSpacing
+        // 只有一个浏览器就不画分组头。视图读的是同一个标志（presentation.grouped），
+        // 这里算高度也必须跟着减，否则面板底部会裁掉半行。
+        let grouped = groupCount > 1
+        let headerHeight = grouped ? kGroupHeaderHeight + kGroupRuleSpace : 0
 
         switch settings.globalSwitcherStyle {
         case .list:
+            let maxHeight = min(screenMaxHeight, kGlobalListMaxHeight)
             let rowsHeight = groupSizes.reduce(CGFloat.zero) { total, n in
-                total + kGroupHeaderHeight + kGroupRuleSpace
-                      + CGFloat(n) * kRowHeight + CGFloat(n - 1) * kRowSpacing
+                total + headerHeight + CGFloat(n) * kRowHeight + CGFloat(n - 1) * kRowSpacing
             }
             let height = min(rowsHeight + gaps + kOuterPadding * 2, maxHeight)
-            return (NSSize(width: min(kListWidth, maxWidth), height: height), .globalList)
+            return (NSSize(width: min(kListWidth, maxWidth), height: height),
+                    SwitcherPresentation(layout: .globalList, grouped: grouped))
 
         case .cards:
-            // 列数取「最大的那组一行放得下」，再夹到目标宽度能给的上限。
-            // 每组独立换行，所以小组不会被大组撑出一堆空位。
-            //
-            // 上限用 kGlobalCardsTargetWidth 而不是整个屏幕：只夹屏幕的话，
-            // 某个浏览器开了十几个标签就会把面板拉成横跨整屏的一条 ——
-            // 卡片本身缩小了也没用，列数会把省下的宽度重新吃回去。
-            // 宁可多换一行，面板保持一块看得过来的方块。
-            let card = CardMetrics.compact
             let targetWidth = min(maxWidth, kGlobalCardsTargetWidth)
-            let maxCols = max(1, Int((targetWidth - kOuterPadding * 2 + kCardSpacing)
-                                     / (card.width + kCardSpacing)))
-            let cols = max(1, min(maxCols, groupSizes.max() ?? 1))
-            let sectionsHeight = groupSizes.reduce(CGFloat.zero) { total, n in
-                let rows = CGFloat((n + cols - 1) / cols)
-                return total + kGroupHeaderHeight + kGroupRuleSpace
-                             + rows * card.height + (rows - 1) * kCardSpacing
+
+            // 只有一个浏览器时，内容和当前浏览器切换器没有任何区别 ——
+            // 那就长得一模一样：同一套卡片尺寸、同一套平衡列数、同一套降档规则。
+            // 分组头省掉之后，剩下的差异只有「贴屏幕居中」而不是「贴浏览器窗口」。
+            guard grouped else {
+                let (fit, compact) = fittedGrid(count: items.count,
+                                                maxWidth: targetWidth,
+                                                maxHeight: screenMaxHeight)
+                return (fit.size, SwitcherPresentation(layout: .globalCards(columns: fit.columns),
+                                                       compact: compact))
             }
-            let width = CGFloat(cols) * card.width + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2
-            let height = min(sectionsHeight + gaps + kOuterPadding * 2, maxHeight)
-            return (NSSize(width: min(width, maxWidth), height: height), .globalCards(columns: cols))
+
+            // 多浏览器：每组独立换行（小组不会被大组撑出一堆空位），
+            // 所以列数取「最大的那组一行放得下」而不是平衡列数。
+            // 高度装不下时和宫格同样降一档卡片，再装不下就滚。
+            func fit(_ card: CardMetrics) -> (cols: Int, size: NSSize, fits: Bool) {
+                let maxCols = max(1, Int((targetWidth - kOuterPadding * 2 + kCardSpacing)
+                                         / (card.width + kCardSpacing)))
+                let cols = max(1, min(maxCols, groupSizes.max() ?? 1))
+                let sectionsHeight = groupSizes.reduce(CGFloat.zero) { total, n in
+                    let rows = CGFloat((n + cols - 1) / cols)
+                    return total + headerHeight + rows * card.height + (rows - 1) * kCardSpacing
+                }
+                let natural = sectionsHeight + gaps + kOuterPadding * 2
+                let width = CGFloat(cols) * card.width + CGFloat(cols - 1) * kCardSpacing + kOuterPadding * 2
+                return (cols,
+                        NSSize(width: min(width, maxWidth), height: min(natural, screenMaxHeight)),
+                        natural <= screenMaxHeight)
+            }
+
+            let standard = fit(.standard)
+            let chosen = standard.fits ? standard : fit(.compact)
+            return (chosen.size,
+                    SwitcherPresentation(layout: .globalCards(columns: chosen.cols),
+                                         compact: !standard.fits,
+                                         grouped: true))
         }
     }
 
