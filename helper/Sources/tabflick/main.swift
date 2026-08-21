@@ -71,6 +71,11 @@ MainActor.assumeIsolated {
         updates.frequency = { MainActor.assumeIsolated { settings.updateCheckFrequency } }
         updates.startPeriodicChecks()
 
+        // 刚升级完就弹一次「这版更新了什么」。放启动流程里而不是挂在某个
+        // 视图的生命周期上 —— 后台自启时 SwiftUI 一个窗口都不会创建，
+        // 挂视图上的初始化永远不执行（PasteMemo #66）。
+        ReleaseNotes.presentIfUpgraded(currentVersion: updates.currentVersion)
+
         // 设置的事实源在 app：改动后立刻推给所有客户端（收藏按浏览器分发），
         // 扩展只执行不持久化。SW 重启后自己会来 requestSettings。
         settings.onChange = { [weak controller] in

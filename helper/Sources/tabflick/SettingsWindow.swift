@@ -526,6 +526,13 @@ private struct AboutPane: View {
                 Text(L10n.t("版本 \(updates.currentVersion)", "Version \(updates.currentVersion)"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+
+                // 升级后那次弹窗如果没网就跳过了，这里是补看的入口
+                Button(L10n.t("本版更新内容", "What's New")) {
+                    ReleaseNotes.presentLatest(currentVersion: updates.currentVersion)
+                }
+                .buttonStyle(.link)
+                .font(.system(size: 11))
             }
 
             Text(L10n.t(
