@@ -838,6 +838,13 @@ final class OverlayPanel {
     /// 关标签后重算布局（applyRemoval）沿用同一套上限，收缩前后同一套规则。
     private var panelMaxSize = NSSize.zero
 
+    /// presentNow 拍下的定位基准：面板居中对齐的矩形（浏览器窗口 / 屏幕可见区）
+    /// 和所在屏幕的可见区（夹取用）。关标签后行数变了要重新居中，得回到
+    /// **同一个**基准 —— 不能在 cycling 中途重问 ChromeWindowLocator：那是
+    /// 跨进程调用，而且前台窗口这期间还会变（同「起手拍快照」的语义）。
+    private var panelAnchor = NSRect.zero
+    private var panelVisibleFrame = NSRect.zero
+
     init(settings: AppSettings) {
         self.settings = settings
     }
@@ -924,17 +931,22 @@ final class OverlayPanel {
         }
         guard size != panel.frame.size else { return }
 
-        // 左上角锚定收缩（AppKit 原点在左下，顶边不动要补 y）：连续关闭时
-        // 被删卡片左侧的所有卡片在屏幕上纹丝不动，右侧邻居滑进原位 ——
-        // 和 Chrome 标签栏连续关标签的手感一致。之前按中心收缩，每关一张
-        // 所有卡片横移半张宽，鼠标下的目标一直在跑。
-        var frame = panel.frame
-        frame.origin.y += frame.height - size.height
-        frame.size = size
-        // 只收不涨一般不会越界，但保持与 presentNow 同一套夹取规则
-        let visible = (panel.screen ?? NSScreen.main ?? NSScreen.screens[0]).visibleFrame
-        frame.origin.x = min(max(frame.origin.x, visible.minX + 8), visible.maxX - frame.width - 8)
-        frame.origin.y = min(max(frame.origin.y, visible.minY + 8), visible.maxY - frame.height - 8)
+        // 行数变了（宫格里高度只由行数和卡片档位决定）= 卡片整体重排：末行的
+        // 卡片全跑到上一行尾巴上，列数也跟着重新平衡，宽度甚至会**涨**回来
+        //（10 张 5×2 → 6 张 1×6）。左上角锚定这时一张卡片都没保住，只留下
+        // 一个顶边卡在原处的偏心面板。所以回到 presentNow 的居中规则。
+        //
+        // 行数没变（只是列数少一列）才继续锚左上角：被删卡片左侧的所有卡片
+        // 在屏幕上纹丝不动，右侧邻居滑进原位 —— 和 Chrome 标签栏连续关标签
+        // 的手感一致。之前无条件按中心收缩，每关一张所有卡片横移半张宽，
+        // 鼠标下的目标一直在跑。
+        let frame: NSRect
+        if size.height == panel.frame.height {
+            // 只收不涨一般不会越界，但保持与 presentNow 同一套夹取规则
+            frame = clampedToVisible(NSRect(origin: panel.frame.origin, size: size))
+        } else {
+            frame = centeredFrame(size: size)
+        }
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.15
@@ -970,6 +982,8 @@ final class OverlayPanel {
         let maxPanelWidth = min(anchor.width, screen.visibleFrame.width) * 0.94
         let maxPanelHeight = min(anchor.height, screen.visibleFrame.height) * 0.94
         panelMaxSize = NSSize(width: maxPanelWidth, height: maxPanelHeight)
+        panelAnchor = anchor
+        panelVisibleFrame = screen.visibleFrame
 
         let (contentSize, layout) = contentLayout(items: model.items,
                                                   maxWidth: maxPanelWidth,
@@ -1012,14 +1026,7 @@ final class OverlayPanel {
 
         // 先定尺寸再定位置：反过来会以近零尺寸居中,内容到位后向右下展开
         panel.setContentSize(NSSize(width: width, height: height))
-        let frame = panel.frame
-        var origin = NSPoint(x: anchor.midX - frame.width / 2,
-                             y: anchor.midY - frame.height / 2)
-        // Chrome 窗口可能有一部分在屏幕外，夹回可见区
-        let visible = screen.visibleFrame
-        origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - frame.width - 8)
-        origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - frame.height - 8)
-        panel.setFrameOrigin(origin)
+        panel.setFrameOrigin(centeredFrame(size: panel.frame.size).origin)
 
         panel.alphaValue = 0
         panel.orderFrontRegardless()             // 不激活自己,焦点留在 Chrome
@@ -1033,6 +1040,25 @@ final class OverlayPanel {
         self.shownAt = Date()
 
         log("浮层 \(layout.describe(count: model.items.count))  \(Int(width))×\(Int(height))  上限 \(Int(maxPanelWidth))×\(Int(maxPanelHeight))")
+    }
+
+    /// 把这个尺寸的面板摆到定位基准中心。presentNow 定位、applyRemoval 行数
+    /// 变化后重新居中，共用这一份 —— 两处各抄一套的话，收缩后的「居中」
+    /// 会和起手那一下差几个 pt，肉眼就是抖一下。
+    private func centeredFrame(size: NSSize) -> NSRect {
+        clampedToVisible(NSRect(x: panelAnchor.midX - size.width / 2,
+                                y: panelAnchor.midY - size.height / 2,
+                                width: size.width, height: size.height))
+    }
+
+    /// 夹回屏幕可见区（浏览器窗口可能有一部分在屏幕外）。
+    private func clampedToVisible(_ frame: NSRect) -> NSRect {
+        var frame = frame
+        frame.origin.x = min(max(frame.origin.x, panelVisibleFrame.minX + 8),
+                             panelVisibleFrame.maxX - frame.width - 8)
+        frame.origin.y = min(max(frame.origin.y, panelVisibleFrame.minY + 8),
+                             panelVisibleFrame.maxY - frame.height - 8)
+        return frame
     }
 
     /// 算面板内容尺寸和排布。presentNow 和 applyRemoval 共用这一份，别各抄一套。
