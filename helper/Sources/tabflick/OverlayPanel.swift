@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 
 // MARK: - 视图模型
@@ -1030,6 +1031,9 @@ final class OverlayPanel {
 
         panel.alphaValue = 0
         panel.orderFrontRegardless()             // 不激活自己,焦点留在 Chrome
+        // 上屏之后才有 window number，阴影参数只能这时候设（见 WindowShadow —— 它
+        // 自己会等 WindowServer 把阴影初始化完，别改成一次性调用）
+        WindowShadow.applyStandardWindowShadow(to: panel)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = fadeInDuration
             panel.animator().alphaValue = 1
@@ -1337,13 +1341,61 @@ enum ChromeWindowLocator {
     /// 窗口定位、菜单栏激活浏览器都以它为准。
     static var activeBundleID = "com.google.Chrome"
 
-    /// 最前面那个 Chrome 窗口的 frame，AppKit 坐标系（左下原点）。
+    /// 最前面那个浏览器窗口的 frame，AppKit 坐标系（左下原点）。
     ///
-    /// 只读窗口几何，不需要屏幕录制权限。
+    /// 主路径走 AX：`kAXFocusedWindow` 是浏览器自己认定的「用户正在用的那个
+    /// 窗口」，语义正好是我们要的。辅助功能权限是 CGEventTap 的前提 —— 没有
+    /// 它切换器根本不会被唤起，所以这条依赖不是新增的失败面。
+    ///
+    /// 兜底才扫 CGWindowList（只读窗口几何，不需要屏幕录制权限）。
     static func frontmostWindowFrame() -> NSRect? {
         let running = NSRunningApplication.runningApplications(withBundleIdentifier: activeBundleID)
         guard let pid = running.first?.processIdentifier else { return nil }
 
+        guard let bounds = axFocusedWindowBounds(pid: pid) ?? cgFrontmostWindowBounds(pid: pid) else {
+            return nil
+        }
+
+        // AX 和 CGWindowList 都用左上原点的全局坐标,原点在主屏左上角;
+        // AppKit 用左下原点。换算基准必须是主屏(screens[0])的高度。
+        guard let primaryHeight = NSScreen.screens.first?.frame.height else { return nil }
+        return NSRect(x: bounds.minX,
+                      y: primaryHeight - bounds.maxY,
+                      width: bounds.width,
+                      height: bounds.height)
+    }
+
+    /// 浏览器自己认定的焦点窗口。
+    ///
+    /// 地址栏展开时，那个建议下拉是一个**独立窗口**（`role=AXWindow`、
+    /// `subrole=AXUnknown`、无标题），盖在主窗口上面；但 `kAXFocusedWindow`
+    /// 始终指向主窗口，下拉从不入选（实测）。扩展 popup、下载气泡同理。
+    private static func axFocusedWindowBounds(pid: pid_t) -> CGRect? {
+        let app = AXUIElementCreateApplication(pid)
+        // 这条在按键关键路径上：浏览器没响应时别把浮层一起拖住 —— 超时了走
+        // CG 兜底，那条路不需要浏览器进程应答，照样拿得到几何。
+        // 实测整条路径（含 create）中位 0.058ms、最大 0.133ms，
+        // 0.15s 已是正常值的一千倍，纯粹当保险丝。
+        AXUIElementSetMessagingTimeout(app, 0.15)
+
+        guard let window = axElement(app, kAXFocusedWindowAttribute)
+                        ?? axElement(app, kAXMainWindowAttribute),
+              let origin = axPoint(window, kAXPositionAttribute),
+              let size = axSize(window, kAXSizeAttribute),
+              // 病态测量值不要拿去定位（同 PermissionFlow 那轮的教训）
+              size.width > 1, size.height > 1
+        else { return nil }
+
+        return CGRect(origin: origin, size: size)
+    }
+
+    /// 兜底：AX 取不到时扫 CGWindowList。
+    ///
+    /// 这里不能直接取「z 序最前的够大窗口」—— 地址栏下拉同样是 layer 0，
+    /// 展开后也远超 200²，而且盖在主窗口上面（z 序更靠前）。CG 侧拿不到
+    /// subrole，窗口标题又要屏幕录制权限（不该为此多要一个权限），只剩
+    /// 几何判据：子窗口完全落在主窗口内部，据此排除。
+    private static func cgFrontmostWindowBounds(pid: pid_t) -> CGRect? {
         guard let list = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
         ) as? [[String: Any]] else { return nil }
@@ -1351,26 +1403,55 @@ enum ChromeWindowLocator {
         // CGWindowList 的返回值是按前后顺序排的，第一个匹配的就是最前面那个。
         // 注意：字典里的数值是 CFNumber，`as? Int32` 会静默全部落空，
         // 必须先桥到 NSNumber 再取值。
+        var candidates: [CGRect] = []
         for entry in list {
             guard let owner = (entry[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
                   owner == pid,
                   let layer = (entry[kCGWindowLayer as String] as? NSNumber)?.intValue,
                   layer == 0,                                   // 0 = 普通窗口,滤掉浮动面板
                   let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
-                  let bounds = CGRect(dictionaryRepresentation: boundsDict)
+                  let bounds = CGRect(dictionaryRepresentation: boundsDict),
+                  // 太小的多半是提示条之类,不当主窗口
+                  bounds.width > 200, bounds.height > 200
             else { continue }
-
-            // 太小的多半是提示条之类,不当主窗口
-            guard bounds.width > 200, bounds.height > 200 else { continue }
-
-            // CGWindowList 用左上原点的全局坐标,原点在主屏左上角;
-            // AppKit 用左下原点。换算基准必须是主屏(screens[0])的高度。
-            guard let primaryHeight = NSScreen.screens.first?.frame.height else { return nil }
-            return NSRect(x: bounds.minX,
-                          y: primaryHeight - bounds.maxY,
-                          width: bounds.width,
-                          height: bounds.height)
+            candidates.append(bounds)
         }
-        return nil
+
+        // 两个窗口 frame 完全相同时互不排除（`!=` 挡掉），仍按 z 序取最前那个。
+        return candidates.first { candidate in
+            !candidates.contains { $0 != candidate && $0.contains(candidate) }
+        }
+    }
+
+    // MARK: AX 取值
+
+    private static func axElement(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success,
+              let value = raw, CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
+        return (value as! AXUIElement)
+    }
+
+    private static func axPoint(_ element: AXUIElement, _ attribute: String) -> CGPoint? {
+        guard let value = axValue(element, attribute) else { return nil }
+        var point = CGPoint.zero
+        guard AXValueGetValue(value, .cgPoint, &point) else { return nil }
+        return point
+    }
+
+    private static func axSize(_ element: AXUIElement, _ attribute: String) -> CGSize? {
+        guard let value = axValue(element, attribute) else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue(value, .cgSize, &size) else { return nil }
+        return size
+    }
+
+    private static func axValue(_ element: AXUIElement, _ attribute: String) -> AXValue? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success,
+              let value = raw, CFGetTypeID(value) == AXValueGetTypeID()
+        else { return nil }
+        return (value as! AXValue)
     }
 }
