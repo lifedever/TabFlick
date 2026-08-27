@@ -20,6 +20,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var menuBrowsersProvider: (() -> [MRUController.MenuBrowser])?
     /// 点了某浏览器子菜单里的标签。参数 (tab.id, 浏览器 bundle id)。
     var onPickTabInBrowser: ((Int, String) -> Void)?
+    /// 点了「最近关闭」里的一条。参数 (ClosedTab.id, 浏览器 bundle id)。
+    var onReopenClosedTab: ((String, String) -> Void)?
+    /// 清空某浏览器的已关闭记录。参数是浏览器 bundle id。
+    var onClearClosedTabs: ((String) -> Void)?
 
     /// 「收藏当前标签」菜单项。标题/图标随当前标签的收藏状态切换。
     private let favoriteItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -314,6 +318,52 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 menu.addItem(item)
             }
         }
+
+        fillClosedSection(menu, browser: browser)
+    }
+
+    /// 活标签之后的「最近关闭」一段：点一条即找回。
+    ///
+    /// 一条都没有时整段不出现 —— 刚装上、还没关过任何标签的用户不该
+    /// 对着一个空标题和一个「清空」按钮发愣。
+    private func fillClosedSection(_ menu: NSMenu, browser: MRUController.MenuBrowser) {
+        guard !browser.closed.isEmpty else { return }
+
+        menu.addItem(.separator())
+        // 存档比列出来的多时，标题就得说清「你看到的是最近 N 条」——
+        // 否则下面那个「清空」会显得只清这几条。
+        let shown = browser.closed.count
+        let total = max(browser.closedTotal, shown)
+        menu.addItem(.sectionHeader(title: total > shown
+            ? L10n.t("最近关闭 · \(shown) / \(total)", "Recently closed · \(shown) of \(total)")
+            : L10n.t("最近关闭 · \(shown) 个", "Recently closed · \(shown)")))
+
+        for entry in browser.closed {
+            let raw = entry.tab.displayTitle
+            let title = raw.count > 60 ? String(raw.prefix(60)) + "…" : raw
+            let item = NSMenuItem(title: title, action: #selector(reopenClosed(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = ["closedId": entry.tab.id,
+                                      "browser": browser.bundleID] as [String: Any]
+            item.image = Self.faviconIcon(entry.icon)
+            // 徽标里带上关闭原因：「程序替我关的」和「我自己关的」是完全不同
+            // 的两件事，不标出来用户无从判断该不该找回它。
+            let reason = entry.tab.reason.label
+            item.badge = NSMenuItemBadge(
+                string: entry.tab.relativeClosedAt.map { "\(reason) · \($0)" } ?? reason)
+            menu.addItem(item)
+        }
+
+        // 隔开再放清空：紧挨着最后一条标签的话，冲着「找回」去的点击很容易
+        // 顺手多滑一格，而这个动作没有撤销。
+        menu.addItem(.separator())
+        let clear = NSMenuItem(title: L10n.t("清空全部 \(total) 条记录",
+                                             "Clear All \(total) Records"),
+                               action: #selector(clearClosed(_:)), keyEquivalent: "")
+        clear.target = self
+        clear.representedObject = browser.bundleID
+        clear.image = Self.symbol("trash")
+        menu.addItem(clear)
     }
 
     /// favicon 统一缩到菜单标准的 16pt；没缓存到的用 globe 占位
@@ -329,6 +379,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
               let tabId = info["tabId"] as? Int,
               let browser = info["browser"] as? String else { return }
         onPickTabInBrowser?(tabId, browser)
+    }
+
+    @objc private func reopenClosed(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let id = info["closedId"] as? String,
+              let browser = info["browser"] as? String else { return }
+        onReopenClosedTab?(id, browser)
+    }
+
+    @objc private func clearClosed(_ sender: NSMenuItem) {
+        guard let browser = sender.representedObject as? String else { return }
+        onClearClosedTabs?(browser)
     }
 
     // MARK: - 图标

@@ -13,6 +13,7 @@
 const OFFSCREEN_PATH = "offscreen.html";
 const RECONNECT_ALARM = "tabflick-reconnect";
 const STORAGE_KEY = "mru";
+const META_KEY = "tabMeta";
 
 /// 配置的事实源在 macOS app 那边（它有原生设置窗口，且进程一直活着）。
 /// 这里的值只是内存里的一份副本：每次连上 helper 都会重新要一份，
@@ -43,19 +44,31 @@ let mru = [];          // tabId 数组，最近使用的在前，跨窗口全局
 let mruLoaded = false;
 let settings = { ...DEFAULT_SETTINGS };
 
+/// 活标签的元信息影子副本：tabId → {url, title, favIconUrl, incognito}。
+///
+/// 为什么非要有这么一份：`chrome.tabs.onRemoved` 只给 `(tabId, removeInfo)`，
+/// **元信息一个字都没有**，而那一刻标签已经从 tab strip 摘掉，
+/// `chrome.tabs.get(tabId)` 直接抛错。要记录「关掉的是什么」，只能提前备份。
+///
+/// 自动清理不需要它（`sweepExpiredTabs` 是我们主动 remove，victims 在手上），
+/// 但用户 ⌘W 关掉的没有这个便利 —— 这份副本是唯一的信息来源。
+let tabMeta = {};
+
 // ── MRU 维护 ────────────────────────────────────────────────────────────
 
 // service worker 随时可能被回收，MRU 必须能从 storage.session 恢复。
 // storage.session 存在内存里，浏览器关闭即清空，正好符合「本次浏览会话」语义。
 async function loadMRU() {
   if (mruLoaded) return;
-  const stored = await chrome.storage.session.get(STORAGE_KEY);
+  const stored = await chrome.storage.session.get([STORAGE_KEY, META_KEY]);
   mru = stored[STORAGE_KEY] ?? [];
+  // 影子副本一起恢复 —— SW 被回收后用户关掉的标签，元信息只能来自这里
+  tabMeta = stored[META_KEY] ?? {};
   mruLoaded = true;
 }
 
 async function persistMRU() {
-  await chrome.storage.session.set({ [STORAGE_KEY]: mru });
+  await chrome.storage.session.set({ [STORAGE_KEY]: mru, [META_KEY]: tabMeta });
 }
 
 async function touchTab(tabId) {
@@ -89,10 +102,34 @@ async function pushMRU() {
   // 拿过滤后的结果回写 mru 会把其他窗口的历史整段抹掉。
   const aliveIds = new Set(allTabs.map((t) => t.id));
   const cleaned = mru.filter((id) => aliveIds.has(id));
-  if (cleaned.length !== mru.length) {
-    mru = cleaned;
-    await persistMRU();
+  const mruDirty = cleaned.length !== mru.length;
+  if (mruDirty) mru = cleaned;
+
+  // 顺手刷新元信息影子副本 —— 这里是全场唯一一处能同时看到所有标签
+  // 全部字段的地方。逐字段比对出脏标记而不是无脑写：storage.session
+  // 虽在内存里，几百个标签一份也有上百 KB，而 pushMRU 是高频路径。
+  let metaDirty = Object.keys(tabMeta).length !== allTabs.length;
+  const nextMeta = {};
+  for (const t of allTabs) {
+    const entry = {
+      url: t.url ?? "",
+      title: t.title ?? "",
+      favIconUrl: t.favIconUrl ?? "",
+      // 无痕标签绝不外传：关闭记录会**落盘**到 app 目录，性质比「关掉一个
+      // 标签」严重得多。扩展默认根本拿不到无痕标签，但用户可以在
+      // chrome://extensions 打开「在无痕模式下启用」—— 那时这就是唯一防线。
+      incognito: t.incognito === true,
+    };
+    nextMeta[t.id] = entry;
+    const prev = tabMeta[t.id];
+    if (!prev || prev.url !== entry.url || prev.title !== entry.title
+        || prev.favIconUrl !== entry.favIconUrl) {
+      metaDirty = true;
+    }
   }
+  tabMeta = nextMeta;
+
+  if (mruDirty || metaDirty) await persistMRU();
 
   if (allTabs.length === 0) return;
 
@@ -301,6 +338,7 @@ async function ensureFavorites() {
         suppressed.add(t.id);
         try {
           if (remaining > 1) {
+            markClosing([t.id], "unpin");
             await chrome.tabs.remove(t.id);
             remaining -= 1;
             send({ type: "log", message: `pending unpin: closed ${h}` });
@@ -469,9 +507,103 @@ async function sweepExpiredTabs() {
   send({ type: "log", message: `lifetime sweep: closing ${victims.length} tab(s) > ${hours}h idle: ${detail}` });
 
   try {
+    // 标记必须先于 remove：onRemoved 是同步触发的，晚一步这批就会被
+    // 记成「手动关闭」—— 而「程序替我关的」恰恰是最需要能找回的那类。
+    markClosing(victims.map((t) => t.id), "lifetime");
     await chrome.tabs.remove(victims.map((t) => t.id));
   } catch (e) {
     send({ type: "log", message: `lifetime sweep failed: ${e}` });
+  }
+}
+
+// ── 已关闭标签记录 ──────────────────────────────────────────────────────
+//
+// 关掉的标签连同「为什么关的」一起上报给 helper 存档，用户能从状态栏找回来。
+//
+// 原因分五类，判定手法照搬同文件里 selfPinned / selfUnpinned 那套「自己动手
+// 前先打标记」：
+//   · lifetime / switcher / unpin —— 我们主动调 tabs.remove，标记必须在
+//     remove **之前**登记（onRemoved 是同步触发的，晚一步就来不及）
+//   · window   —— removeInfo.isWindowClosing，Chrome 直接给的，白捡
+//   · manual   —— 以上都不是，即 ⌘W / 点 ✕ / 中键
+//
+// 有两种关闭**天生记不到**，是 MV3 的硬约束不是缺陷：浏览器整体退出时 SW
+// 跟着一起死，onRemoved 根本不跑（同 onUpdated 里 pinned:false 那段的处境）；
+// 崩溃同理。所以列表里不会有「退出浏览器时开着的那些」。
+
+const CLOSED_FLUSH_MS = 120;
+const REASON_TTL_MS = 30_000;
+
+/// tabId → {reason, at}：我们自己发起的关闭在这里登记原因。
+const closeReasons = new Map();
+
+function markClosing(tabIds, reason) {
+  const at = Date.now();
+  for (const id of tabIds) closeReasons.set(id, { reason, at });
+}
+
+/// 待上报的关闭记录。自动清理一次能关几百个标签 = 几百次 onRemoved，
+/// 逐条发就是几百帧 WebSocket，合并成一条发。
+let closedBuffer = [];
+let closedFlushTimer = null;
+
+async function recordClosed(tabId, removeInfo) {
+  // SW 可能正是被这次 onRemoved 唤醒的，此时内存里的影子副本还是空的 ——
+  // 真正的元信息在 storage.session 里（上一轮 pushMRU 存的，那份快照里
+  // 这个标签还活着）。所以必须先 loadMRU 再读。
+  await loadMRU();
+
+  const meta = tabMeta[tabId];
+  const marked = closeReasons.get(tabId);
+  closeReasons.delete(tabId);
+
+  // 影子副本里没有 = 这个标签从没进过任何一轮 pushMRU（后台打开且秒关）。
+  // 没有 URL 的记录没有找回价值，直接丢，别往列表里塞空条目。
+  if (!meta?.url) return;
+  if (meta.incognito) return;                    // 无痕永不落盘
+  if (!meta.url.startsWith("http")) return;      // chrome:// / 扩展页找回没意义
+
+  closedBuffer.push({
+    url: meta.url,
+    title: meta.title ?? "",
+    favIconUrl: meta.favIconUrl ?? "",
+    reason: marked?.reason ?? (removeInfo?.isWindowClosing ? "window" : "manual"),
+    closedAt: Date.now(),
+  });
+
+  clearTimeout(closedFlushTimer);
+  closedFlushTimer = setTimeout(flushClosed, CLOSED_FLUSH_MS);
+}
+
+function flushClosed() {
+  closedFlushTimer = null;
+
+  // remove 抛错时登记的标记没人来取，攒着白占内存。tabId 在一次浏览器会话
+  // 里不复用，所以陈旧标记不会误判成别的标签，纯粹是清理。
+  const cutoff = Date.now() - REASON_TTL_MS;
+  for (const [id, mark] of closeReasons) {
+    if (mark.at < cutoff) closeReasons.delete(id);
+  }
+
+  if (closedBuffer.length === 0) return;
+  const batch = closedBuffer;
+  closedBuffer = [];
+  // 断线时这批直接丢（send 自己会 return）：helper 不在没人接收，而等它
+  // 回来时元信息早已不可查。和「没连着 helper 就不清理标签」同一个口径。
+  send({ type: "tabsClosed", tabs: batch });
+}
+
+/// 从已关闭列表里找回一个标签。
+async function reopenTab(url, active) {
+  try {
+    const tab = await chrome.tabs.create({ url, active: active !== false });
+    // 用户是从状态栏点进来的，浏览器多半不在前台 —— 光 create 不会把窗口
+    // 提到前面（和 activateTab 里那句同理）。
+    if (active !== false && tab?.windowId !== undefined) {
+      await chrome.windows.update(tab.windowId, { focused: true });
+    }
+  } catch (e) {
+    send({ type: "log", message: `reopen failed (${url}): ${e}` });
   }
 }
 
@@ -561,12 +693,19 @@ async function handleHelperMessage(raw) {
       // 不用在这里重复维护 MRU。
       if (typeof msg.tabId === "number") {
         try {
+          markClosing([msg.tabId], "switcher");
           await chrome.tabs.remove(msg.tabId);
         } catch (e) {
           // 标签可能已经没了（用户手动关掉的竞态），清掉本地记录即可
           send({ type: "log", message: `close failed: ${e}` });
           await forgetTab(msg.tabId);
         }
+      }
+      break;
+    case "reopen":
+      // 从已关闭列表里找回一个标签
+      if (typeof msg.url === "string" && msg.url.startsWith("http")) {
+        await reopenTab(msg.url, msg.active);
       }
       break;
     case "ping":
@@ -640,8 +779,12 @@ chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
   scheduleThumbnail(tabId, windowId);
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => {
-  forgetTab(tabId);
+// 顺序是关键：recordClosed 要从影子副本里读元信息，而 forgetTab 会触发
+// pushMRU 把这条从副本里清掉。两个都 async，不 await 串起来的话就是在赌
+// 微任务的交错顺序。
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  await recordClosed(tabId, removeInfo);
+  await forgetTab(tabId);
 });
 
 // 切换浏览器窗口时，那个窗口的当前标签页才是「最近使用」的

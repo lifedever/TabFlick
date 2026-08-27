@@ -16,22 +16,7 @@ struct TabInfo: Decodable {
 }
 
 extension TabInfo {
-    /// 「X 分钟前」。lastAccessed 拿不到时（旧扩展 / 旧 Chrome）返回 nil，
-    /// 调用方就不显示这一栏。
-    ///
-    /// 状态栏菜单和全局切换器的列表共用这一份 —— 同样的东西写两遍，
-    /// 迟早在其中一处漏改（这个项目栽过好几次）。
-    var relativeLastAccessed: String? {
-        guard let msEpoch = lastAccessed, msEpoch > 0 else { return nil }
-        let seconds = Date().timeIntervalSince1970 - msEpoch / 1000
-        guard seconds >= 0 else { return nil }
-        if seconds < 60 { return L10n.t("刚刚", "just now") }
-        let minutes = Int(seconds / 60)
-        if minutes < 60 { return L10n.t("\(minutes) 分钟前", "\(minutes)m ago") }
-        let hours = Int(seconds / 3600)
-        if hours < 24 { return L10n.t("\(hours) 小时前", "\(hours)h ago") }
-        return L10n.t("\(Int(seconds / 86400)) 天前", "\(Int(seconds / 86400))d ago")
-    }
+    var relativeLastAccessed: String? { relativeTime(msEpoch: lastAccessed) }
 }
 
 /// 一枚 favicon 及其视觉属性。
@@ -128,6 +113,13 @@ final class MRUController {
     /// 落盘则是因为 `captureVisibleTab` 只能截可见标签，图是一张张攒出来的，
     /// 只存内存的话 helper 一重启就退化成一排空卡片。
     private let thumbnails = ThumbnailStore()
+
+    /// 已关闭标签的存档（状态栏子菜单末尾那一段「最近关闭」）。
+    /// 落盘在 Application Support —— 浏览器重启、helper 重启都还在。
+    private let closedTabs = ClosedTabStore()
+
+    /// 状态栏子菜单里列出的已关闭标签条数。
+    static let menuClosedTabLimit = 20
 
     /// 每个已连接客户端（浏览器）的独立状态。浏览器是物理隔离的主体：
     /// 标签列表、命令路由、置顶恢复都按客户端分账，绝不互串。
@@ -301,7 +293,10 @@ final class MRUController {
     /// ⚠️ 不是「和 app 版本号保持一致」：只在**协议发生不兼容变化**时才手动
     /// 提升。app 发版没动扩展/协议 → 这里不动，老扩展继续用，不骚扰用户。
     /// （扩展 manifest 的 version 则是「扩展内容变了就升」，两者语义不同。）
-    static let requiredExtensionVersion = "0.5"
+    /// 0.9：新增 `tabsClosed` / `reopen` 两条消息。老扩展不发前者，「最近关闭」
+    /// 那一段会**永远是空的**且没有任何提示 —— 用户只会以为功能坏了。
+    /// 这正是这套提示存在的意义，所以这次提。
+    static let requiredExtensionVersion = "0.9"
 
     /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
     private static func isOlder(_ v: String, than required: String) -> Bool {
@@ -412,6 +407,10 @@ final class MRUController {
         self.settings = settings
         self.overlay = OverlayPanel(settings: settings)
         thumbnails.warmUp()   // 磁盘上的图先读进来，第一次按 ⌃⇥ 就有画面
+        // 已关闭列表的 favicon 也要能立刻显示。IconCache 只在内存里，helper
+        // 一重启就空了 —— 存档却还在，不预热的话那一整段都是 globe 占位。
+        // 每个浏览器只列 20 条，取最近 60 条足够覆盖几个浏览器。
+        icons.prefetch(closedTabs.entries.prefix(60).map(\.favIconUrl)) { }
         overlay.model.onPick = { [weak self] itemID in
             self?.pick(itemID: itemID)
         }
@@ -523,6 +522,37 @@ final class MRUController {
                   let data = Data(base64Encoded: base64) else { return }
             thumbnails.store(data, for: url)
             refreshOverlayImages()
+
+        case "tabsClosed":
+            // 扩展关掉标签后的存档上报（一批一条消息，见 background.js
+            // 「已关闭标签记录」）。无痕 / chrome:// 已在扩展侧滤掉。
+            guard let raw = root["tabs"] as? [[String: Any]], !raw.isEmpty else { return }
+            let browser = effectiveBrowser(of: clientID)
+            let now = Date().timeIntervalSince1970 * 1000
+            let records = raw.compactMap { entry -> ClosedTab? in
+                guard let url = entry["url"] as? String, url.hasPrefix("http"),
+                      url.count <= ClosedTab.maxURLLength else { return nil }
+                return ClosedTab(
+                    url: url,
+                    title: entry["title"] as? String ?? "",
+                    favIconUrl: entry["favIconUrl"] as? String ?? "",
+                    browser: browser,
+                    reason: CloseReason(rawValue: entry["reason"] as? String ?? "") ?? .manual,
+                    // 夹到「现在」：时钟错乱送来一个未来时刻的话，它会永远
+                    // 排在降序列表最前，把真正最近关的那些挤出可见范围。
+                    closedAt: min((entry["closedAt"] as? NSNumber)?.doubleValue ?? now, now))
+            }
+            guard !records.isEmpty else { return }
+            closedTabs.record(records)
+            // 菜单里这一段也要有图标。活着时缓存过的能直接命中，剩下的
+            // （helper 重启后）在这里补拉 —— 只拉菜单真正会显示的那些，
+            // 一次清理几百个标签时不能顺手发几百个并发请求出去。
+            icons.prefetch(records.prefix(Self.menuClosedTabLimit).map(\.favIconUrl)) { }
+            let summary = Dictionary(grouping: records, by: \.reason)
+                .map { "\($0.key.rawValue)×\($0.value.count)" }
+                .sorted()
+                .joined(separator: " ")
+            log("🗑  archived \(records.count) closed tab(s) [\(BrowserSupport.displayName(browser))]: \(summary)")
 
         case "pinnedTab":
             // 浏览器里被置顶的标签（用户手动置顶，或程序离线期间置顶、
@@ -989,11 +1019,17 @@ final class MRUController {
 
     // MARK: - 状态栏子菜单
 
-    /// 状态栏菜单里的一个浏览器条目：名称 + 它的全部标签（MRU 顺序）。
+    /// 状态栏菜单里的一个浏览器条目：名称 + 它的全部标签（MRU 顺序）
+    /// + 最近关闭的那些。
     struct MenuBrowser {
         let bundleID: String
         let name: String
         let entries: [(tab: TabInfo, icon: NSImage?)]
+        /// 最近关闭的标签，最新在前。子菜单末尾单列一段，点一条即找回。
+        let closed: [(tab: ClosedTab, icon: NSImage?)]
+        /// 存档里该浏览器的**总**条数 —— `closed` 只是最近 20 条，
+        /// 而「清空」清的是全部，两个数字必须都摆出来。
+        let closedTotal: Int
     }
 
     /// 每个已连接浏览器一份菜单数据，活动浏览器排最前。
@@ -1010,8 +1046,41 @@ final class MRUController {
             return MenuBrowser(
                 bundleID: bundleID,
                 name: BrowserSupport.displayName(bundleID),
-                entries: client.tabs.map { ($0, icons.image(for: $0.favIconUrl)?.image) })
+                entries: client.tabs.map { ($0, icons.image(for: $0.favIconUrl)?.image) },
+                closed: closedTabs.recent(browser: bundleID, limit: Self.menuClosedTabLimit)
+                    .map { ($0, icons.image(for: $0.favIconUrl)?.image) },
+                closedTotal: closedTabs.count(browser: bundleID))
         }
+    }
+
+    /// 找回一个已关闭的标签。
+    func reopenClosedTab(id: String, browser bundleID: String) {
+        guard let record = closedTabs.entries.first(where: { $0.id == id }) else { return }
+        log("↩︎ reopen: \(record.displayTitle.prefix(50)) [\(bundleID)]")
+
+        if let clientID = clients.first(where: { effectiveBrowser(of: $0.key) == bundleID })?.key {
+            // 用户是从状态栏点进来的，浏览器多半不在前台 —— 跨 App 的激活
+            // 必须 helper 来做（和菜单点选活标签同一条路）。
+            _ = NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleID)
+                .first?
+                .activate(options: [])
+            server.send(["type": "reopen", "url": record.url], to: clientID)
+        } else if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+                  let url = URL(string: record.url) {
+            // 菜单打开之后、点击之前那个浏览器断线了。直接交给 macOS 用它
+            // 打开这个地址 —— 找回标签这件事没有「等它重连再补做」的余地。
+            NSWorkspace.shared.open([url], withApplicationAt: app,
+                                    configuration: NSWorkspace.OpenConfiguration())
+        }
+
+        // 找回了就该离开回收站，否则用户再点一次会开出重复标签
+        closedTabs.remove(id: id)
+    }
+
+    /// 清空某个浏览器的已关闭记录。
+    func clearClosedTabs(browser: String) {
+        closedTabs.clear(browser: browser)
     }
 
     /// 状态栏子菜单点选：激活对应浏览器并切到该标签。

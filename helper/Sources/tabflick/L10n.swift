@@ -60,3 +60,21 @@ enum L10n {
         isChinese ? zh : en
     }
 }
+
+/// 「X 分钟前」。ms epoch 拿不到（旧扩展 / 旧 Chrome）或是未来时刻时返回 nil，
+/// 调用方就不显示这一栏。
+///
+/// 状态栏菜单的活标签（`TabInfo.lastAccessed`）、已关闭标签
+/// （`ClosedTab.closedAt`）、全局切换器的列表共用这一份 —— 同样的东西
+/// 写两遍，迟早在其中一处漏改（这个项目栽过好几次）。
+func relativeTime(msEpoch: Double?) -> String? {
+    guard let msEpoch, msEpoch > 0 else { return nil }
+    let seconds = Date().timeIntervalSince1970 - msEpoch / 1000
+    guard seconds >= 0 else { return nil }
+    if seconds < 60 { return L10n.t("刚刚", "just now") }
+    let minutes = Int(seconds / 60)
+    if minutes < 60 { return L10n.t("\(minutes) 分钟前", "\(minutes)m ago") }
+    let hours = Int(seconds / 3600)
+    if hours < 24 { return L10n.t("\(hours) 小时前", "\(hours)h ago") }
+    return L10n.t("\(Int(seconds / 86400)) 天前", "\(Int(seconds / 86400))d ago")
+}

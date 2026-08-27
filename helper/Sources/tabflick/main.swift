@@ -136,6 +136,14 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated { controller.activateFromMenu(tabId: tabId, browser: browser) }
         }
 
+        // 子菜单末尾的「最近关闭」：点一条把它重新打开
+        statusItem.onReopenClosedTab = { id, browser in
+            MainActor.assumeIsolated { controller.reopenClosedTab(id: id, browser: browser) }
+        }
+        statusItem.onClearClosedTabs = { browser in
+            MainActor.assumeIsolated { controller.clearClosedTabs(browser: browser) }
+        }
+
         // 收藏当前标签（绑定优先 + 域名兜底的判定在 MRUController）
         statusItem.favoriteState = {
             MainActor.assumeIsolated { controller.currentTabFavorited }
