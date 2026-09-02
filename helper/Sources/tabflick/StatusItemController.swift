@@ -34,6 +34,30 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 置顶快捷键（菜单项右侧显示用）。nil = 未设置，不显示。
     var pinHotkeyProvider: (() -> (key: String, modifiers: NSEvent.ModifierFlags)?)?
 
+    /// 「收藏的文件夹」区。文件夹行每次展开时现拆现建（同浏览器行），
+    /// 插在 sepAfterPin 下方。「收藏当前 Finder 目录」和「置顶当前标签」
+    /// 共用上下文动作槽位（互斥显示）。
+    private var folderItems: [NSMenuItem] = []
+    private let addFinderFolderItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+
+    /// 动作槽前后的两道分隔线。动作项按前台上下文显隐后，相邻的分隔线
+    /// 会叠在一起，得跟着收敛（见 menuNeedsUpdate）。每次 buildMenu
+    /// 重建新实例，不跨菜单复用；sepAfterPin 兼任文件夹列表的插入锚点。
+    private var sepAfterStatus = NSMenuItem.separator()
+    private var sepAfterPin = NSMenuItem.separator()
+
+    /// 收藏的文件夹列表数据源。
+    var favoriteFoldersProvider: (() -> [FavoriteFolder])?
+    /// 点了「收藏当前 Finder 目录」。
+    var onAddFinderFolder: (() -> Void)?
+    /// 点了某文件夹的「取消收藏」。参数是标准化路径。
+    var onRemoveFolder: ((String) -> Void)?
+    /// 某文件夹刚被某个 App 打开（记录最近使用：平铺区按文件夹的、
+    /// 「打开方式」按 App 的）。参数是 (标准化路径, App URL)。
+    var onFolderOpened: ((String, URL) -> Void)?
+    /// 「打开方式」各 App 的最近点击时刻（key = App 标准化路径，排序用）。
+    var openerHistoryProvider: (() -> [String: Double])?
+
     /// 「扩展需要更新」警告项。文案由 provider 给，nil = 隐藏。
     private let warningItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     var extensionWarning: (() -> String?)?
@@ -88,6 +112,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         statusLine.menu?.removeItem(statusLine)
         favoriteItem.menu?.removeItem(favoriteItem)
         warningItem.menu?.removeItem(warningItem)
+        addFinderFolderItem.menu?.removeItem(addFinderFolderItem)
 
         let menu = NSMenu()
         // 自动启用会把「子菜单还是空的」的状态行判成禁用（子菜单在展开时才
@@ -105,7 +130,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         warningItem.isHidden = true
         menu.addItem(warningItem)
 
-        menu.addItem(.separator())
+        sepAfterStatus = .separator()
+        menu.addItem(sepAfterStatus)
 
         // 菜单项图标要么全有要么全无 —— 系统会给个别标准项（如「设置」）
         // 自动配图标，其余项没有就参差不齐，所以统一显式给全。
@@ -132,6 +158,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         favoriteItem.image = Self.symbol("pin")
         favoriteItem.isEnabled = false   // menuNeedsUpdate 时按当前标签刷新
         menu.addItem(favoriteItem)
+
+        // 和「置顶当前标签」共用同一个槽位：置顶只在浏览器前台出现、这条
+        // 只在 Finder 前台出现，互斥，永远不会同时可见（2026-09-02 用户定的）
+        addFinderFolderItem.target = self
+        addFinderFolderItem.action = #selector(addFinderFolder)
+        addFinderFolderItem.title = L10n.t("收藏当前 Finder 目录", "Add Current Finder Folder")
+        addFinderFolderItem.image = Self.symbol("folder.badge.plus")
+        addFinderFolderItem.isEnabled = true
+        menu.addItem(addFinderFolderItem)
+
+        sepAfterPin = .separator()
+        menu.addItem(sepAfterPin)
+
+        // 收藏的文件夹列表在 menuNeedsUpdate 时插到 sepAfterPin 下方
 
         menu.addItem(.separator())
 
@@ -195,8 +235,27 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard menu === statusItem.menu else { return }
         refreshBrowserLines(in: menu)
-        refreshFavoriteItem()
+
+        // 动作项跟着前台上下文走：「置顶当前标签」只在浏览器前台时出现，
+        // 「收藏当前 Finder 目录」只在 Finder 前台时出现 —— 不相干的时候
+        // 点了也「成功」，只会让人懵（2026-09-02 用户反馈）。
+        // 状态栏菜单不抢激活（accessory app，弹 alert 都得显式 NSApp.activate
+        // 就是旁证），所以打开菜单这一刻 frontmost 还是用户正在用的 App。
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let pinVisible = refreshFavoriteItem(browserIsFront: BrowserSupport.isSupported(front))
+        let finderIsFront = front == "com.apple.finder"
+        addFinderFolderItem.isHidden = !finderIsFront
+        let foldersVisible = refreshFolderLines(in: menu)
         refreshWarningItem()
+
+        // 动作槽和文件夹列表显隐后相邻分隔线会叠在一起：中间那道只在两段
+        // 都在时要，顶上那道只要还有任意一段就要（全藏时由列表后的那道
+        // 独自分隔）。
+        if !unauthorized {
+            let actionVisible = pinVisible || finderIsFront
+            sepAfterPin.isHidden = !(actionVisible && foldersVisible)
+            sepAfterStatus.isHidden = !(actionVisible || foldersVisible)
+        }
     }
 
     /// 每个已连接浏览器一行：「Chrome · 5 个标签 ▸」，行首是浏览器图标，
@@ -256,7 +315,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         onExtensionWarningClick?()
     }
 
-    private func refreshFavoriteItem() {
+    /// 返回菜单项是否可见（浏览器不在前台时整项隐藏）。
+    private func refreshFavoriteItem(browserIsFront: Bool) -> Bool {
+        favoriteItem.isHidden = !browserIsFront
+        guard browserIsFront else { return false }
         if let isFavorited = favoriteState?() {
             favoriteItem.isEnabled = true
             favoriteItem.title = isFavorited
@@ -276,6 +338,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             favoriteItem.keyEquivalent = ""
             favoriteItem.keyEquivalentModifierMask = []
         }
+        return true
     }
 
     private func fillTabsMenu(_ menu: NSMenu, browser: MRUController.MenuBrowser) {
@@ -372,6 +435,226 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let icon, let copy = icon.copy() as? NSImage else { return symbol("globe") }
         copy.size = NSSize(width: 16, height: 16)
         return copy
+    }
+
+    // MARK: - 收藏的文件夹
+
+    /// 平铺区容量：按最近打开排的前几个直接躺在主菜单里，
+    /// 其余收进「更多 ▸」—— 收藏几十个也不会把主菜单挤爆。
+    private static let kInlineFolderLimit = 5
+
+    /// 「收藏的文件夹」列表：最近打开的前几个平铺，溢出的进「更多 ▸」，
+    /// 每条的子菜单列出能打开它的 App。列表**始终显示**（有收藏就列）——
+    /// 在任何 App 里都要能一键打开项目，这是功能本体。
+    /// 返回列表是否有可见内容（决定外层分隔线的收敛）。
+    private func refreshFolderLines(in menu: NSMenu) -> Bool {
+        for item in folderItems { item.menu?.removeItem(item) }
+        folderItems.removeAll()
+        // 未授权菜单里没有这一区
+        guard sepAfterPin.menu === menu else { return false }
+
+        let folders = FavoriteFolderStore.byRecency(favoriteFoldersProvider?() ?? [])
+        guard !folders.isEmpty else { return false }
+
+        var insertIndex = menu.index(of: sepAfterPin) + 1
+        let header = NSMenuItem.sectionHeader(title: L10n.t("收藏的文件夹", "Favorite Folders"))
+        menu.insertItem(header, at: insertIndex)
+        folderItems.append(header)
+        insertIndex += 1
+
+        // 「能打开文件夹的 App」查一次全体共用：查询按内容类型
+        // （public.folder）走，跟具体是哪个文件夹无关。
+        let openers = folderOpeners()
+        // 消歧标题必须对全量算：两个同名夹子一个在平铺、一个在「更多」时，
+        // 各算各的就都不带父目录，重名照样分不清。
+        let titles = FavoriteFolderStore.displayTitles(folders)
+
+        for (folder, title) in zip(folders.prefix(Self.kInlineFolderLimit),
+                                   titles.prefix(Self.kInlineFolderLimit)) {
+            let item = folderMenuItem(folder, title: title, openers: openers)
+            menu.insertItem(item, at: insertIndex)
+            insertIndex += 1
+            folderItems.append(item)
+        }
+
+        let overflowFolders = folders.dropFirst(Self.kInlineFolderLimit)
+        if !overflowFolders.isEmpty {
+            // 数量用 badge。试过并进标题（「更多 · 4 个」），用户裁定不如
+            // badge 好看（2026-09-02），改回来，别再翻烙饼
+            let more = NSMenuItem(title: L10n.t("更多", "More"), action: nil, keyEquivalent: "")
+            more.image = Self.symbol("ellipsis.circle")
+            more.badge = NSMenuItemBadge(count: overflowFolders.count)
+            let submenu = NSMenu()
+            submenu.autoenablesItems = false
+            for (folder, title) in zip(overflowFolders,
+                                       titles.dropFirst(Self.kInlineFolderLimit)) {
+                submenu.addItem(folderMenuItem(folder, title: title, openers: openers))
+            }
+            more.submenu = submenu
+            more.isEnabled = true
+            menu.insertItem(more, at: insertIndex)
+            insertIndex += 1
+            folderItems.append(more)
+        }
+        return true
+    }
+
+    /// 一条收藏的菜单行 —— 平铺区和「更多」共用同一副面孔。
+    private func folderMenuItem(_ folder: FavoriteFolder, title: String,
+                                openers: [(name: String, url: URL)]) -> NSMenuItem {
+        let exists = FileManager.default.fileExists(atPath: folder.path)
+        let item = NSMenuItem(title: exists ? title : title + L10n.t("（不存在）", " (missing)"),
+                              action: nil, keyEquivalent: "")
+        item.toolTip = folder.path
+        item.image = exists
+            ? Self.menuIcon(NSWorkspace.shared.icon(forFile: folder.path))
+            : Self.symbol("questionmark.folder")
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        // 目录已经不存在时打开方式全部免谈，只留拷贝路径和取消收藏
+        fillFolderMenu(submenu, folder: folder, openers: exists ? openers : [])
+        item.submenu = submenu
+        item.isEnabled = true
+        return item
+    }
+
+    private func fillFolderMenu(_ menu: NSMenu, folder: FavoriteFolder,
+                                openers: [(name: String, url: URL)]) {
+        if !openers.isEmpty {
+            menu.addItem(.sectionHeader(title: L10n.t("打开方式", "Open With")))
+            for opener in openers {
+                let item = NSMenuItem(title: opener.name,
+                                      action: #selector(openFolder(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = ["path": folder.path, "app": opener.url] as [String: Any]
+                item.image = Self.menuIcon(NSWorkspace.shared.icon(forFile: opener.url.path))
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
+        }
+
+        let copy = NSMenuItem(title: L10n.t("拷贝路径", "Copy Path"),
+                              action: #selector(copyFolderPath(_:)), keyEquivalent: "")
+        copy.target = self
+        copy.representedObject = folder.path
+        copy.image = Self.symbol("doc.on.doc")
+        menu.addItem(copy)
+
+        let remove = NSMenuItem(title: L10n.t("取消收藏", "Remove from Favorites"),
+                                action: #selector(removeFolder(_:)), keyEquivalent: "")
+        remove.target = self
+        remove.representedObject = folder.path
+        remove.image = Self.symbol("folder.badge.minus")
+        menu.addItem(remove)
+    }
+
+    /// 终端类 App 是**没法枚举的**：Terminal / iTerm 这些不向 Launch Services
+    /// 登记 public.folder（本机实测 `urlsForApplications(toOpen:)` 连系统自带
+    /// Terminal 都不返回），而「是不是终端」没有任何 UTI / API 可查 ——
+    /// 只能按 bundle id（反向 DNS，永不本地化）点名，装了才显示。
+    /// 这是硬编码规则明文允许的场景：无法从 API 推导的列表。
+    private static let terminalBundleIDs = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.Warp-Stable",
+        "com.mitchellh.ghostty",
+        "net.kovidgoyal.kitty",
+        "com.github.wez.wezterm",
+        "org.alacritty",
+    ]
+
+    /// 能打开文件夹的 App。点过的按最近点击排前（MRU，2026-09-02 用户
+    /// 要求）；没点过的按 Finder → 已装终端 → Launch Services 枚举垫底。
+    private func folderOpeners() -> [(name: String, url: URL)] {
+        var seen = Set<URL>()
+        var result: [(name: String, url: URL)] = []
+
+        func append(_ url: URL) {
+            let standardized = url.standardizedFileURL
+            guard seen.insert(standardized).inserted else { return }
+            result.append((Self.appDisplayName(url), url))
+        }
+
+        if let finder = NSWorkspace.shared
+            .urlForApplication(withBundleIdentifier: "com.apple.finder") {
+            append(finder)
+        }
+        for id in Self.terminalBundleIDs {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                append(url)
+            }
+        }
+
+        // 查询用哪个目录都一样（按 public.folder 匹配），拿主目录当代表
+        let claimed = NSWorkspace.shared
+            .urlsForApplications(toOpen: FileManager.default.homeDirectoryForCurrentUser)
+            .map { (Self.appDisplayName($0), $0) }
+            .sorted { $0.0.localizedStandardCompare($1.0) == .orderedAscending }
+        for (_, url) in claimed { append(url) }
+
+        let lastUsed = openerHistoryProvider?() ?? [:]
+        guard !lastUsed.isEmpty else { return result }
+        let paths = result.map { $0.url.standardizedFileURL.path }
+        let byPath = Dictionary(uniqueKeysWithValues: zip(paths, result))
+        return FavoriteFolderStore.openerOrder(paths, lastUsed: lastUsed)
+            .compactMap { byPath[$0] }
+    }
+
+    /// App 显示名。Finder 开了「显示所有文件扩展名」时 `displayName` 会带
+    /// `.app` 尾巴，菜单里不需要它。
+    private static func appDisplayName(_ url: URL) -> String {
+        let name = FileManager.default.displayName(atPath: url.path)
+        return name.lowercased().hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    /// 文件 / App 图标缩到菜单标准的 16pt。
+    private static func menuIcon(_ icon: NSImage) -> NSImage {
+        guard let copy = icon.copy() as? NSImage else { return icon }
+        copy.size = NSSize(width: 16, height: 16)
+        return copy
+    }
+
+    @objc private func addFinderFolder() {
+        onAddFinderFolder?()
+    }
+
+    @objc private func openFolder(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any],
+              let path = info["path"] as? String,
+              let app = info["app"] as? URL else { return }
+        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        let appName = Self.appDisplayName(app)
+        let folderName = folder.lastPathComponent
+        // toast 等真打开了再报：冷启动的 App 要一两秒，提前说「已打开」是撒谎
+        NSWorkspace.shared.open([folder], withApplicationAt: app,
+                                configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    if let error {
+                        log("⚠️  open folder failed: \(error.localizedDescription)")
+                        Toast.show(L10n.t("打开失败：\(error.localizedDescription)",
+                                          "Failed to open: \(error.localizedDescription)"))
+                    } else {
+                        Toast.show(L10n.t("已在 \(appName) 打开「\(folderName)」",
+                                          "Opened “\(folderName)” in \(appName)"))
+                    }
+                }
+            }
+        }
+        log("📁 open \(path) with \(app.lastPathComponent)")
+        onFolderOpened?(path, app)
+    }
+
+    @objc private func copyFolderPath(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(path, forType: .string)
+        Toast.show(L10n.t("已拷贝路径", "Path copied"))
+    }
+
+    @objc private func removeFolder(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        onRemoveFolder?(path)
     }
 
     @objc private func pickTab(_ sender: NSMenuItem) {

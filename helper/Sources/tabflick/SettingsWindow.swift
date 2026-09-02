@@ -396,6 +396,91 @@ private struct FaviconView: View {
     }
 }
 
+// MARK: - 文件夹
+
+private struct FoldersPane: View {
+    @ObservedObject var folders: FavoriteFolderStore
+
+    var body: some View {
+        Form {
+            Section {
+                if folders.entries.isEmpty {
+                    Text(L10n.t("还没有收藏。在 Finder 打开目录后，从状态栏菜单点「收藏当前 Finder 目录」。",
+                                "Nothing yet. Open a folder in Finder, then use “Add Current Finder Folder” in the menu bar."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else if folders.entries.count > 6 {
+                    // 收藏多时限高滚动 —— 设置窗口按内容自适应高度，
+                    // 列表无限增长会把窗口顶出屏幕（同置顶标签列表）。
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(folders.entries, id: \.path) { folder in
+                                folderRow(folder)
+                                    .padding(.vertical, 5)
+                                if folder.path != folders.entries.last?.path {
+                                    Divider()
+                                }
+                            }
+                        }
+                        // 尾部留白：overlay 滚动条浮在内容上，不留的话
+                        // 行尾的删除按钮会被它压住（2026-09-02 截图实测）
+                        .padding(.trailing, 14)
+                    }
+                    .frame(height: 250)
+                } else {
+                    ForEach(folders.entries, id: \.path) { folder in
+                        folderRow(folder)
+                    }
+                }
+
+                Text(L10n.t(
+                    "状态栏菜单按最近打开排序，平铺前 5 个，其余收在「更多」里。",
+                    "The menu lists the 5 most recently opened; the rest live under More."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(folders.entries.isEmpty
+                     ? L10n.t("收藏的文件夹", "Favorite Folders")
+                     : L10n.t("收藏的文件夹 · \(folders.entries.count) 个",
+                              "Favorite Folders · \(folders.entries.count)"))
+            }
+        }
+        .formStyle(.grouped)
+        // 比其他 pane 宽：内容主体是完整路径，460 截断太狠。
+        // NSTabViewController 切 tab 时会对不同宽度做原生尺寸动画。
+        .frame(width: 560)
+    }
+
+    @ViewBuilder
+    private func folderRow(_ folder: FavoriteFolder) -> some View {
+        HStack(spacing: 8) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: folder.path))
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(folder.name)
+                    .lineLimit(1)
+                Text(folder.path)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            Button {
+                folders.remove(path: folder.path)
+            } label: {
+                Image(systemName: "trash")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.t("取消收藏", "Remove"))
+        }
+    }
+}
+
 // MARK: - 快捷键
 
 private struct HotkeyPane: View {
@@ -601,12 +686,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private let settings: AppSettings
     private let updates: UpdateChecker
+    private let folders: FavoriteFolderStore
     private var window: NSWindow?
     private var connected = false
 
     private var generalHost: NSHostingController<GeneralPane>?
     private var switcherHost: NSHostingController<SwitcherPane>?
     private var tabManagementHost: NSHostingController<TabManagementPane>?
+    private var foldersHost: NSHostingController<FoldersPane>?
     private var browserHost: NSHostingController<BrowserPane>?
     private var hotkeyHost: NSHostingController<HotkeyPane>?
     private var aboutHost: NSHostingController<AboutPane>?
@@ -620,9 +707,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
     private var tabController: NSTabViewController?
 
-    init(settings: AppSettings, updates: UpdateChecker) {
+    init(settings: AppSettings, updates: UpdateChecker, folders: FavoriteFolderStore) {
         self.settings = settings
         self.updates = updates
+        self.folders = folders
         super.init()
     }
 
@@ -646,6 +734,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         [L10n.t("通用", "General"),
          L10n.t("切换器", "Switcher"),
          L10n.t("标签管理", "Tabs"),
+         L10n.t("文件夹管理", "Folders"),
          L10n.t("浏览器", "Browsers"),
          L10n.t("快捷键", "Shortcuts"),
          L10n.t("关于", "About")]
@@ -656,6 +745,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         generalHost?.rootView = GeneralPane(settings: settings)
         switcherHost?.rootView = SwitcherPane(settings: settings)
         tabManagementHost?.rootView = TabManagementPane(settings: settings)
+        foldersHost?.rootView = FoldersPane(folders: folders)
         browserHost?.rootView = BrowserPane(browsers: browserStatuses)
         hotkeyHost?.rootView = HotkeyPane(settings: settings)
         aboutHost?.rootView = AboutPane(updates: updates)
@@ -673,6 +763,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let general = NSHostingController(rootView: GeneralPane(settings: settings))
             let switcher = NSHostingController(rootView: SwitcherPane(settings: settings))
             let tabManagement = NSHostingController(rootView: TabManagementPane(settings: settings))
+            let foldersPane = NSHostingController(rootView: FoldersPane(folders: folders))
             let browser = NSHostingController(rootView: BrowserPane(browsers: browserStatuses))
             let hotkey = NSHostingController(rootView: HotkeyPane(settings: settings))
             let about = NSHostingController(rootView: AboutPane(updates: updates))
@@ -681,20 +772,22 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             general.sizingOptions = [.preferredContentSize]
             switcher.sizingOptions = [.preferredContentSize]
             tabManagement.sizingOptions = [.preferredContentSize]
+            foldersPane.sizingOptions = [.preferredContentSize]
             browser.sizingOptions = [.preferredContentSize]
             hotkey.sizingOptions = [.preferredContentSize]
             about.sizingOptions = [.preferredContentSize]
             generalHost = general
             switcherHost = switcher
             tabManagementHost = tabManagement
+            foldersHost = foldersPane
             browserHost = browser
             hotkeyHost = hotkey
             aboutHost = about
 
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
-            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "rectangle.stack", "globe", "command", "info.circle"]
-            for (index, controller) in ([general, switcher, tabManagement, browser, hotkey, about] as [NSViewController]).enumerated() {
+            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "rectangle.stack", "folder", "globe", "command", "info.circle"]
+            for (index, controller) in ([general, switcher, tabManagement, foldersPane, browser, hotkey, about] as [NSViewController]).enumerated() {
                 let item = NSTabViewItem(viewController: controller)
                 item.label = Self.paneTitles[index]
                 item.image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: nil)

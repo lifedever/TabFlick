@@ -30,6 +30,11 @@
     <key>LSUIElement</key>
     <true/>
 
+    <!-- 「收藏当前 Finder 目录」要向 Finder 询问前窗口位置（Apple Events）。
+         缺这个 key 的话 macOS 直接拒绝，连「自动化」授权框都不弹。 -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>TabFlick 需要询问 Finder 当前窗口的文件夹位置，用于「收藏当前 Finder 目录」。TabFlick asks Finder for its front window's folder when you favorite it.</string>
+
     <key>NSHumanReadableCopyright</key>
     <string>MIT License © lifedever</string>
 </dict>

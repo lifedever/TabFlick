@@ -59,7 +59,9 @@ MainActor.assumeIsolated {
         let server = WebSocketServer(port: kPort)
         let controller = MRUController(server: server, settings: settings)
         let statusItem = StatusItemController()
-        let settingsWindow = SettingsWindowController(settings: settings, updates: updates)
+        let folders = FavoriteFolderStore()
+        let settingsWindow = SettingsWindowController(settings: settings, updates: updates,
+                                                     folders: folders)
 
         // 没有主菜单，⌘W/⌘Q/⌘, 这些 key equivalent 无处路由，
         // 设置窗口会对标准快捷键毫无反应。
@@ -142,6 +144,75 @@ MainActor.assumeIsolated {
         }
         statusItem.onClearClosedTabs = { browser in
             MainActor.assumeIsolated { controller.clearClosedTabs(browser: browser) }
+        }
+
+        // 收藏的文件夹：状态栏直接列出，子菜单选 App 打开；
+        // 「收藏当前 Finder 目录」通过 osascript 问 Finder 前窗口的位置
+        statusItem.favoriteFoldersProvider = {
+            MainActor.assumeIsolated { folders.entries }
+        }
+        statusItem.onRemoveFolder = { path in
+            MainActor.assumeIsolated {
+                folders.remove(path: path)
+                let name = URL(fileURLWithPath: path).lastPathComponent
+                Toast.show(L10n.t("已取消收藏「\(name)」",
+                                  "Removed “\(name)” from favorites"))
+            }
+        }
+        statusItem.onFolderOpened = { path, app in
+            MainActor.assumeIsolated {
+                folders.touch(path: path)
+                folders.touchOpener(appPath: app.standardizedFileURL.path)
+            }
+        }
+        statusItem.openerHistoryProvider = {
+            MainActor.assumeIsolated { folders.openerLastUsed }
+        }
+        statusItem.onAddFinderFolder = {
+            FinderFront.fetchFolder { result in
+                MainActor.assumeIsolated {
+                    switch result {
+                    case .success(let path):
+                        let name = URL(fileURLWithPath: path).lastPathComponent
+                        switch folders.add(path: path) {
+                        case .added:
+                            Toast.show(L10n.t("已收藏「\(name)」",
+                                              "Added “\(name)” to favorites"))
+                        case .movedToFront:
+                            Toast.show(L10n.t("「\(name)」已在收藏里，移到最前",
+                                              "“\(name)” is already a favorite — moved to front"))
+                        case .invalid:
+                            break
+                        }
+                    case .failure(.notAuthorized):
+                        let alert = NSAlert()
+                        alert.alertStyle = .warning
+                        alert.messageText = L10n.t("需要「自动化」权限",
+                                                   "Automation permission needed")
+                        alert.informativeText = L10n.t(
+                            "收藏当前 Finder 目录需要询问 Finder 前面的窗口在看哪个文件夹。\n\n请在 系统设置 → 隐私与安全性 → 自动化 中允许 TabFlick 控制「访达」。",
+                            "To favorite the current Finder folder, TabFlick asks Finder which folder its front window shows.\n\nAllow TabFlick to control Finder under System Settings → Privacy & Security → Automation.")
+                        alert.addButton(withTitle: L10n.t("打开系统设置", "Open System Settings"))
+                        alert.addButton(withTitle: L10n.t("稍后", "Later"))
+                        NSApp.activate(ignoringOtherApps: true)
+                        if alert.runModal() == .alertFirstButtonReturn {
+                            NSWorkspace.shared.open(URL(string:
+                                "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
+                        }
+                    case .failure(.noFolder):
+                        let alert = NSAlert()
+                        alert.alertStyle = .informational
+                        alert.messageText = L10n.t("没有可收藏的 Finder 窗口",
+                                                   "No Finder window to add")
+                        alert.informativeText = L10n.t(
+                            "先在 Finder 里打开想收藏的文件夹，再点这一项。",
+                            "Open the folder in Finder first, then use this item.")
+                        alert.addButton(withTitle: L10n.t("好", "OK"))
+                        NSApp.activate(ignoringOtherApps: true)
+                        alert.runModal()
+                    }
+                }
+            }
         }
 
         // 收藏当前标签（绑定优先 + 域名兜底的判定在 MRUController）
