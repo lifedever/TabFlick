@@ -1,5 +1,11 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// 所有设置 pane 的统一宽度。**必须全体一致**：宽度不一的话切 tab 时窗口
+/// 会跟着伸缩跳动（2026-09-02 用户反馈「跳来跳去体验不好」）。取 560 是
+/// 因为「文件夹管理」要放完整路径，460 截断太狠 —— 就全体跟它对齐。
+private let kSettingsPaneWidth: CGFloat = 560
 
 // MARK: - 通用
 
@@ -72,7 +78,7 @@ private struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: kSettingsPaneWidth)
     }
 }
 
@@ -140,7 +146,7 @@ private struct SwitcherPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: kSettingsPaneWidth)
     }
 }
 
@@ -187,7 +193,7 @@ private struct BrowserPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: kSettingsPaneWidth)
     }
 
     @ViewBuilder
@@ -312,7 +318,7 @@ private struct TabManagementPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: kSettingsPaneWidth)
     }
 
     private var hasMultipleBrowsers: Bool {
@@ -426,7 +432,7 @@ private struct FoldersPane: View {
                         // 行尾的删除按钮会被它压住（2026-09-02 截图实测）
                         .padding(.trailing, 14)
                     }
-                    .frame(height: 250)
+                    .frame(height: 220)
                 } else {
                     ForEach(folders.entries, id: \.path) { folder in
                         folderRow(folder)
@@ -445,11 +451,94 @@ private struct FoldersPane: View {
                      : L10n.t("收藏的文件夹 · \(folders.entries.count) 个",
                               "Favorite Folders · \(folders.entries.count)"))
             }
+
+            openWithSection
         }
         .formStyle(.grouped)
-        // 比其他 pane 宽：内容主体是完整路径，460 截断太狠。
-        // NSTabViewController 切 tab 时会对不同宽度做原生尺寸动画。
-        .frame(width: 560)
+        .frame(width: kSettingsPaneWidth)
+    }
+
+    /// 「打开方式」管理：只列当前生效的，行尾垃圾桶移除，「添加 App…」
+    /// 补回或新增 —— 和上面收藏列表同一副面孔（2026-09-02 用户点名
+    /// 不要开关，要加减）。列表组装和菜单共用 OpenerCatalog。
+    @ViewBuilder
+    private var openWithSection: some View {
+        let apps = OpenerCatalog.candidates(extras: folders.openerExtras)
+            .filter { !folders.openerHidden.contains($0.path) }
+        Section {
+            if apps.count > 6 {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(apps) { app in
+                            openerRow(app)
+                                .padding(.vertical, 4)
+                            if app.id != apps.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
+                    .padding(.trailing, 14)   // 避开悬浮滚动条（同上面的列表）
+                }
+                .frame(height: 190)
+            } else {
+                ForEach(apps) { app in
+                    openerRow(app)
+                }
+            }
+
+            Button {
+                addOpenerApp()
+            } label: {
+                Label(L10n.t("添加 App…", "Add App…"), systemImage: "plus")
+            }
+            .buttonStyle(.borderless)
+
+            Text(L10n.t(
+                "移除即从「打开方式」菜单消失，随时用「添加 App…」加回；系统没枚举到的终端 / 编辑器也从这里补。",
+                "Removing an app takes it out of the Open With menu; use “Add App…” to bring any back — or to add editors and terminals the system misses."
+            ))
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+        } header: {
+            Text(L10n.t("打开方式", "Open With"))
+        }
+    }
+
+    @ViewBuilder
+    private func openerRow(_ app: OpenerApp) -> some View {
+        HStack(spacing: 8) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path))
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+            Text(app.name)
+            Spacer()
+            Button {
+                // 两本账一次清：extras 里的去 extras，发现来源的进 hidden。
+                // 只清一边的话，「手动加过的又能被系统枚举到」的 App
+                // 要点两次才消失。
+                folders.removeOpenerExtra(appPath: app.path)
+                folders.setOpenerHidden(true, appPath: app.path)
+            } label: {
+                Image(systemName: "trash")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.t("从打开方式中移除", "Remove from Open With"))
+        }
+    }
+
+    private func addOpenerApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = FileManager.default
+            .urls(for: .applicationDirectory, in: .localDomainMask).first
+        if panel.runModal() == .OK, let url = panel.url {
+            folders.addOpenerExtra(appPath: url.standardizedFileURL.path)
+        }
     }
 
     @ViewBuilder
@@ -530,7 +619,7 @@ private struct HotkeyPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: kSettingsPaneWidth)
         .onDisappear { stopRecording() }
     }
 
@@ -665,7 +754,7 @@ private struct AboutPane: View {
         }
         .frame(maxWidth: .infinity)
         .padding(22)
-        .frame(width: 460)
+        .frame(width: kSettingsPaneWidth)
     }
 }
 

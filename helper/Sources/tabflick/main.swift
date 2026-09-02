@@ -165,8 +165,8 @@ MainActor.assumeIsolated {
                 folders.touchOpener(appPath: app.standardizedFileURL.path)
             }
         }
-        statusItem.openerHistoryProvider = {
-            MainActor.assumeIsolated { folders.openerLastUsed }
+        statusItem.folderOpenersProvider = {
+            MainActor.assumeIsolated { OpenerCatalog.menuOpeners(store: folders) }
         }
         statusItem.onAddFinderFolder = {
             FinderFront.fetchFolder { result in

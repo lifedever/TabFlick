@@ -55,8 +55,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 某文件夹刚被某个 App 打开（记录最近使用：平铺区按文件夹的、
     /// 「打开方式」按 App 的）。参数是 (标准化路径, App URL)。
     var onFolderOpened: ((String, URL) -> Void)?
-    /// 「打开方式」各 App 的最近点击时刻（key = App 标准化路径，排序用）。
-    var openerHistoryProvider: (() -> [String: Double])?
+    /// 「打开方式」的最终列表。过滤和 MRU 排序在数据侧做（OpenerCatalog），
+    /// 菜单只管展示。
+    var folderOpenersProvider: (() -> [OpenerApp])?
 
     /// 「扩展需要更新」警告项。文案由 provider 给，nil = 隐藏。
     private let warningItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -464,7 +465,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         // 「能打开文件夹的 App」查一次全体共用：查询按内容类型
         // （public.folder）走，跟具体是哪个文件夹无关。
-        let openers = folderOpeners()
+        let openers = folderOpenersProvider?() ?? []
         // 消歧标题必须对全量算：两个同名夹子一个在平铺、一个在「更多」时，
         // 各算各的就都不带父目录，重名照样分不清。
         let titles = FavoriteFolderStore.displayTitles(folders)
@@ -501,7 +502,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// 一条收藏的菜单行 —— 平铺区和「更多」共用同一副面孔。
     private func folderMenuItem(_ folder: FavoriteFolder, title: String,
-                                openers: [(name: String, url: URL)]) -> NSMenuItem {
+                                openers: [OpenerApp]) -> NSMenuItem {
         let exists = FileManager.default.fileExists(atPath: folder.path)
         let item = NSMenuItem(title: exists ? title : title + L10n.t("（不存在）", " (missing)"),
                               action: nil, keyEquivalent: "")
@@ -519,7 +520,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func fillFolderMenu(_ menu: NSMenu, folder: FavoriteFolder,
-                                openers: [(name: String, url: URL)]) {
+                                openers: [OpenerApp]) {
         if !openers.isEmpty {
             menu.addItem(.sectionHeader(title: L10n.t("打开方式", "Open With")))
             for opener in openers {
@@ -548,65 +549,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(remove)
     }
 
-    /// 终端类 App 是**没法枚举的**：Terminal / iTerm 这些不向 Launch Services
-    /// 登记 public.folder（本机实测 `urlsForApplications(toOpen:)` 连系统自带
-    /// Terminal 都不返回），而「是不是终端」没有任何 UTI / API 可查 ——
-    /// 只能按 bundle id（反向 DNS，永不本地化）点名，装了才显示。
-    /// 这是硬编码规则明文允许的场景：无法从 API 推导的列表。
-    private static let terminalBundleIDs = [
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
-        "dev.warp.Warp-Stable",
-        "com.mitchellh.ghostty",
-        "net.kovidgoyal.kitty",
-        "com.github.wez.wezterm",
-        "org.alacritty",
-    ]
-
-    /// 能打开文件夹的 App。点过的按最近点击排前（MRU，2026-09-02 用户
-    /// 要求）；没点过的按 Finder → 已装终端 → Launch Services 枚举垫底。
-    private func folderOpeners() -> [(name: String, url: URL)] {
-        var seen = Set<URL>()
-        var result: [(name: String, url: URL)] = []
-
-        func append(_ url: URL) {
-            let standardized = url.standardizedFileURL
-            guard seen.insert(standardized).inserted else { return }
-            result.append((Self.appDisplayName(url), url))
-        }
-
-        if let finder = NSWorkspace.shared
-            .urlForApplication(withBundleIdentifier: "com.apple.finder") {
-            append(finder)
-        }
-        for id in Self.terminalBundleIDs {
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
-                append(url)
-            }
-        }
-
-        // 查询用哪个目录都一样（按 public.folder 匹配），拿主目录当代表
-        let claimed = NSWorkspace.shared
-            .urlsForApplications(toOpen: FileManager.default.homeDirectoryForCurrentUser)
-            .map { (Self.appDisplayName($0), $0) }
-            .sorted { $0.0.localizedStandardCompare($1.0) == .orderedAscending }
-        for (_, url) in claimed { append(url) }
-
-        let lastUsed = openerHistoryProvider?() ?? [:]
-        guard !lastUsed.isEmpty else { return result }
-        let paths = result.map { $0.url.standardizedFileURL.path }
-        let byPath = Dictionary(uniqueKeysWithValues: zip(paths, result))
-        return FavoriteFolderStore.openerOrder(paths, lastUsed: lastUsed)
-            .compactMap { byPath[$0] }
-    }
-
-    /// App 显示名。Finder 开了「显示所有文件扩展名」时 `displayName` 会带
-    /// `.app` 尾巴，菜单里不需要它。
-    private static func appDisplayName(_ url: URL) -> String {
-        let name = FileManager.default.displayName(atPath: url.path)
-        return name.lowercased().hasSuffix(".app") ? String(name.dropLast(4)) : name
-    }
-
     /// 文件 / App 图标缩到菜单标准的 16pt。
     private static func menuIcon(_ icon: NSImage) -> NSImage {
         guard let copy = icon.copy() as? NSImage else { return icon }
@@ -623,7 +565,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
               let path = info["path"] as? String,
               let app = info["app"] as? URL else { return }
         let folder = URL(fileURLWithPath: path, isDirectory: true)
-        let appName = Self.appDisplayName(app)
+        let appName = OpenerCatalog.appDisplayName(app)
         let folderName = folder.lastPathComponent
         // toast 等真打开了再报：冷启动的 App 要一两秒，提前说「已打开」是撒谎
         NSWorkspace.shared.open([folder], withApplicationAt: app,

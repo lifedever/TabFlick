@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -41,7 +42,17 @@ final class FavoriteFolderStore: ObservableObject {
     /// JSON（改它的 schema 会触发老文件的 salvage 分支）。
     private(set) var openerLastUsed: [String: Double]
 
+    /// 用户手动加进「打开方式」的 App（标准化路径）。终端点名 + LS 枚举
+    /// 都不保证全（不登记 public.folder 又不在终端名单里的就漏），
+    /// 漏网的从设置页手动补。
+    @Published private(set) var openerExtras: [String]
+    /// 用户从「打开方式」里关掉的 App（标准化路径）。只对发现来源生效；
+    /// 手动添加的关掉即从 extras 移除，不进这份名单。
+    @Published private(set) var openerHidden: Set<String>
+
     private static let openerKey = "openerLastUsed"
+    private static let openerExtrasKey = "openerExtras"
+    private static let openerHiddenKey = "openerHidden"
 
     private let file: URL
 
@@ -53,6 +64,8 @@ final class FavoriteFolderStore: ObservableObject {
         file = dir.appendingPathComponent("favorite-folders.json")
         openerLastUsed = UserDefaults.standard
             .dictionary(forKey: Self.openerKey) as? [String: Double] ?? [:]
+        openerExtras = UserDefaults.standard.stringArray(forKey: Self.openerExtrasKey) ?? []
+        openerHidden = Set(UserDefaults.standard.stringArray(forKey: Self.openerHiddenKey) ?? [])
         load()
     }
 
@@ -60,6 +73,34 @@ final class FavoriteFolderStore: ObservableObject {
     func touchOpener(appPath: String) {
         openerLastUsed[appPath] = Date().timeIntervalSince1970 * 1000
         UserDefaults.standard.set(openerLastUsed, forKey: Self.openerKey)
+    }
+
+    /// 设置页手动添加打开方式。之前被关掉过的话顺带解除隐藏。
+    func addOpenerExtra(appPath: String) {
+        if openerHidden.remove(appPath) != nil {
+            UserDefaults.standard.set(Array(openerHidden), forKey: Self.openerHiddenKey)
+        }
+        guard !openerExtras.contains(appPath) else { return }
+        openerExtras.append(appPath)
+        UserDefaults.standard.set(openerExtras, forKey: Self.openerExtrasKey)
+        log("📁 opener added: \(appPath)")
+    }
+
+    func removeOpenerExtra(appPath: String) {
+        guard openerExtras.contains(appPath) else { return }
+        openerExtras.removeAll { $0 == appPath }
+        UserDefaults.standard.set(openerExtras, forKey: Self.openerExtrasKey)
+        log("📁 opener extra removed: \(appPath)")
+    }
+
+    /// 开关某个发现来源的 App 在「打开方式」里的可见性。
+    func setOpenerHidden(_ hidden: Bool, appPath: String) {
+        if hidden {
+            guard openerHidden.insert(appPath).inserted else { return }
+        } else {
+            guard openerHidden.remove(appPath) != nil else { return }
+        }
+        UserDefaults.standard.set(Array(openerHidden), forKey: Self.openerHiddenKey)
     }
 
     enum AddOutcome {
@@ -188,6 +229,92 @@ final class FavoriteFolderStore: ObservableObject {
     private func persist() {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         try? data.write(to: file, options: .atomic)
+    }
+}
+
+/// 「打开方式」里的一个 App。
+struct OpenerApp: Identifiable, Equatable {
+    let name: String
+    let url: URL
+    var id: String { path }
+    /// 标准化路径 —— extras / hidden / lastUsed 三份账都用它当 key。
+    var path: String { url.standardizedFileURL.path }
+}
+
+/// 「打开方式」候选 App 的发现与组装。菜单和设置页共用同一份逻辑 ——
+/// 同一个组装在所有入口共用，别复制半套。
+@MainActor
+enum OpenerCatalog {
+
+    /// 终端类 App 是**没法枚举的**：Terminal / iTerm 这些不向 Launch Services
+    /// 登记 public.folder（本机实测 `urlsForApplications(toOpen:)` 连系统自带
+    /// Terminal 都不返回），而「是不是终端」没有任何 UTI / API 可查 ——
+    /// 只能按 bundle id（反向 DNS，永不本地化）点名，装了才显示。
+    /// 这是硬编码规则明文允许的场景：无法从 API 推导的列表。
+    /// 名单外的漏网 App 由用户在设置页手动补（openerExtras）。
+    static let terminalBundleIDs = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.Warp-Stable",
+        "com.mitchellh.ghostty",
+        "net.kovidgoyal.kitty",
+        "com.github.wez.wezterm",
+        "org.alacritty",
+    ]
+
+    /// App 显示名。Finder 开了「显示所有文件扩展名」时 `displayName` 会带
+    /// `.app` 尾巴，菜单里不需要它。
+    static func appDisplayName(_ url: URL) -> String {
+        let name = FileManager.default.displayName(atPath: url.path)
+        return name.lowercased().hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    /// 完整候选（含被关掉的）：Finder → 已装终端 → LS 枚举 → 手动添加。
+    /// 设置页用它列全量；菜单走 `menuOpeners`（过滤 + MRU）。
+    static func candidates(extras: [String]) -> [OpenerApp] {
+        var seen = Set<URL>()
+        var result: [OpenerApp] = []
+
+        func append(_ url: URL) {
+            let standardized = url.standardizedFileURL
+            guard seen.insert(standardized).inserted else { return }
+            result.append(OpenerApp(name: appDisplayName(url), url: url))
+        }
+
+        if let finder = NSWorkspace.shared
+            .urlForApplication(withBundleIdentifier: "com.apple.finder") {
+            append(finder)
+        }
+        for id in terminalBundleIDs {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                append(url)
+            }
+        }
+
+        // 查询用哪个目录都一样（按 public.folder 匹配），拿主目录当代表
+        let claimed = NSWorkspace.shared
+            .urlsForApplications(toOpen: FileManager.default.homeDirectoryForCurrentUser)
+            .map { (appDisplayName($0), $0) }
+            .sorted { $0.0.localizedStandardCompare($1.0) == .orderedAscending }
+        for (_, url) in claimed { append(url) }
+
+        // 手动添加的排最后（已被前面来源覆盖的会被 seen 去重掉）；
+        // 已卸载的不列出，但不动 extras 账本 —— 装回来自动恢复
+        for path in extras where FileManager.default.fileExists(atPath: path) {
+            append(URL(fileURLWithPath: path, isDirectory: true))
+        }
+        return result
+    }
+
+    /// 菜单里的最终列表：滤掉被关掉的，点过的按最近点击排前。
+    static func menuOpeners(store: FavoriteFolderStore) -> [OpenerApp] {
+        let visible = candidates(extras: store.openerExtras)
+            .filter { !store.openerHidden.contains($0.path) }
+        guard !store.openerLastUsed.isEmpty else { return visible }
+        let paths = visible.map(\.path)
+        let byPath = Dictionary(uniqueKeysWithValues: zip(paths, visible))
+        return FavoriteFolderStore.openerOrder(paths, lastUsed: store.openerLastUsed)
+            .compactMap { byPath[$0] }
     }
 }
 
