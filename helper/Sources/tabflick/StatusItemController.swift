@@ -39,6 +39,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 共用上下文动作槽位（互斥显示）。
     private var folderItems: [NSMenuItem] = []
     private let addFinderFolderItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    /// 「添加文件夹…」：弹目录选择面板收藏任意目录。常驻在文件夹列表末尾，
+    /// 不看前台 —— 「收藏当前 Finder 目录」只在 Finder 前台出现，别的 App
+    /// 下原来没有任何收藏入口（2026-09-04 用户要求）。
+    private let addFolderItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
     /// 动作槽前后的两道分隔线。动作项按前台上下文显隐后，相邻的分隔线
     /// 会叠在一起，得跟着收敛（见 menuNeedsUpdate）。每次 buildMenu
@@ -50,6 +54,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var favoriteFoldersProvider: (() -> [FavoriteFolder])?
     /// 点了「收藏当前 Finder 目录」。
     var onAddFinderFolder: (() -> Void)?
+    /// 在「添加文件夹…」面板里选定了一个目录。参数是所选路径，
+    /// 返回是否真的进了收藏（无效路径返回 false，不弹菜单）。
+    var onAddFolder: ((String) -> Bool)?
     /// 点了某文件夹的「取消收藏」。参数是标准化路径。
     var onRemoveFolder: ((String) -> Void)?
     /// 某文件夹刚被某个 App 打开（记录最近使用：平铺区按文件夹的、
@@ -172,7 +179,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         sepAfterPin = .separator()
         menu.addItem(sepAfterPin)
 
-        // 收藏的文件夹列表在 menuNeedsUpdate 时插到 sepAfterPin 下方
+        // 收藏的文件夹列表在 menuNeedsUpdate 时插到 sepAfterPin 下方，
+        // 「添加文件夹…」固定压在列表末尾（插入点在它上方，自然排到最后）
+        addFolderItem.target = self
+        addFolderItem.action = #selector(pickFolder)
+        addFolderItem.title = L10n.t("添加文件夹…", "Add Folder…")
+        addFolderItem.image = Self.symbol("plus.circle")
+        addFolderItem.isEnabled = true
+        menu.addItem(addFolderItem)
 
         menu.addItem(.separator())
 
@@ -246,16 +260,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let pinVisible = refreshFavoriteItem(browserIsFront: BrowserSupport.isSupported(front))
         let finderIsFront = front == "com.apple.finder"
         addFinderFolderItem.isHidden = !finderIsFront
-        let foldersVisible = refreshFolderLines(in: menu)
+        refreshFolderLines(in: menu)
         refreshWarningItem()
 
-        // 动作槽和文件夹列表显隐后相邻分隔线会叠在一起：中间那道只在两段
-        // 都在时要，顶上那道只要还有任意一段就要（全藏时由列表后的那道
-        // 独自分隔）。
+        // 动作槽按前台显隐后，它和文件夹区之间那道分隔线会叠到上一道上：
+        // 只在动作槽可见时要。文件夹区因「添加文件夹…」常驻而永远有内容，
+        // 顶上那道分隔线不用收敛。
         if !unauthorized {
-            let actionVisible = pinVisible || finderIsFront
-            sepAfterPin.isHidden = !(actionVisible && foldersVisible)
-            sepAfterStatus.isHidden = !(actionVisible || foldersVisible)
+            sepAfterPin.isHidden = !(pinVisible || finderIsFront)
         }
     }
 
@@ -446,22 +458,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// 「收藏的文件夹」列表：最近打开的前几个平铺，溢出的进「更多 ▸」，
     /// 每条的子菜单列出能打开它的 App。列表**始终显示**（有收藏就列）——
-    /// 在任何 App 里都要能一键打开项目，这是功能本体。
-    /// 返回列表是否有可见内容（决定外层分隔线的收敛）。
-    private func refreshFolderLines(in menu: NSMenu) -> Bool {
+    /// 在任何 App 里都要能一键打开项目，这是功能本体。区头也始终画：
+    /// 没有收藏时它下面只剩「添加文件夹…」，正好点明那一项是干什么的。
+    private func refreshFolderLines(in menu: NSMenu) {
         for item in folderItems { item.menu?.removeItem(item) }
         folderItems.removeAll()
         // 未授权菜单里没有这一区
-        guard sepAfterPin.menu === menu else { return false }
-
-        let folders = FavoriteFolderStore.byRecency(favoriteFoldersProvider?() ?? [])
-        guard !folders.isEmpty else { return false }
+        guard sepAfterPin.menu === menu else { return }
 
         var insertIndex = menu.index(of: sepAfterPin) + 1
         let header = NSMenuItem.sectionHeader(title: L10n.t("收藏的文件夹", "Favorite Folders"))
         menu.insertItem(header, at: insertIndex)
         folderItems.append(header)
         insertIndex += 1
+
+        let folders = FavoriteFolderStore.byRecency(favoriteFoldersProvider?() ?? [])
+        guard !folders.isEmpty else { return }
 
         // 「能打开文件夹的 App」查一次全体共用：查询按内容类型
         // （public.folder）走，跟具体是哪个文件夹无关。
@@ -497,7 +509,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             insertIndex += 1
             folderItems.append(more)
         }
-        return true
     }
 
     /// 一条收藏的菜单行 —— 平铺区和「更多」共用同一副面孔。
@@ -558,6 +569,28 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func addFinderFolder() {
         onAddFinderFolder?()
+    }
+
+    /// 「添加文件夹…」：目录选择面板。accessory app 不激活的话面板会沉到
+    /// 别的窗口后面（同弹 alert 的做法）。
+    @objc private func pickFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = L10n.t("选择要收藏的文件夹", "Choose a folder to add to favorites")
+        panel.prompt = L10n.t("收藏", "Add")
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard onAddFolder?(url.path) == true else { return }
+        // 收藏成功就把菜单弹出来：新收藏的那条已经在列表最前，用户点它
+        // 就能立刻打开（2026-09-04 用户要求）。要等面板真正收起再弹 ——
+        // performClick 会同步进入菜单跟踪循环，直接在这里调会卡住
+        // 面板的关闭动画。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.statusItem.button?.performClick(nil)
+        }
     }
 
     @objc private func openFolder(_ sender: NSMenuItem) {

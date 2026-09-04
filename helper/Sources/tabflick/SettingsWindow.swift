@@ -411,8 +411,8 @@ private struct FoldersPane: View {
         Form {
             Section {
                 if folders.entries.isEmpty {
-                    Text(L10n.t("还没有收藏。在 Finder 打开目录后，从状态栏菜单点「收藏当前 Finder 目录」。",
-                                "Nothing yet. Open a folder in Finder, then use “Add Current Finder Folder” in the menu bar."))
+                    Text(L10n.t("还没有收藏。从状态栏菜单点「添加文件夹…」，或在 Finder 打开目录后点「收藏当前 Finder 目录」。",
+                                "Nothing yet. Use “Add Folder…” in the menu bar, or open a folder in Finder and use “Add Current Finder Folder”."))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 } else if folders.entries.count > 6 {

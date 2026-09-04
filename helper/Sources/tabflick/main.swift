@@ -168,22 +168,34 @@ MainActor.assumeIsolated {
         statusItem.folderOpenersProvider = {
             MainActor.assumeIsolated { OpenerCatalog.menuOpeners(store: folders) }
         }
+        // 收藏一个目录并给回响。「收藏当前 Finder 目录」和「添加文件夹…」
+        // 两个入口只差「路径从哪来」，落库和 toast 是同一段。
+        // 返回是否进了收藏（重复收藏也算：它被浮到了最前）。
+        @MainActor @discardableResult
+        func addFolder(_ path: String) -> Bool {
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            switch folders.add(path: path) {
+            case .added:
+                Toast.show(L10n.t("已收藏「\(name)」",
+                                  "Added “\(name)” to favorites"))
+                return true
+            case .movedToFront:
+                Toast.show(L10n.t("「\(name)」已在收藏里，移到最前",
+                                  "“\(name)” is already a favorite — moved to front"))
+                return true
+            case .invalid:
+                return false
+            }
+        }
+        statusItem.onAddFolder = { path in
+            MainActor.assumeIsolated { addFolder(path) }
+        }
         statusItem.onAddFinderFolder = {
             FinderFront.fetchFolder { result in
                 MainActor.assumeIsolated {
                     switch result {
                     case .success(let path):
-                        let name = URL(fileURLWithPath: path).lastPathComponent
-                        switch folders.add(path: path) {
-                        case .added:
-                            Toast.show(L10n.t("已收藏「\(name)」",
-                                              "Added “\(name)” to favorites"))
-                        case .movedToFront:
-                            Toast.show(L10n.t("「\(name)」已在收藏里，移到最前",
-                                              "“\(name)” is already a favorite — moved to front"))
-                        case .invalid:
-                            break
-                        }
+                        addFolder(path)
                     case .failure(.notAuthorized):
                         let alert = NSAlert()
                         alert.alertStyle = .warning
