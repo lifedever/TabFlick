@@ -464,7 +464,7 @@ private struct FoldersPane: View {
     @ViewBuilder
     private var openWithSection: some View {
         let apps = OpenerCatalog.candidates(extras: folders.openerExtras)
-            .filter { !folders.openerHidden.contains($0.path) }
+            .filter { !folders.openerHidden.contains($0.id) }
         Section {
             if apps.count > 6 {
                 ScrollView {
@@ -517,8 +517,9 @@ private struct FoldersPane: View {
                 // 两本账一次清：extras 里的去 extras，发现来源的进 hidden。
                 // 只清一边的话，「手动加过的又能被系统枚举到」的 App
                 // 要点两次才消失。
-                folders.removeOpenerExtra(appPath: app.path)
-                folders.setOpenerHidden(true, appPath: app.path)
+                // 账本 key 是 id（变体带 # 后缀），不是 App 路径
+                folders.removeOpenerExtra(appPath: app.id)
+                folders.setOpenerHidden(true, appPath: app.id)
             } label: {
                 Image(systemName: "trash")
                     .foregroundStyle(.secondary)

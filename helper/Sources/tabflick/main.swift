@@ -159,10 +159,10 @@ MainActor.assumeIsolated {
                                   "Removed “\(name)” from favorites"))
             }
         }
-        statusItem.onFolderOpened = { path, app in
+        statusItem.onFolderOpened = { path, opener in
             MainActor.assumeIsolated {
                 folders.touch(path: path)
-                folders.touchOpener(appPath: app.standardizedFileURL.path)
+                folders.touchOpener(appPath: opener.id)
             }
         }
         statusItem.folderOpenersProvider = {

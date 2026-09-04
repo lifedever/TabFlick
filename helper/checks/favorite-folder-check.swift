@@ -115,6 +115,19 @@ do {
     check("一个不丢", order.count == paths.count)
 }
 
+// ── Claude Code deep link ───────────────────────────────────────────────
+print("claudeCodeURL：路径按 encodeURIComponent 规则编码")
+do {
+    let plain = OpenerCatalog.claudeCodeURL(folder: "/Users/me/dev")?.absoluteString
+    check("斜杠也编码", plain == "claude://code/new?folder=%2FUsers%2Fme%2Fdev", "得到 \(plain ?? "nil")")
+    let tricky = OpenerCatalog.claudeCodeURL(folder: "/a b/C++ &x=1#y/中文")?.absoluteString
+    check("空格 / + / & / = / # 全部编码，对端 URLSearchParams 不会解错",
+          tricky == "claude://code/new?folder=%2Fa%20b%2FC%2B%2B%20%26x%3D1%23y%2F%E4%B8%AD%E6%96%87",
+          "得到 \(tricky ?? "nil")")
+    let keep = OpenerCatalog.claudeCodeURL(folder: "/x-y_z.w~")?.absoluteString
+    check("unreserved 字符原样保留", keep == "claude://code/new?folder=%2Fx-y_z.w~", "得到 \(keep ?? "nil")")
+}
+
 // ── 重名消歧 ────────────────────────────────────────────────────────────
 print("菜单标题：目录名，重名补父目录")
 do {

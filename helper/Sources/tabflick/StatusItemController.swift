@@ -59,9 +59,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onAddFolder: ((String) -> Bool)?
     /// 点了某文件夹的「取消收藏」。参数是标准化路径。
     var onRemoveFolder: ((String) -> Void)?
-    /// 某文件夹刚被某个 App 打开（记录最近使用：平铺区按文件夹的、
-    /// 「打开方式」按 App 的）。参数是 (标准化路径, App URL)。
-    var onFolderOpened: ((String, URL) -> Void)?
+    /// 某文件夹刚被某个打开方式打开（记录最近使用：平铺区按文件夹的、
+    /// 「打开方式」按条目的）。参数是 (标准化路径, 打开方式)。
+    var onFolderOpened: ((String, OpenerApp) -> Void)?
     /// 「打开方式」的最终列表。过滤和 MRU 排序在数据侧做（OpenerCatalog），
     /// 菜单只管展示。
     var folderOpenersProvider: (() -> [OpenerApp])?
@@ -538,7 +538,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 let item = NSMenuItem(title: opener.name,
                                       action: #selector(openFolder(_:)), keyEquivalent: "")
                 item.target = self
-                item.representedObject = ["path": folder.path, "app": opener.url] as [String: Any]
+                item.representedObject = ["path": folder.path, "opener": opener] as [String: Any]
                 item.image = Self.menuIcon(NSWorkspace.shared.icon(forFile: opener.url.path))
                 menu.addItem(item)
             }
@@ -596,13 +596,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func openFolder(_ sender: NSMenuItem) {
         guard let info = sender.representedObject as? [String: Any],
               let path = info["path"] as? String,
-              let app = info["app"] as? URL else { return }
+              let opener = info["opener"] as? OpenerApp else { return }
         let folder = URL(fileURLWithPath: path, isDirectory: true)
-        let appName = OpenerCatalog.appDisplayName(app)
+        let appName = opener.name
         let folderName = folder.lastPathComponent
         // toast 等真打开了再报：冷启动的 App 要一两秒，提前说「已打开」是撒谎
-        NSWorkspace.shared.open([folder], withApplicationAt: app,
-                                configuration: NSWorkspace.OpenConfiguration()) { _, error in
+        let report: (Error?) -> Void = { error in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     if let error {
@@ -616,8 +615,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 }
             }
         }
-        log("📁 open \(path) with \(app.lastPathComponent)")
-        onFolderOpened?(path, app)
+        switch opener.launch {
+        case .document:
+            NSWorkspace.shared.open([folder], withApplicationAt: opener.url,
+                                    configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                report(error)
+            }
+        case .claudeCode:
+            guard let link = OpenerCatalog.claudeCodeURL(folder: path) else {
+                log("⚠️  claude code deep link failed to build for \(path)")
+                return
+            }
+            NSWorkspace.shared.open(link, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                report(error)
+            }
+        }
+        log("📁 open \(path) with \(opener.id)")
+        onFolderOpened?(path, opener)
     }
 
     @objc private func copyFolderPath(_ sender: NSMenuItem) {

@@ -75,9 +75,13 @@ final class FavoriteFolderStore: ObservableObject {
         UserDefaults.standard.set(openerLastUsed, forKey: Self.openerKey)
     }
 
-    /// 设置页手动添加打开方式。之前被关掉过的话顺带解除隐藏。
+    /// 设置页手动添加打开方式。之前被关掉过的话顺带解除隐藏 ——
+    /// 连同这个 App 的变体（key 形如 `<path>#<variant>`，见 OpenerApp.id）
+    /// 一起解除：用户选的是 Claude.app，没法单独指名「Claude Code」。
     func addOpenerExtra(appPath: String) {
-        if openerHidden.remove(appPath) != nil {
+        let unhidden = openerHidden.filter { $0 == appPath || $0.hasPrefix(appPath + "#") }
+        if !unhidden.isEmpty {
+            openerHidden.subtract(unhidden)
             UserDefaults.standard.set(Array(openerHidden), forKey: Self.openerHiddenKey)
         }
         guard !openerExtras.contains(appPath) else { return }
@@ -234,10 +238,38 @@ final class FavoriteFolderStore: ObservableObject {
 
 /// 「打开方式」里的一个 App。
 struct OpenerApp: Identifiable, Equatable {
+    /// 怎么把目录交给 App。同一个 App 可以有多种交法（Claude 桌面版：
+    /// 当文档交过去进 Cowork，走 deep link 进 Code），所以是 App 之外的
+    /// 一个独立维度，不能只靠 url 区分条目。
+    enum Launch: Equatable {
+        /// 常规：NSWorkspace 把目录当文档交给 App。
+        case document
+        /// Claude 桌面版的 Code 模式：目录当文档交过去只会进「Chat and
+        /// Cowork」，没有开关可改；它自己给 Finder 快捷操作用的是
+        /// `claude://code/new?folder=<路径>` 这条 deep link，照走。
+        case claudeCode
+    }
+
     let name: String
     let url: URL
-    var id: String { path }
-    /// 标准化路径 —— extras / hidden / lastUsed 三份账都用它当 key。
+    let launch: Launch
+
+    init(name: String, url: URL, launch: Launch = .document) {
+        self.name = name
+        self.url = url
+        self.launch = launch
+    }
+
+    /// extras / hidden / lastUsed 三份账都用它当 key：常规条目就是 App
+    /// 标准化路径（老账本原样兼容），变体拼 `#<variant>` 后缀——同一个
+    /// App 的两种交法各记各的账，最近使用互不串。
+    var id: String {
+        switch launch {
+        case .document: return path
+        case .claudeCode: return path + "#claude-code"
+        }
+    }
+    /// App 标准化路径。
     var path: String { url.standardizedFileURL.path }
 }
 
@@ -269,16 +301,40 @@ enum OpenerCatalog {
         return name.lowercased().hasSuffix(".app") ? String(name.dropLast(4)) : name
     }
 
+    /// Claude 桌面版。它登记了 public.folder，会被 LS 枚举出来（当文档
+    /// 交过去进 Cowork）；Code 模式要另走 deep link，所以是唯一一个在
+    /// 「打开方式」里占两行的 App（2026-09-04 用户定的「Claude 和
+    /// Claude Code 并存」）。bundle id 点名属于针对特定 App 行为的绕道。
+    static let claudeBundleID = "com.anthropic.claudefordesktop"
+
+    /// Claude Code 的 deep link。编码照 Claude 自家 Finder 快捷操作的
+    /// `encodeURIComponent`：只放行 RFC 3986 unreserved 字符——
+    /// `URLComponents.queryItems` 不编码 `+`，而对端 `URLSearchParams`
+    /// 会把 `+` 解成空格，「C++ projects」这种目录名就打不开。
+    nonisolated static func claudeCodeURL(folder path: String) -> URL? {
+        var unreserved = CharacterSet.alphanumerics
+        unreserved.insert(charactersIn: "-._~")
+        guard let encoded = path.addingPercentEncoding(withAllowedCharacters: unreserved)
+        else { return nil }
+        return URL(string: "claude://code/new?folder=\(encoded)")
+    }
+
     /// 完整候选（含被关掉的）：Finder → 已装终端 → LS 枚举 → 手动添加。
     /// 设置页用它列全量；菜单走 `menuOpeners`（过滤 + MRU）。
     static func candidates(extras: [String]) -> [OpenerApp] {
         var seen = Set<URL>()
         var result: [OpenerApp] = []
+        let claude = NSWorkspace.shared
+            .urlForApplication(withBundleIdentifier: claudeBundleID)?.standardizedFileURL
 
         func append(_ url: URL) {
             let standardized = url.standardizedFileURL
             guard seen.insert(standardized).inserted else { return }
             result.append(OpenerApp(name: appDisplayName(url), url: url))
+            // Claude 的 Code 变体紧跟在它后面，绕过 seen（同一个 url）
+            if standardized == claude {
+                result.append(OpenerApp(name: "Claude Code", url: url, launch: .claudeCode))
+            }
         }
 
         if let finder = NSWorkspace.shared
@@ -308,13 +364,15 @@ enum OpenerCatalog {
 
     /// 菜单里的最终列表：滤掉被关掉的，点过的按最近点击排前。
     static func menuOpeners(store: FavoriteFolderStore) -> [OpenerApp] {
+        // 账本 key 一律用 id 而不是 path：Claude 和 Claude Code 同 path，
+        // 按 path 建字典会撞 key（uniqueKeysWithValues 直接崩）
         let visible = candidates(extras: store.openerExtras)
-            .filter { !store.openerHidden.contains($0.path) }
+            .filter { !store.openerHidden.contains($0.id) }
         guard !store.openerLastUsed.isEmpty else { return visible }
-        let paths = visible.map(\.path)
-        let byPath = Dictionary(uniqueKeysWithValues: zip(paths, visible))
-        return FavoriteFolderStore.openerOrder(paths, lastUsed: store.openerLastUsed)
-            .compactMap { byPath[$0] }
+        let keys = visible.map(\.id)
+        let byKey = Dictionary(uniqueKeysWithValues: zip(keys, visible))
+        return FavoriteFolderStore.openerOrder(keys, lastUsed: store.openerLastUsed)
+            .compactMap { byKey[$0] }
     }
 }
 
