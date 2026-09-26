@@ -394,6 +394,11 @@ private struct TabSearchView: View {
             }
         }
         .frame(width: kSearchPanelWidth)
+        // 玻璃和内容之间垫一层色。玻璃的明暗由背后的网页决定（`tintColor` 只偏色相、
+        // 不改明度，PasteMemo 那轮屏上量过），深色外观浮在白底网页上就是一块浑浊的
+        // 中灰（用户 2026-09-26 截图）。深色压黑、浅色提白，保留一点透感即可 ——
+        // 判据是「它可能出现在哪些背景上」：浏览器里多数是白底页。
+        .background(scheme == .dark ? Color.black.opacity(0.42) : Color.white.opacity(0.35))
         // 窗口是 titled（见 present 里的说明），隐藏了的标题栏仍算安全区，
         // 不忽略的话输入框上方会空出一条标题栏高度
         .ignoresSafeArea()
