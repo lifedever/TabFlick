@@ -99,7 +99,7 @@
 <div class="wrap">
   <header>
     <a class="brand" href="index.html"><img src="logo.svg" alt=""><span>TabFlick</span></a>
-    <button class="lang-btn" id="langToggle">EN</button>
+    <select class="lang-btn" id="langSelect" aria-label="Language"></select>
   </header>
 
   <h1 data-zh="扩展安装说明" data-en="Installing the extension">扩展安装说明</h1>
@@ -131,8 +131,8 @@
     </li>
     <li>
       <h3 data-zh="确认连接" data-en="Confirm the connection">确认连接</h3>
-      <p data-zh="保持 TabFlick 应用运行，菜单栏图标变亮、第一行显示「已连接」即两端接通。之后按住 ⌃ 点 ⇥ 就能唤出切换器。"
-         data-en="With the TabFlick app running, the menu bar icon brightens and its first line reads Connected. Hold ⌃ and tap ⇥ to bring up the switcher.">保持 TabFlick 应用运行，菜单栏图标变亮、第一行显示「已连接」即两端接通。之后按住 ⌃ 点 ⇥ 就能唤出切换器。</p>
+      <p data-zh="保持 TabFlick 运行，菜单栏图标变亮、菜单里列出浏览器和标签数，就是两端接通了。之后按住 ⌃ 点 ⇥ 就能唤出切换器。"
+         data-en="With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.">保持 TabFlick 运行，菜单栏图标变亮、菜单里列出浏览器和标签数，就是两端接通了。之后按住 ⌃ 点 ⇥ 就能唤出切换器。</p>
     </li>
   </ol>
 
@@ -147,28 +147,9 @@
   </footer>
 </div>
 
+<script src="i18n.js"></script>
 <script>
-  const KEY = "tabflick-lang";
-  const toggle = document.getElementById("langToggle");
-  function apply(lang) {
-    document.documentElement.lang = lang;
-    for (const el of document.querySelectorAll("[data-zh][data-en]")) {
-      const value = el.dataset[lang];
-      if (value !== undefined) el.textContent = value;
-    }
-    toggle.textContent = lang === "zh" ? "EN" : "中文";
-    document.title = lang === "zh"
-      ? "TabFlick — 扩展安装说明"
-      : "TabFlick — Installing the extension";
-  }
-  let lang = localStorage.getItem(KEY)
-    || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
-  apply(lang);
-  toggle.addEventListener("click", () => {
-    lang = lang === "zh" ? "en" : "zh";
-    localStorage.setItem(KEY, lang);
-    apply(lang);
-  });
+  TabFlickI18n.init({ zh: "TabFlick — 扩展安装说明", en: "TabFlick — Installing the extension" });
 </script>
 
 </body>

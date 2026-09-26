@@ -1,222 +1,158 @@
 <h3 align="center">⌘ TabFlick</h3>
 
 <p align="center">
-  <strong>增强 Chrome 标签体验 —— 最近使用顺序切换、标签管理、置顶常驻。</strong><br>
-  按住 ⌃ 点 ⇥，按你实际使用的顺序在标签之间移动。
+  <strong>macOS 上 Chrome 的标签切换器和搜索面板。</strong><br>
+  ⌃⇥ 回到上一个用过的标签。⌘E 在一个框里找标签、书签、历史记录、文件夹和 App。
 </p>
 
 <p align="center">
   <a href="https://github.com/lifedever/TabFlick/stargazers"><img src="https://img.shields.io/github/stars/lifedever/TabFlick?style=flat-square&color=F59E0B&label=Stars" alt="Stars"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2014%2B-blue?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/badge/Chrome-116%2B-7C3AED?style=flat-square" alt="Chrome">
+  <img src="https://img.shields.io/badge/Chromium-116%2B-7C3AED?style=flat-square" alt="Chromium">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.lifedever.com/TabFlick/">🌐 <strong>官网</strong></a> ｜ <a href="#安装">🚀 <strong>快速开始</strong></a> ｜ <a href="https://www.lifedever.com/sponsor/">💖 <strong>赞助</strong></a>
-</p>
-
-<p align="center">
-  <a href="README.md">English</a>
+  <a href="https://www.lifedever.com/TabFlick/">🌐 <strong>官网</strong></a> ｜ <a href="#安装">🚀 <strong>安装</strong></a> ｜ <a href="https://www.lifedever.com/sponsor/">💖 <strong>赞助</strong></a> ｜ <a href="README.md">English</a>
 </p>
 
 ---
 
-<p align="center">
-  <img src="https://cdn.jsdelivr.net/gh/lifedever/images@master/uPic/2026/08/tabflick-demo-full.gif" width="860" alt="TabFlick 演示">
-</p>
+## 切换器 —— ⌃⇥
 
 <p align="center">
-  <sub>高清视频见<a href="https://www.lifedever.com/TabFlick/">官网</a>。</sub>
+  <img src="https://cdn.jsdelivr.net/gh/lifedever/images@master/uPic/2026/08/tabflick-demo-full.gif" width="820" alt="TabFlick 切换器">
 </p>
 
-Chrome 的 ⌃⇥ 按标签栏顺序切换。TabFlick 把它改成按最近使用顺序切换，并在按住按键期间显示切换器浮层，与 ⌘⇥ 切换应用的方式一致。
+Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你用过的顺序走，和 ⌘⇥ 切 App 一样。
 
-## 功能
+- **来回切换稳定。** 按一下 ⌃⇥ 回到上一个标签，再按一下回来。按住 ⌃ 时只移动游标，松开才切，中途经过的不算用过。
+- **网页缩略图。** 靠页面样子认标签，不用读截断的标题。
+- **键盘、方向键、鼠标都行。** ⌃⇧⇥ 反向，按住 ⌃ 时方向键移动，或直接点卡片。
+- **按窗口分开。** 只列当前窗口的标签，每个窗口有自己的顺序。设置里可以关。
+- **两种排布。** 横向长条，或一屏排下全部标签的宫格。
 
-- ⌃⇥ 切换到上一个使用的标签
-- 再点一次 ⌃⇥ 回到出发的标签，A↔B 来回切换保持稳定
-- 列表中每个标签都带网页缩略图
-- 键盘（⌃⇥、⌃⇧⇥）、方向键、鼠标点击都可以操作切换器
-- 两种切换器布局：横向长条，或自适应宫格（尽量一屏放下全部标签）
-- 浮层显示在正在使用的 Chrome 窗口正中，支持多显示器
-- 深浅色外观跟随系统设置
-- 应用内自动更新 —— 按设定频率检查 GitHub Releases，确认后一键原地安装
-- helper 或扩展不可用时，⌃⇥ 回落到 Chrome 自带的切换行为
+## 搜索面板 —— ⌘E
 
-## 工作原理
+<p align="center">
+  <img src="docs/search-demo.gif" width="820" alt="TabFlick 搜索面板">
+</p>
 
-TabFlick 由两部分组成，通过本地回环 WebSocket 通信：
+活标签、最近关闭、书签、历史记录、收藏的文件夹、已装的 App，都在同一个框里。
 
-```
-┌─────────────────────────┐         ┌──────────────────────────┐
-│  Chrome 扩展 (MV3)      │  ws://  │  Swift helper            │
-│                         │◄───────►│                          │
-│  · tabs.onActivated     │  :41573 │  · CGEventTap  (拦 ⌃⇥)   │
-│    → 维护 MRU 顺序      │         │  · NSPanel     (浮层)    │
-│  · captureVisibleTab    │         │  · MRU 状态机            │
-│    → 采集缩略图         │         │                          │
-│  · tabs.update          │         │                          │
-│    → 执行切换           │         │                          │
-└─────────────────────────┘         └──────────────────────────┘
-```
+- **Tab 换范围。** 全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用依次切，哪些进循环、什么顺序在设置里定。
+- **中文用拼音也能搜。** 全拼和首字母都认，`mnjt` 能找到「蒙牛集团」。
+- **没找到就搜网页。** 用浏览器自己的默认引擎，也可以用 GitHub、YouTube 这类站内搜索（模板可改）。
+- **在别的 App 里也能用。** 按 ⌥Space，搜所有浏览器的标签。
+- **文件夹。** 回车用上次的 App 打开收藏的文件夹，⌘↩ 换一个（Finder、终端、编辑器……）。
+- ⌘1–⌘9 直接选第几行，悬停标签行尾的 ✕ 关掉它，⌘, 打开设置。
 
-两部分缺一不可：
+## 还有这些
 
-- **扩展读不到键盘。** `Tab` 键在 Chrome 33 时就被移出了 `chrome.commands` 的可用键列表，任何扩展都无法绑定 ⌃⇥。
-- **helper 读不到标签。** 标题、MRU 顺序、缩略图和执行切换都要通过 `chrome.tabs` API。
+- **置顶常驻**：置顶的标签重启浏览器后自动回来，停在最后看的那页。
+- **自动清理闲置标签**：12 小时、24 小时或 7 天没用过就关掉，置顶、在放声音的、标签组里的不动。默认关。
+- **菜单栏标签列表**：按窗口列出所有标签，还有最近关闭的。
+- **收藏的文件夹**：常用目录收在菜单栏，选任意 App 打开。
+- **全局切换器**：在浏览器之外按 ⌃⇥，按浏览器分组列出所有标签。默认关。
+- **多个浏览器同时用**：Chrome、Edge、Brave 等 Chromium 浏览器，各自一份列表。
+- **八种语言**：简体中文、繁體中文、English、日本語、한국어、Español、Français、Deutsch。
+- **应用内更新**：检查 GitHub Releases，原地替换。
+- **出问题不会吞键**：扩展没连上时，⌃⇥ 交回给 Chrome 自带的切换，不会按了没反应。
 
 ## 安装
 
-### 环境要求
+需要 macOS 14 以上，Chrome（或其他 Chromium 浏览器）116 以上。
 
-- macOS 14 或更高
-- Google Chrome 116 或更高
-- Xcode 命令行工具（仅源码构建需要）—— `xcode-select --install`
+1. **装 App。** 从 [Releases](https://github.com/lifedever/TabFlick/releases/latest) 下载对应的 DMG（Apple 芯片选 `arm64`，Intel 选 `x86_64`），把 TabFlick 拖进「应用程序」。第一次打开如果提示无法验证开发者，在「应用程序」里右键 TabFlick 选「打开」。
+2. **装扩展。** 下载 [TabFlick-Extension.zip](https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip)，解压到不会误删的位置，打开 `chrome://extensions`，开启开发者模式，点「加载已解压的扩展程序」选中文件夹。[图文步骤](https://www.lifedever.com/TabFlick/install-extension.html)。
+3. **给辅助功能权限。** 第一次启动会弹出引导，把 TabFlick 图标拖进「辅助功能」列表，App 会自动重启。菜单栏图标变亮就是两端连上了。
 
-### 方式一 —— 下载安装（推荐）
+扩展要标签、书签、历史记录、图标、搜索这几项权限，数据只通过本机 WebSocket 交给同一台 Mac 上的 TabFlick。升级后 Chrome 提示新权限时点允许，再重新加载扩展。
 
-1. 从 [Releases](https://github.com/lifedever/TabFlick/releases/latest) 下载对应本机的 DMG：Apple Silicon 选 `arm64`，Intel 选 `x86_64`
-2. 把 **TabFlick.app** 拖进「应用程序」并启动 —— 引导浮层会带你完成辅助功能授权
-3. 加载扩展（见下方步骤 3）—— 这一步任何安装方式都需要
-4. 完成。之后的新版本可以自动更新：TabFlick 按设定频率检查 GitHub Releases，确认后一键原地安装
-
-### 方式二 —— 源码构建
-
-### 1. 克隆仓库
+### 源码构建
 
 ```bash
 git clone https://github.com/lifedever/TabFlick.git
 cd TabFlick
+./scripts/dev-run.sh                      # 调试运行 helper
+./scripts/build-app.sh 0.0.0 --install    # 或者打出 TabFlick.app 并安装
 ```
 
-### 2. 编译 helper
+别用裸的 `swift build`：这两个脚本会把 SDK 路径传给链接器，不传的话二进制记的是 SDK 14.0，macOS 会按旧外观画整个 App。
 
-```bash
-cd helper
-swift build -c release
-```
+扩展按第 2 步加载 `extension/` 目录。从终端运行时，辅助功能权限归到终端名下，授权后要完全退出终端（⌘Q）再打开。
 
-产物在 `helper/.build/release/tabflick`。
+## 快捷键
 
-> 开发阶段用 `swift build` / `swift run`（debug 模式）编译快得多。
+都可以在设置里改。
 
-### 3. 加载扩展
+**切换器**（浏览器在前台时）
 
-1. 打开 `chrome://extensions`
-2. 右上角打开 **开发者模式**
-3. 点击 **加载已解压的扩展程序**
-4. 选择本仓库的 `extension/` 目录
-
-### 4. 授予辅助功能权限
-
-helper 通过 `CGEventTap` 在 Chrome 收到之前拦截 ⌃⇥，这需要辅助功能权限。
-
-先启动一次：
-
-```bash
-./.build/release/tabflick
-```
-
-macOS 会弹出授权提示。授权给启动这个二进制的应用（终端、iTerm 等），然后完全退出该应用再重新打开 —— 权限在进程启动时读取。
-
-如果 `CGEvent.tapCreate` 仍然失败，在 **系统设置 → 隐私与安全性 → 输入监控** 里也打开同一个应用。
-
-### 5. 运行
-
-```bash
-./.build/release/tabflick
-```
-
-启动输出：
-
-```
-[HH:MM:SS.mmm] tabflick started — binary built ...
-[HH:MM:SS.mmm] WebSocket server listening → ws://127.0.0.1:41573/
-[HH:MM:SS.mmm] Keyboard hook installed — waiting for ⌃⇥ in Chrome
-[HH:MM:SS.mmm] ✅ Extension connected (1 client(s))
-```
-
-最后一行表示扩展已连上 helper。（运行日志统一为英文。）
-
-## 使用
-
-### 快捷键
-
-| 操作 | 效果 |
+| 按键 | 效果 |
 |---|---|
-| 点一下 ⌃⇥ 松开 | 切换到上一个使用的标签 |
-| 连点两下 ⌃⇥ | 回到出发时的标签 |
-| 按住 ⌃ 连点 ⇥ | 沿使用历史继续往回移动 |
-| 按住 ⌃ 按 ⌃⇧⇥ | 往前移动 |
-| 按住 ⌃ 按 ← 或 → | 用方向键移动游标 |
-| 按住 ⌃ 按 ↑ 或 ↓ | 按行移动（宫格布局） |
-| 按住 ⌃ 点击卡片 | 立即切换到该标签 |
-| 按住 ⌃ 鼠标悬停 | 用鼠标移动游标 |
+| ⌃⇥ | 切到上一个用过的标签 |
+| ⌃⇥⇥… | 按住 ⌃ 连点，继续往回走 |
+| ⌃⇧⇥ | 反向 |
+| ⌃ ← → ↑ ↓ | 按住 ⌃ 时移动（宫格里 ↑↓ 按行） |
+| 松开 ⌃ | 切过去 |
 
-浮层在按下 ⇥ 时出现，松开 ⌃ 时关闭。快速点一下会短暂闪现，与 ⌘⇥ 的行为一致。
+**搜索面板**
 
-### 设置
+| 按键 | 效果 |
+|---|---|
+| ⌘E | 在浏览器里打开，再按一次关闭 |
+| ⌥Space | 在别的 App 里打开，搜所有浏览器 |
+| ⇥ / ⇧⇥ | 切换范围 |
+| ⌘1–⌘9 | 直接选第几行 |
+| ⌘↩ | 文件夹换一个 App 打开 |
+| ⌘, | 打开设置 |
 
-从菜单栏图标打开设置窗口（「设置…」，或窗口聚焦时按 ⌘,），点击 Chrome 工具栏上的 TabFlick 图标也可以。改动立即生效，无需重启。
+## 设置
 
-| 设置项 | 默认 | 作用 |
-|---|---|---|
-| 只切换当前窗口的标签 | 开 | 切换器只列出正在使用的那个 Chrome 窗口的标签。关闭后所有窗口的标签合并成一张列表。 |
-| 切换器布局 | 横向长条 | 宫格会自动换行，尽量一屏放下全部标签；此时 ⌃↑/⌃↓ 按行移动。 |
-| 自动检查更新 | 每天 | 每天 / 每周 / 从不。发现新版本后确认一次即可自动下载、原地安装并重启。 |
-| 语言 / 外观 / 开机时启动 | — | 界面语言（中/英）、深浅色、登录自启。 |
+从菜单栏图标、Chrome 工具栏的 TabFlick 图标，或搜索面板里按 ⌘, 打开。改了立即生效。
 
-两种模式下每个窗口都保留各自的历史。关闭「只切换当前窗口」只是把列表合并展示，不会丢弃任何记录。
+| 分页 | 内容 |
+|---|---|
+| 通用 | 语言、外观、开机启动、检查更新、全局切换器排除的 App |
+| 切换器 | 快捷键、按窗口分开、排布、全局切换器 |
+| 搜索面板 | 开关、两个快捷键、「全部」没输入时显示什么、Tab 顺序和开关、站内搜索模板 |
+| 标签管理 | 置顶标签、闲置标签存活时间、置顶快捷键 |
+| 文件夹管理 / 打开方式 | 收藏的文件夹，以及打开它们时可选的 App |
+| 浏览器 | 每个浏览器的连接状态和扩展版本 |
 
-### 标签排序规则
+## 工作原理
 
-列表分为两段：
+```
+┌─────────────────────────┐         ┌──────────────────────────┐
+│  Browser extension (MV3)│  ws://  │  Swift helper            │
+│                         │◄───────►│                          │
+│  · tabs / bookmarks     │  :41573 │  · CGEventTap  (keys)    │
+│  · history / favicons   │         │  · NSPanel     (panels)  │
+│  · captureVisibleTab    │         │  · MRU state machine     │
+└─────────────────────────┘         └──────────────────────────┘
+```
 
-1. **本次会话访问过的标签** —— 按最后访问时间排序，最近的在前
-2. **从未打开过的标签** —— 恢复的会话、后台打开的链接，排在第一段之后，按标签栏顺序
+- **扩展读不到键盘。** Chrome 33 起 `chrome.commands` 不接受带 Tab 的快捷键，任何扩展都绑不了 ⌃⇥。
+- **原生进程读不到标签。** 标签、书签、历史记录、缩略图和切换都要走 Chrome 的扩展 API。
 
-刚启动 helper 时第一段是空的，所以列表初始等同于标签栏顺序，随着使用会逐步重排。
-
-### 缩略图
-
-`captureVisibleTab` 只能截取当前可见的标签，因此 TabFlick 在每次标签被激活时截取一张。MRU 列表中的标签都曾被激活过，缩略图会在正常使用中逐步补齐。
-
-`chrome://` 页面和 Chrome 应用商店无法截图，这是 Chrome 的限制，这些卡片显示 favicon。
+缩略图：`captureVisibleTab` 只能截当前可见的标签，所以每次标签被激活时截一张，用着用着就齐了。`chrome://` 页面和应用商店截不了，显示网站图标。
 
 ## 常见问题
 
-排查从 helper 日志开始：`~/Library/Logs/TabFlick/tabflick.log`，同时也打印在终端。日志每次启动时截断，因此内容始终对应当前这次运行。
+日志在 `~/Library/Logs/TabFlick/tabflick.log`，每次启动清空。
 
-### 按 ⌃⇥ 没有反应
+- **⌃⇥ 没反应 / 还是按标签栏顺序切。** 在日志里找 `✅ Extension connected`。没有这一行说明扩展没连上 App：确认扩展在 `chrome://extensions` 里是开着的、TabFlick 在运行。没连上时 TabFlick 会故意把 ⌃⇥ 交还给 Chrome。
+- **搜索面板里没有书签或历史记录。** 扩展比 App 旧。下载最新的扩展包替换原文件夹，再重新加载。
+- **`CGEvent.tapCreate failed`。** 辅助功能权限没给或已失效。重新授权后完全退出 TabFlick 再打开，macOS 只在启动时读这项权限。
+- **Chrome 提示停用开发者模式扩展。** 所有未打包的扩展都会有这个提示，不影响 TabFlick。
 
-在日志中查找 `✅ Extension connected`。
+## 参与翻译
 
-- **没有这一行** —— 扩展没有连上 helper。确认 helper 进程在运行，且扩展在 `chrome://extensions` 中处于启用状态。
-- **有这一行，但仍是原生切换** —— 说明连接在之后断开了。TabFlick 在断连时会把 ⌃⇥ 放行给 Chrome，因此原生切换正是预期的回落行为。
-
-### `CGEvent.tapCreate failed`
-
-辅助功能权限缺失或未生效。按安装步骤 4 处理。注意终端应用必须完全退出（⌘Q，仅关闭窗口不够）后重开，新授予的权限才会生效。
-
-### 改了代码没有变化
-
-helper 不支持热重载。
-
-- **改了 helper** —— 第一行日志会打印二进制的编译时间，早于你最后一次编译就说明旧进程还在跑，停掉重启即可。
-- **改了扩展** —— 在 `chrome://extensions` 上点击该扩展卡片的 ↻。
-
-### Chrome 提示「停用开发者模式扩展」
-
-这是 Chrome 对所有以 unpacked 方式加载的扩展的通用提示，不影响 TabFlick 使用。
-
-### 浮层出现在错误的显示器上
-
-浮层跟随最前面的 Chrome 窗口。多个显示器上都有 Chrome 窗口时，以最近位于最前的那个为准。
+界面文案写在代码里，形如 `L10n.t("中文", "English")`；其他语言是从 `scripts/l10n/<lang>.json` 生成的翻译表。欢迎改进：改 JSON，然后跑 `python3 scripts/l10n/build.py --strict`。术语和语气见 [scripts/l10n/GUIDE.md](scripts/l10n/GUIDE.md)。
 
 ## 赞助
 
-TabFlick 免费且开源。如果它对你有用，可以 [赞助开发](https://www.lifedever.com/sponsor/) 💖
+TabFlick 免费开源。觉得有用的话，可以[赞助开发](https://www.lifedever.com/sponsor/) 💖
 
 ## 许可证
 

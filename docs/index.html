@@ -74,12 +74,12 @@
   /* 赞助是唯一一个「请求读者做点什么」的入口，给点颜色和其余导航区分开 */
   .header-link.sponsor { color: #E0245E; }
   .header-link.sponsor:hover { background: rgba(224, 36, 94, 0.10); }
-  #langToggle {
+  #langSelect {
     font: inherit; font-size: 13px; cursor: pointer; margin-left: 6px;
     color: var(--text-secondary); background: var(--bg-alt);
-    border: 1px solid var(--border-strong); border-radius: 7px; padding: 5px 11px;
+    border: 1px solid var(--border-strong); border-radius: 7px; padding: 5px 8px;
   }
-  #langToggle:hover { color: var(--text-heading); }
+  #langSelect:hover { color: var(--text-heading); }
 
   /* 首屏 */
   .hero { text-align: center; padding: 84px 0 64px; }
@@ -211,7 +211,7 @@
     <a class="header-link" href="#install" data-zh="安装" data-en="Install">安装</a>
     <a class="header-link" href="https://github.com/lifedever/TabFlick" target="_blank" rel="noreferrer">GitHub</a>
     <a class="header-link sponsor" href="https://www.lifedever.com/sponsor/" target="_blank" rel="noreferrer" data-zh="赞助" data-en="Sponsor">赞助</a>
-    <button id="langToggle" type="button">EN</button>
+    <select id="langSelect" aria-label="Language"></select>
   </div>
 </header>
 
@@ -422,28 +422,10 @@
   </div>
 </footer>
 
+<script src="i18n.js"></script>
 <script>
-  // 双语切换：文案直接放在 data-zh / data-en 上，赋值只走 textContent。
-  const KEY = "tabflick-lang";
-  const toggle = document.getElementById("langToggle");
-  function apply(lang) {
-    document.documentElement.lang = lang;
-    for (const el of document.querySelectorAll("[data-zh][data-en]")) {
-      const value = el.dataset[lang];
-      if (value !== undefined) el.textContent = value;
-    }
-    toggle.textContent = lang === "zh" ? "EN" : "中文";
-    document.title = lang === "zh"
-      ? "TabFlick — Chrome 的标签切换器和搜索面板"
-      : "TabFlick — tab switcher and search panel for Chrome";
-  }
-  let lang = localStorage.getItem(KEY) || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
-  apply(lang);
-  toggle.addEventListener("click", () => {
-    lang = lang === "zh" ? "en" : "zh";
-    localStorage.setItem(KEY, lang);
-    apply(lang);
-  });
+  TabFlickI18n.init({ zh: "TabFlick — Chrome 的标签切换器和搜索面板",
+                      en: "TabFlick — tab switcher and search panel for Chrome" });
 </script>
 </body>
 </html>
