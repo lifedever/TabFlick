@@ -19,6 +19,14 @@ extension TabInfo {
     var relativeLastAccessed: String? { relativeTime(msEpoch: lastAccessed) }
 }
 
+/// 一条书签（扩展把整棵树摊平后发来的）。
+struct BookmarkInfo: Decodable {
+    let title: String
+    let url: String
+    /// 所在文件夹路径，如「书签栏 / 工具」；直接放在根下的为空。
+    let path: String
+}
+
 /// 一枚 favicon 及其视觉属性。
 struct IconInfo {
     let image: NSImage
@@ -105,6 +113,8 @@ final class MRUController {
     private let server: WebSocketServer
     private let settings: AppSettings
     private let overlay: OverlayPanel
+    /// ⌘E 唤出的标签搜索面板。和切换器浮层各管各的，不共享游标和快照。
+    private let search = TabSearchPanel()
     private let icons = IconCache()
 
     /// 网页缩略图缓存（内存 + 磁盘，按 URL 索引）。
@@ -140,6 +150,9 @@ final class MRUController {
         var browser: String?
         /// 扩展上报的自身版本（requestSettings 握手带来）。
         var extVersion: String?
+        /// 该浏览器的全部书签（摊平），扩展连上时整份推过来、变动时整份重推。
+        /// 只放内存：扩展一重连就有，不值得落盘。
+        var bookmarks: [BookmarkInfo] = []
     }
 
     private var clients: [UUID: ClientState] = [:]
@@ -400,6 +413,8 @@ final class MRUController {
     /// 单独算一份。
     private func updateReadiness() {
         setEventTapReady(connected && switcherTabs.count > 1)
+        // 搜索面板不按窗口过滤，也不要求两个以上：一个标签也搜得到
+        setEventTapSearchReady(connected && !tabs.isEmpty)
 
         // 全局切换器「按了没反应」有两种完全不同的原因：拦截没开（就绪为 false，
         // 键被放行）和路由判错（吞了却没弹）。日志里要能一眼分开，所以
@@ -439,6 +454,20 @@ final class MRUController {
         overlay.model.onClose = { [weak self] itemID in
             self?.closeTab(itemID: itemID)
         }
+        search.pickHandler = { [weak self] pick in
+            self?.pickFromSearch(pick)
+        }
+        search.closeHandler = { [weak self] itemID in
+            self?.closeFromSearch(itemID: itemID)
+        }
+        search.onClose = { setEventTapSearchPanelOpen(false) }
+        // 启动收尾后离屏预热搜索面板（照 PasteMemo 快捷面板的做法），首次 ⌘E 不再
+        // 承担首次渲染的一次性抖动
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.search.warmUp() }
+        }
+        // 拼音字缓存也顺手在后台填热（见 Pinyin.prewarm）：搜索候选里已关闭记录占大头
+        Pinyin.prewarm(closedTabs.entries.prefix(600).map(\.title))
     }
 
     /// 鼠标悬停：把状态机游标移过去，再回写视觉高亮。
@@ -510,6 +539,98 @@ final class MRUController {
         armWatchdog()
     }
 
+    // MARK: - 标签搜索
+
+    /// 当前浏览器的全部标签（不按窗口过滤 —— 搜索的目的就是「找那个标签」，
+    /// 不该被它在哪个窗口挡住），MRU 顺序。
+    private var searchItems: [SwitcherItem] {
+        guard let id = activeClientID else { return [] }
+        return tabs.map { SwitcherItem(tab: $0, browser: nil, clientID: id) }
+    }
+
+    /// 当前浏览器的已关闭记录（搜索时的「最近关闭」候选），已按关闭时间降序。
+    /// 取前 300 条足够：面板只列 5 条匹配，再往前的记录用户自己也记不得了。
+    private var searchClosed: [ClosedTab] {
+        let browser = activeBrowser
+        return Array(closedTabs.entries.lazy.filter { $0.browser == browser }.prefix(300))
+    }
+
+    /// 当前浏览器的书签。
+    private var searchBookmarks: [BookmarkInfo] {
+        activeClientID.flatMap { clients[$0]?.bookmarks } ?? []
+    }
+
+    /// favicon 按 favIconUrl 索引（活标签和已关闭记录共用）。
+    private func iconMap(for items: [SwitcherItem], closed: [ClosedTab]) -> [String: IconInfo] {
+        var map: [String: IconInfo] = [:]
+        for url in items.map(\.tab.favIconUrl) + closed.map(\.favIconUrl) where map[url] == nil {
+            if let info = icons.image(for: url) { map[url] = info }
+        }
+        return map
+    }
+
+    /// 面板开着时把当前数据推过去。
+    private func refreshSearch(animated: Bool = false) {
+        guard search.isVisible else { return }
+        let items = searchItems
+        let closed = searchClosed
+        search.update(items: items, closed: closed, bookmarks: searchBookmarks,
+                      icons: iconMap(for: items, closed: closed), animated: animated)
+    }
+
+    /// 搜索快捷键：开着就关，关着就开。cycling 中不开 —— 两个浮层叠一起没法用。
+    func toggleTabSearch() {
+        if search.isVisible {
+            search.close()
+            return
+        }
+        guard !cycling else { return }
+        let items = searchItems
+        guard !items.isEmpty else { return }
+        let closed = searchClosed
+        // 已关闭记录的 favicon 平时只预热了菜单那 20 条，搜索候选多得多，补最近 60 条
+        //（再往前的命中了也就显示 globe，不值得每次打开都发几百个请求）
+        icons.prefetch(closed.prefix(60).map(\.favIconUrl)) { [weak self] in self?.refreshOverlayImages() }
+        let bookmarks = searchBookmarks
+        search.show(items: items, closed: closed, bookmarks: bookmarks,
+                    icons: iconMap(for: items, closed: closed))
+        setEventTapSearchPanelOpen(true)
+        log("🔍 tab search opened: \(items.count) tabs, \(closed.count) closed, \(bookmarks.count) bookmarks")
+    }
+
+    /// 面板里选定了一项。面板已经关掉、键盘焦点回到了浏览器。
+    private func pickFromSearch(_ pick: SearchPick) {
+        switch pick {
+        case .tab(let item):
+            log("🔍 pick → \(item.tab.title.prefix(50)) (tabId \(item.tab.id))")
+            server.send(["type": "switch", "tabId": item.tab.id], to: item.clientID)
+        case .closed(let entry):
+            log("🔍 reopen closed → \(entry.displayTitle.prefix(50))")
+            reopenClosedTab(id: entry.id, browser: entry.browser)
+        case .url(let url):
+            guard let clientID = activeClientID else { return }
+            log("🔍 open url → \(url.prefix(80))")
+            server.send(["type": "reopen", "url": url], to: clientID)
+        case .bookmark(let bookmark):
+            guard let clientID = activeClientID else { return }
+            log("🔍 open bookmark → \(bookmark.title.prefix(50))")
+            server.send(["type": "reopen", "url": bookmark.url], to: clientID)
+        }
+    }
+
+    /// 面板里关掉一个活标签（⌘⌫ / 行尾 ✕）。面板不关，列表原地收缩。
+    /// 和切换器的 closeTab 一样点对点发给所属连接、本地同步剔除。
+    private func closeFromSearch(itemID: String) {
+        guard let item = search.model.all.first(where: { $0.id == itemID }),
+              search.model.canCloseTabs else { return }
+        log("🔍 ✕ close → \(item.tab.title.prefix(50)) (tabId \(item.tab.id))")
+        server.send(["type": "close", "tabId": item.tab.id], to: item.clientID)
+        clients[item.clientID]?.tabs.removeAll { $0.id == item.tab.id }
+        publishStatus()
+        updateReadiness()
+        refreshSearch(animated: true)
+    }
+
     // MARK: - 来自 WebSocket
 
     func handleMessage(_ data: Data, from clientID: UUID) {
@@ -531,9 +652,20 @@ final class MRUController {
             }
             updateReadiness()
             publishStatus()
+            if clientID == activeClientID { refreshSearch() }
             if !cycling, clientID == activeClientID {
                 log("MRU updated: \(decoded.count) tabs, current: \(decoded.first?.title.prefix(40) ?? "?")")
             }
+
+        case "bookmarks":
+            guard clients[clientID] != nil,
+                  let raw = root["items"],
+                  let payload = try? JSONSerialization.data(withJSONObject: raw),
+                  let decoded = try? JSONDecoder().decode([BookmarkInfo].self, from: payload) else { return }
+            clients[clientID]?.bookmarks = decoded
+            Pinyin.prewarm(decoded.map(\.title))
+            log("🔖 bookmarks: \(decoded.count) from \(effectiveBrowser(of: clientID))")
+            if clientID == activeClientID { refreshSearch() }
 
         case "thumb":
             guard let url = root["url"] as? String, !url.isEmpty,
@@ -568,6 +700,7 @@ final class MRUController {
             }
             guard !records.isEmpty else { return }
             closedTabs.record(records)
+            refreshSearch()
             // 菜单里这一段也要有图标。活着时缓存过的能直接命中，剩下的
             // （helper 重启后）在这里补拉 —— 只拉菜单真正会显示的那些，
             // 一次清理几百个标签时不能顺手发几百个并发请求出去。
@@ -742,6 +875,8 @@ final class MRUController {
             endCycling()
             resetEventTapCycling()
         }
+        // 面板里列的是这条连接的标签，连接没了选什么都发进空气
+        if wasActive { search.close() }
         updateReadiness()
         publishStatus()
     }
@@ -1132,6 +1267,9 @@ final class MRUController {
         }
         overlay.model.icons = iconMap
         overlay.model.thumbs = thumbMap
+        if search.isVisible {
+            search.model.icons = self.iconMap(for: search.model.all, closed: search.model.closed)
+        }
 
         // 折射背景的源图：当前标签（MRU 第一个）那张**完整视口**的截图。
         // 浮层会按自己盖住了窗口的哪一块去裁它 —— 裁剪归浮层做，这里只负责

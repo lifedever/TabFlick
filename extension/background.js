@@ -635,6 +635,52 @@ async function activateTab(tabId) {
   }
 }
 
+// ── 书签 ────────────────────────────────────────────────────────────────
+//
+// helper 侧的 ⌘E 搜索面板要能搜书签。整棵树摊平发过去（标题、网址、所在文件夹
+// 路径），连接建立时发一次，之后任何增删改移都整份重发（合并 500ms）——增量
+// 同步要维护两边一致性，几千条书签也就一两百 KB，不值得。helper 只放内存，
+// 重连即重发，不落盘。
+
+const BOOKMARKS_DEBOUNCE_MS = 500;
+let bookmarksTimer = null;
+
+async function pushBookmarks() {
+  if (!connected || !chrome.bookmarks) return;
+  let tree;
+  try {
+    tree = await chrome.bookmarks.getTree();
+  } catch (e) {
+    send({ type: "log", message: `bookmarks.getTree failed: ${e}` });
+    return;
+  }
+  const items = [];
+  const walk = (node, path) => {
+    if (node.url) {
+      // javascript: / chrome:// 这类打不开的不发
+      if (node.url.startsWith("http")) items.push({ title: node.title ?? "", url: node.url, path });
+      return;
+    }
+    // 根节点没有标题，它的孩子才是「书签栏 / 其他书签」这一层
+    const next = node.title ? (path ? `${path} / ${node.title}` : node.title) : path;
+    for (const child of node.children ?? []) walk(child, next);
+  };
+  for (const root of tree) walk(root, "");
+  send({ type: "bookmarks", items });
+}
+
+function scheduleBookmarks() {
+  clearTimeout(bookmarksTimer);
+  bookmarksTimer = setTimeout(pushBookmarks, BOOKMARKS_DEBOUNCE_MS);
+}
+
+// 没有 bookmarks 权限时（老 manifest 没重载）这些事件不存在，跳过即可
+if (chrome.bookmarks) {
+  for (const name of ["onCreated", "onRemoved", "onChanged", "onMoved", "onImportEnded"]) {
+    chrome.bookmarks[name]?.addListener(scheduleBookmarks);
+  }
+}
+
 // ── WebSocket ───────────────────────────────────────────────────────────
 
 function send(obj) {
@@ -768,6 +814,7 @@ chrome.runtime.onMessage.addListener((message) => {
         // 附带扩展版本：helper 核对 major.minor 配套，不一致会提示用户更新扩展
         send({ type: "requestSettings", extVersion: chrome.runtime.getManifest().version });
         pushMRU();
+        pushBookmarks();
         chrome.tabs
           .query({ active: true, lastFocusedWindow: true })
           .then(([tab]) => { if (tab) scheduleThumbnail(tab.id, tab.windowId); });

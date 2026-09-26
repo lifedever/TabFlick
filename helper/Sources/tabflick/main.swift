@@ -288,6 +288,14 @@ MainActor.assumeIsolated {
                 configureGlobalHotkey(keyCode: settings.globalHotkey.map { Int64($0.keyCode) },
                                       flags: settings.globalHotkey?.cgFlags ?? [],
                                       enabled: settings.globalSwitcher)
+                // 标签搜索键。弹面板要查浏览器窗口位置，不在 tap 回调里直接做
+                configureSearchHotkey(keyCode: settings.searchHotkey.map { Int64($0.keyCode) },
+                                      flags: settings.searchHotkey?.cgFlags ?? [],
+                                      enabled: settings.tabSearch) {
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { controller.toggleTabSearch() }
+                    }
+                }
             }
         }
         settings.onHotkeyChange = applyHotkeys

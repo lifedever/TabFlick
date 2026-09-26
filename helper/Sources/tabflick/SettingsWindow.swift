@@ -145,6 +145,22 @@ private struct SwitcherPane: View {
                 Text(L10n.t("全局切换器", "Global switcher"))
             }
 
+            Section {
+                Toggle(isOn: $settings.tabSearch) {
+                    Text(L10n.t("搜索标签", "Search tabs"))
+                }
+                .toggleStyle(.switch)
+
+                Text(L10n.t(
+                    "按 \(settings.searchHotkey?.displaySpaced ?? "⌘ E") 弹出搜索框，输标题、网址或拼音找标签，也搜最近关闭的和书签；按住 ⌘ 时用 1–\(kSearchQuickPickCount) 直接选，⌘⌫ 关掉选中的标签。网页自己的 \(settings.searchHotkey?.displaySpaced ?? "⌘ E") 会被盖住，可以在「快捷键」里换一个。",
+                    "Press \(settings.searchHotkey?.displaySpaced ?? "⌘ E") to search tabs by title, URL or pinyin, plus recently closed tabs and bookmarks; hold ⌘ and press 1–\(kSearchQuickPickCount) to pick directly, ⌘⌫ closes the selected tab. It overrides the page's own \(settings.searchHotkey?.displaySpaced ?? "⌘ E") — change the key under Shortcuts."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("标签搜索", "Tab search"))
+            }
+
             excludedSection
         }
         .formStyle(.grouped)
@@ -706,7 +722,7 @@ private struct OpenWithPane: View {
 private struct HotkeyPane: View {
     @ObservedObject var settings: AppSettings
 
-    private enum Target { case switcher, global, pin }
+    private enum Target { case switcher, global, search, pin }
     @State private var recording: Target?
     @State private var monitor: Any?
 
@@ -725,6 +741,13 @@ private struct HotkeyPane: View {
                     placeholder: L10n.t("同切换器键", "Same as switcher"),
                     clear: { settings.globalHotkey = nil })
                     .disabled(!settings.globalSwitcher)
+
+                row(label: L10n.t("搜索标签", "Search tabs"),
+                    target: .search,
+                    current: settings.searchHotkey?.displaySpaced,
+                    placeholder: "⌘ E",
+                    clear: { settings.searchHotkey = nil })
+                    .disabled(!settings.tabSearch)
 
                 row(label: L10n.t("置顶 / 取消置顶当前标签", "Pin / unpin current tab"),
                     target: .pin,
@@ -815,6 +838,7 @@ private struct HotkeyPane: View {
             switch target {
             case .switcher: settings.switcherHotkey = config
             case .global:   settings.globalHotkey = config
+            case .search:   settings.searchHotkey = config
             case .pin:      settings.pinHotkey = config
             }
             return nil   // 这次按键被录制吃掉，不下发

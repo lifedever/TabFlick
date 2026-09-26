@@ -262,6 +262,8 @@ final class AppSettings: ObservableObject {
         static let pinHotkey = "pinHotkey"
         static let switcherHotkey = "switcherHotkey"
         static let globalHotkey = "globalHotkey"
+        static let searchHotkey = "searchHotkey"
+        static let tabSearch = "tabSearch"
         static let globalSwitcher = "globalSwitcher"
         static let globalSwitcherStyle = "globalSwitcherStyle"
         static let globalExcludedApps = "globalExcludedApps"
@@ -429,6 +431,29 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 标签搜索面板的开关。默认开。纯 helper 侧，改的是拦截范围，走 onHotkeyChange
+    /// 一并重挂（它和搜索键在 event tap 里是同一组状态）。
+    @Published var tabSearch: Bool {
+        didSet {
+            guard oldValue != tabSearch else { return }
+            UserDefaults.standard.set(tabSearch, forKey: Key.tabSearch)
+            onHotkeyChange?()
+        }
+    }
+
+    /// 标签搜索面板的触发键。nil = 默认 ⌘E。
+    @Published var searchHotkey: HotkeyConfig? {
+        didSet {
+            guard oldValue != searchHotkey else { return }
+            if let hk = searchHotkey, let data = try? JSONEncoder().encode(hk) {
+                UserDefaults.standard.set(data, forKey: Key.searchHotkey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Key.searchHotkey)
+            }
+            onHotkeyChange?()
+        }
+    }
+
     /// 待补做的取消置顶。目标浏览器下次连上时随设置下发，执行完即清除。
     /// 不触发 onChange —— 它跟着 settings payload 走，不需要额外推送。
     @Published var pendingUnpins: [PendingUnpin] {
@@ -534,6 +559,9 @@ final class AppSettings: ObservableObject {
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
         globalHotkey = defaults.data(forKey: Key.globalHotkey)
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
+        searchHotkey = defaults.data(forKey: Key.searchHotkey)
+            .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
+        tabSearch = defaults.object(forKey: Key.tabSearch) == nil ? true : defaults.bool(forKey: Key.tabSearch)
         globalSwitcher = defaults.bool(forKey: Key.globalSwitcher)   // 未设置即默认 false
         globalSwitcherStyle = GlobalSwitcherStyle(rawValue: defaults.string(forKey: Key.globalSwitcherStyle) ?? "") ?? .list
         globalExcludedApps = defaults.data(forKey: Key.globalExcludedApps)

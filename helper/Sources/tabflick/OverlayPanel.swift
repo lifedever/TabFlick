@@ -918,6 +918,10 @@ final class OverlayPanel {
         self.settings = settings
     }
 
+    /// 给别的浮层（标签搜索面板）共用同一套背板与圆角，别各抄一份常量。
+    static var panelCornerRadius: CGFloat { kPanelCornerRadius }
+    static var usesGlassBackdrop: Bool { kGlassBackdrop }
+
     /// 浮层最少可见这么久。
     ///
     /// 照 macOS ⌘⇥ 的行为：按下就立即显示，快速按松时就是「闪一下」。
@@ -1364,7 +1368,7 @@ final class OverlayPanel {
     /// 返回时还没好，它会先画一版默认材质再翻（Toast 那轮屏上量过，约 400ms）。
     /// 淡入只有 70ms，所以这一下落在淡入之后。压不住 —— 屏幕外预热、alpha 0 预热、
     /// `tintColor` 钉色都试过，唯一有效的是砍掉全部出场动效。
-    private static func makeBackdrop(size: NSSize, content: NSView) -> NSView {
+    static func makeBackdrop(size: NSSize, content: NSView) -> NSView {
         if #available(macOS 26.0, *), kGlassBackdrop {
             let glass = NSGlassEffectView(frame: NSRect(origin: .zero, size: size))
             glass.cornerRadius = kPanelCornerRadius

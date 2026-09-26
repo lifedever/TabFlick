@@ -168,6 +168,40 @@ func configurePinHotkey(keyCode: Int64?, flags: CGEventFlags, handler: (() -> Vo
     gOnPinHotkey = handler
 }
 
+/// 标签搜索面板的快捷键（默认 ⌘E，设置里可改、可关）。
+///
+/// 和置顶键一样只在受支持浏览器前台吞键。就绪判定（`gSearchReady`）只管
+/// 「打开」：没连上扩展时不吞，⌘E 回落到浏览器自己的行为。
+private var gSearchKeyCode: Int64 = Int64(kVK_ANSI_E)
+private var gSearchModifiers: CGEventFlags = .maskCommand
+private var gSearchEnabled = true
+private var gSearchReady = false
+private var gOnSearchHotkey: (() -> Void)?
+
+/// 搜索面板正开着。它是 key window，键盘归它 —— 这期间切换器键和置顶键都
+/// 不接管，只留搜索键本身（再按一次是关掉）。由主线程在面板开关时维护。
+private var gSearchPanelOpen = false
+
+/// 搜索快捷键设置变化时由主线程调用。keyCode 传 nil = 默认 ⌘E。
+func configureSearchHotkey(keyCode: Int64?, flags: CGEventFlags, enabled: Bool,
+                           handler: (() -> Void)?) {
+    gSearchKeyCode = keyCode ?? Int64(kVK_ANSI_E)
+    gSearchModifiers = keyCode == nil
+        ? .maskCommand
+        : flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift])
+    gSearchEnabled = enabled
+    gOnSearchHotkey = handler
+}
+
+/// 搜索面板的就绪状态（扩展连着、当前浏览器至少有一个标签），由 MRUController 维护。
+func setEventTapSearchReady(_ ready: Bool) {
+    gSearchReady = ready
+}
+
+func setEventTapSearchPanelOpen(_ open: Bool) {
+    gSearchPanelOpen = open
+}
+
 /// cycling 中按下的方向键。
 ///
 /// 具体含义（走列表 / 跳分组 / 按行移动）由 MRUController 按**当前排布**决定 ——
@@ -258,6 +292,18 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
             default: break
             }
         }
+
+        // 标签搜索快捷键（默认 ⌘E）。面板开着时这一下是「关掉」，不看就绪 ——
+        // 就绪只是「打开」的门。
+        if gSearchEnabled, gFrontIsBrowser, code == gSearchKeyCode,
+           flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]) == gSearchModifiers {
+            guard gSearchReady || gSearchPanelOpen else { break }
+            gOnSearchHotkey?()
+            return nil
+        }
+
+        // 搜索面板开着：键盘归它，下面的置顶键和切换器键都不接管
+        if gSearchPanelOpen { break }
 
         // 用户自定义的置顶快捷键。未设置时 gPinHotkeyCode 为 -1，永不命中；
         // 只在受支持浏览器前台时吞键，其余场合原样放行。
