@@ -268,7 +268,18 @@ private struct SearchField: NSViewRepresentable {
     let onCancel: () -> Void
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+        // **必须是 NSSearchField，不能是 NSTextField**（2026-09-26 二分出来的）：
+        // 普通文本框一建出来，SafariPlatformSupport 就会在本进程里挂一个自动填充
+        // 卡片窗口（`SPRoundedWindow`，312×237 的 `NSRemoteView`），正常隐藏，但偶尔
+        // 会上屏一帧 —— 就是用户反复报的「输入框下面闪一下小卡片」。关焦点、关掉
+        // 全部自动功能、指定 contentType 都压不住；系统对搜索框不挂 AutoFill。
+        // 搜索框自带的放大镜 / 取消钮 / 圆角底全部剥掉，外观由 SwiftUI 这边画。
+        let field = NSSearchField()
+        if let cell = field.cell as? NSSearchFieldCell {
+            cell.searchButtonCell = nil
+            cell.cancelButtonCell = nil
+        }
+        field.isBezeled = false
         field.delegate = context.coordinator
         field.isBordered = false
         field.drawsBackground = false
@@ -292,7 +303,7 @@ private struct SearchField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject, NSTextFieldDelegate {
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
         let parent: SearchField
         init(_ parent: SearchField) { self.parent = parent }
 
