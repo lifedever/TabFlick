@@ -49,7 +49,7 @@ swiftc -O main.swift stubs.swift TabSearchPanel.swift TabSearch.swift Pinyin.swi
 ./demo shot s4 dark folders >/dev/null; ./demo shot s5 light bookmarks >/dev/null
 ./demo video dark >/dev/null
 ffmpeg -v error -y -i video.mov -vf "scale=1600:-2,format=yuv420p" -c:v libx264 -preset slow -crf 22 -movflags +faststart -an "$ROOT/docs/search-demo.mp4"
-ffmpeg -v error -y -ss 3.2 -i "$ROOT/docs/search-demo.mp4" -frames:v 1 -q:v 3 "$ROOT/docs/search-demo-poster.jpg"
+ffmpeg -v error -y -ss 2.2 -i "$ROOT/docs/search-demo.mp4" -frames:v 1 -q:v 3 "$ROOT/docs/search-demo-poster.jpg"
 python3 - "$WORK" "$ROOT/docs" <<'PY'
 import sys
 from PIL import Image

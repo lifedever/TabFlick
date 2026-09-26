@@ -6,12 +6,10 @@
 <title>TabFlick — Chrome 的标签切换器和搜索面板</title>
 <meta name="description" content="Chrome 的 ⌃⇥ 按最近使用顺序切标签，带网页缩略图；⌘E 搜索面板搜活标签、最近关闭、书签、历史记录、文件夹和 App。macOS 开源工具。">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
-
 <meta property="og:title" content="TabFlick — tab switcher and search panel for Chrome">
 <meta property="og:description" content="MRU tab switching with thumbnails, plus a ⌘E search panel across open tabs, closed tabs, bookmarks, history, folders and apps.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.lifedever.com/TabFlick/">
-
 <style>
   :root {
     --bg: #FFFFFF;
@@ -52,209 +50,153 @@
   }
 
   * { box-sizing: border-box; }
-
   html { scroll-behavior: smooth; }
-
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
+    margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    line-height: 1.65;
+    -webkit-font-smoothing: antialiased; line-height: 1.65;
   }
+  a { color: var(--accent); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
 
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
-
-  /* ── 顶栏 ─────────────────────────────────────────── */
+  /* 顶栏 */
   header {
     position: sticky; top: 0; z-index: 20;
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
     background: color-mix(in srgb, var(--bg) 82%, transparent);
     border-bottom: 1px solid var(--border);
   }
-  .header-inner {
-    max-width: 1000px; margin: 0 auto; padding: 12px 24px;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--text-heading); text-decoration: none; }
+  .header-inner { max-width: 1120px; margin: 0 auto; padding: 12px 28px; display: flex; align-items: center; gap: 6px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--text-heading); text-decoration: none; margin-right: auto; }
   .brand img { width: 26px; height: 26px; border-radius: 7px; }
-  .spacer { flex: 1; }
-  .header-link {
-    color: var(--text-secondary); text-decoration: none; font-size: 14px;
-    padding: 6px 10px; border-radius: 7px;
-  }
+  .header-link { color: var(--text-secondary); text-decoration: none; font-size: 14px; padding: 6px 10px; border-radius: 7px; }
   .header-link:hover { color: var(--text-heading); background: var(--bg-alt); }
   /* 赞助是唯一一个「请求读者做点什么」的入口，给点颜色和其余导航区分开 */
   .header-link.sponsor { color: #E0245E; }
-  .header-link.sponsor:hover { color: #E0245E; background: rgba(224, 36, 94, 0.10); }
-
+  .header-link.sponsor:hover { background: rgba(224, 36, 94, 0.10); }
   #langToggle {
-    font: inherit; font-size: 13px; cursor: pointer;
+    font: inherit; font-size: 13px; cursor: pointer; margin-left: 6px;
     color: var(--text-secondary); background: var(--bg-alt);
     border: 1px solid var(--border-strong); border-radius: 7px; padding: 5px 11px;
   }
   #langToggle:hover { color: var(--text-heading); }
 
-  /* ── Hero ────────────────────────────────────────── */
-  .hero { text-align: center; padding: 76px 0 44px; }
-  .hero img.icon { width: 84px; height: 84px; border-radius: 21px; box-shadow: 0 10px 30px rgba(44,107,237,0.28); }
-  .hero h1 {
-    margin: 24px 0 0; font-size: 46px; line-height: 1.15;
-    letter-spacing: -0.025em; color: var(--text-heading); font-weight: 700;
-  }
-  .hero .sub {
-    margin: 16px auto 0; max-width: 640px;
-    font-size: 18px; color: var(--text-secondary);
-  }
-  .badges { margin-top: 20px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-  .badge {
-    font-size: 12.5px; padding: 4px 11px; border-radius: 999px;
-    background: var(--bg-alt); border: 1px solid var(--border-strong); color: var(--text-secondary);
-  }
-
-  .cta { margin-top: 30px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  /* 首屏 */
+  .hero { text-align: center; padding: 84px 0 64px; }
+  .hero img.icon { width: 80px; height: 80px; border-radius: 20px; box-shadow: 0 10px 30px rgba(44,107,237,0.28); }
+  .hero h1 { margin: 26px 0 0; font-size: 50px; line-height: 1.12; letter-spacing: -0.03em; color: var(--text-heading); font-weight: 700; }
+  .hero .sub { margin: 18px auto 0; max-width: 560px; font-size: 18px; color: var(--text-secondary); }
+  .cta { margin-top: 32px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   .btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 11px 22px; border-radius: 11px;
-    font-size: 15px; font-weight: 500; text-decoration: none;
-    transition: transform 0.15s ease, opacity 0.15s ease;
+    display: inline-flex; align-items: center; gap: 7px; padding: 11px 22px; border-radius: 11px;
+    font-size: 15px; font-weight: 500; text-decoration: none; transition: transform .15s ease, opacity .15s ease;
   }
   .btn:active { transform: scale(0.97); }
   .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover { opacity: 0.9; }
   .btn-secondary { background: var(--bg-alt); color: var(--text-heading); border: 1px solid var(--border-strong); }
   .btn-secondary:hover { border-color: var(--text-muted); }
+  .btn-sm { padding: 8px 16px; font-size: 14px; border-radius: 9px; }
+  .meta { margin-top: 18px; font-size: 13px; color: var(--text-muted); }
+  .meta span + span::before { content: "·"; margin: 0 8px; }
 
-  /* ── 演示视频 ────────────────────────────────────── */
-  .demo { padding: 8px 0 20px; }
-  .demo video {
+  /* 通用区块 */
+  section { padding: 88px 0; }
+  section.alt { background: var(--bg-alt); border-block: 1px solid var(--border); }
+  .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .04em; color: var(--accent); margin: 0 0 10px; }
+  h2 { margin: 0; font-size: 34px; line-height: 1.2; letter-spacing: -0.025em; color: var(--text-heading); font-weight: 700; }
+  .lead { margin: 14px 0 0; color: var(--text-secondary); font-size: 16.5px; }
+  .center { text-align: center; }
+  .center .lead { max-width: 620px; margin-left: auto; margin-right: auto; }
+
+  /* 功能主段：文字 + 视频两栏 */
+  .feature { display: grid; grid-template-columns: 5fr 7fr; gap: 56px; align-items: center; }
+  .feature.flip { grid-template-columns: 7fr 5fr; }
+  .feature.flip .copy { order: 2; }
+  .points { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 16px; }
+  .points li { padding-left: 22px; position: relative; font-size: 15px; color: var(--text-secondary); }
+  .points li::before {
+    content: ""; position: absolute; left: 2px; top: 10px;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  }
+  .points b { color: var(--text-heading); font-weight: 600; }
+  .media video, .media img {
     width: 100%; display: block; border-radius: 14px;
-    border: 1px solid var(--border-strong);
-    box-shadow: var(--shadow-lg);
-    background: var(--bg-alt);
+    border: 1px solid var(--border-strong); box-shadow: var(--shadow-lg); background: var(--bg-alt);
   }
-  .demo .caption {
-    margin-top: 14px; text-align: center;
-    font-size: 13.5px; color: var(--text-muted);
-  }
-
-  .shots {
-    display: grid; gap: 18px; padding: 4px 0 28px;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  }
+  .shots { margin-top: 56px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; align-items: start; }
   .shots figure { margin: 0; }
-  .shots img {
-    width: 100%; display: block; border-radius: 12px;
-    border: 1px solid var(--border-strong); box-shadow: var(--shadow-lg);
-    background: var(--bg-alt);
-  }
-  .shots figcaption {
-    margin-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center;
-  }
+  .shots img { width: 100%; display: block; border-radius: 12px; border: 1px solid var(--border-strong); box-shadow: 0 12px 32px rgba(17,24,39,.12); }
+  .shots figcaption { margin-top: 12px; font-size: 13.5px; color: var(--text-secondary); text-align: center; }
 
-  /* ── 通用区块 ────────────────────────────────────── */
-  section.block { padding: 56px 0; }
-  section.block.alt { background: var(--bg-alt); border-block: 1px solid var(--border); }
-  h2 {
-    margin: 0 0 8px; font-size: 27px; letter-spacing: -0.02em;
-    color: var(--text-heading); font-weight: 650;
-  }
-  .lead { margin: 0 0 30px; color: var(--text-secondary); font-size: 15.5px; }
+  /* 其他功能：小项 */
+  .more { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px 40px; }
+  .more h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; color: var(--text-heading); }
+  .more p { margin: 0; font-size: 14.5px; color: var(--text-secondary); }
 
-  .grid {
-    display: grid; gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  /* 安装 */
+  .steps { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .step { background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; }
+  .step .num {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff;
+    font-size: 13px; font-weight: 600; display: grid; place-items: center; margin-bottom: 14px;
   }
-  .card {
-    background: var(--card-bg); border: 1px solid var(--border);
-    border-radius: 13px; padding: 20px;
-  }
-  .card h3 {
-    margin: 0 0 6px; font-size: 15.5px; font-weight: 600; color: var(--text-heading);
-  }
-  .card p { margin: 0; font-size: 14px; color: var(--text-secondary); }
-
-  kbd {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px; padding: 2px 7px; border-radius: 6px;
-    background: var(--kbd-bg); border: 1px solid var(--kbd-border);
-    box-shadow: 0 1.5px 0 var(--kbd-shadow); color: var(--text-heading);
-    white-space: nowrap;
-  }
-
-  /* ── 原理 ────────────────────────────────────────── */
-  pre.diagram {
-    margin: 0 0 20px; padding: 20px; overflow-x: auto;
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 13px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px; line-height: 1.55; color: var(--text-secondary);
-  }
-  .why { display: grid; gap: 12px; }
-  .why > div {
-    padding: 14px 16px; border-radius: 11px;
-    background: var(--accent-soft);
-    font-size: 14.5px;
-  }
-  .why strong { color: var(--text-heading); }
-
-  /* ── 安装步骤 ────────────────────────────────────── */
-  ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
-  ol.steps > li {
-    counter-increment: s; position: relative;
-    padding: 0 0 26px 44px; border-left: 2px solid var(--border);
-    margin-left: 13px;
-  }
-  ol.steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
-  ol.steps > li::before {
-    content: counter(s); position: absolute; left: -14px; top: -2px;
-    width: 27px; height: 27px; border-radius: 50%;
-    background: var(--accent); color: #fff;
-    font-size: 13px; font-weight: 600;
-    display: grid; place-items: center;
-  }
-  ol.steps h3 { margin: 2px 0 8px; font-size: 15.5px; color: var(--text-heading); font-weight: 600; }
-  ol.steps p { margin: 0 0 10px; font-size: 14px; color: var(--text-secondary); }
-
-  code.cmd {
-    display: block; padding: 12px 15px; border-radius: 10px;
-    background: var(--card-bg); border: 1px solid var(--border);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12.5px; color: var(--text); overflow-x: auto; white-space: pre;
+  .step h3 { margin: 0 0 8px; font-size: 16px; color: var(--text-heading); font-weight: 600; }
+  .step p { margin: 0 0 16px; font-size: 14px; color: var(--text-secondary); flex: 1; }
+  .step .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .note {
+    margin-top: 20px; padding: 13px 16px; border-radius: 10px;
+    background: var(--accent-soft); font-size: 14px; color: var(--text);
   }
   code.inline {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12.5px; padding: 1px 6px; border-radius: 5px;
-    background: var(--kbd-bg); color: var(--text-heading);
-  }
-  .note {
-    margin-top: 10px; padding: 11px 14px; border-radius: 9px;
-    background: var(--accent-soft); font-size: 13.5px; color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+    padding: 1px 6px; border-radius: 5px; background: var(--kbd-bg); color: var(--text-heading);
   }
 
-  /* ── 表格 ────────────────────────────────────────── */
+  /* 快捷键 */
+  .keys-grid { margin-top: 44px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .keys-grid h3 { margin: 0 0 6px; font-size: 16px; color: var(--text-heading); font-weight: 600; }
+  .keys-grid .hint { margin: 0 0 12px; font-size: 13px; color: var(--text-muted); }
   table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
-  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); }
-  th { color: var(--text-muted); font-weight: 500; font-size: 13px; }
-  td.keys { white-space: nowrap; }
-
-  /* ── 页脚 ────────────────────────────────────────── */
-  footer {
-    padding: 40px 0 56px; text-align: center;
-    color: var(--text-muted); font-size: 13.5px;
-    border-top: 1px solid var(--border);
+  td { padding: 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  td.k { white-space: nowrap; width: 1%; padding-right: 20px; }
+  kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    padding: 2px 7px; border-radius: 6px; background: var(--kbd-bg); border: 1px solid var(--kbd-border);
+    box-shadow: 0 1.5px 0 var(--kbd-shadow); color: var(--text-heading); white-space: nowrap;
   }
+
+  /* 工作原理（折叠） */
+  details.how { margin-top: 28px; }
+  details.how summary { cursor: pointer; font-size: 15px; color: var(--text-secondary); list-style: none; }
+  details.how summary::-webkit-details-marker { display: none; }
+  details.how summary::before { content: "▸ "; }
+  details.how[open] summary::before { content: "▾ "; }
+  pre.diagram {
+    margin: 18px 0; padding: 20px; overflow-x: auto;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; color: var(--text-secondary);
+  }
+  .why { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+  .why > div { padding: 14px 16px; border-radius: 11px; background: var(--accent-soft); font-size: 14px; }
+  .why strong { color: var(--text-heading); }
+
+  footer { padding: 40px 0 56px; text-align: center; color: var(--text-muted); font-size: 13.5px; border-top: 1px solid var(--border); }
   footer a { color: var(--text-secondary); text-decoration: none; }
   footer a:hover { color: var(--accent); }
   .footer-links { display: flex; gap: 20px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
 
+  @media (max-width: 860px) {
+    .feature, .feature.flip { grid-template-columns: 1fr; gap: 32px; }
+    .feature.flip .copy { order: 0; }
+    .shots, .more, .steps, .keys-grid, .why { grid-template-columns: 1fr; }
+  }
   @media (max-width: 640px) {
-    .hero { padding: 52px 0 32px; }
-    .hero h1 { font-size: 33px; }
+    .hero { padding: 56px 0 44px; }
+    .hero h1 { font-size: 34px; }
     .hero .sub { font-size: 16px; }
-    section.block { padding: 44px 0; }
-    h2 { font-size: 23px; }
+    section { padding: 60px 0; }
+    h2 { font-size: 26px; }
     .header-link { display: none; }
   }
 </style>
@@ -263,12 +205,9 @@
 
 <header>
   <div class="header-inner">
-    <a class="brand" href="#top">
-      <img src="logo.svg" alt="TabFlick">
-      <span>TabFlick</span>
-    </a>
-    <div class="spacer"></div>
-    <a class="header-link" href="#features" data-zh="功能" data-en="Features">功能</a>
+    <a class="brand" href="#top"><img src="logo.svg" alt="TabFlick"><span>TabFlick</span></a>
+    <a class="header-link" href="#switcher" data-zh="切换器" data-en="Switcher">切换器</a>
+    <a class="header-link" href="#search" data-zh="搜索面板" data-en="Search">搜索面板</a>
     <a class="header-link" href="#install" data-zh="安装" data-en="Install">安装</a>
     <a class="header-link" href="https://github.com/lifedever/TabFlick" target="_blank" rel="noreferrer">GitHub</a>
     <a class="header-link sponsor" href="https://www.lifedever.com/sponsor/" target="_blank" rel="noreferrer" data-zh="赞助" data-en="Sponsor">赞助</a>
@@ -276,286 +215,199 @@
   </div>
 </header>
 
-<div class="wrap" id="top">
-
-  <div class="hero">
-    <img class="icon" src="logo.svg" alt="TabFlick">
-    <h1 data-zh="Chrome 的标签切换器和搜索面板"
-        data-en="A tab switcher and search panel for Chrome">Chrome 的标签切换器和搜索面板</h1>
-    <p class="sub"
-       data-zh="⌃⇥ 按最近使用顺序切标签，带网页缩略图。⌘E 弹出搜索面板，搜活标签、最近关闭、书签、历史记录、收藏的文件夹和已装的 App；在别的 App 里按 ⌥Space。"
-       data-en="⌃⇥ cycles tabs by recent use, with page thumbnails. ⌘E opens a search panel for open tabs, recently closed tabs, bookmarks, history, favorite folders and installed apps; ⌥Space opens it from any other app.">⌃⇥ 按最近使用顺序切标签，带网页缩略图。⌘E 弹出搜索面板，搜活标签、最近关闭、书签、历史记录、收藏的文件夹和已装的 App；在别的 App 里按 ⌥Space。</p>
-
-    <div class="badges">
-      <span class="badge">macOS 14+</span>
-      <span class="badge">Chrome 116+</span>
-      <span class="badge" data-zh="开源 · MIT" data-en="Open Source · MIT">开源 · MIT</span>
-      <span class="badge" data-zh="免费" data-en="Free">免费</span>
-    </div>
-
-    <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="免费下载" data-en="Download">免费下载</a>
-      <a class="btn btn-secondary" href="#install" data-zh="安装指南" data-en="Install Guide">安装指南</a>
-    </div>
+<div class="wrap hero" id="top">
+  <img class="icon" src="logo.svg" alt="TabFlick">
+  <h1 data-zh="Chrome 的标签切换器和搜索面板" data-en="A tab switcher and search panel for Chrome">Chrome 的标签切换器和搜索面板</h1>
+  <p class="sub"
+     data-zh="⌃⇥ 按最近使用的顺序切标签。⌘E 在一个框里找标签、书签、历史记录、文件夹和 App。"
+     data-en="⌃⇥ switches tabs in the order you used them. ⌘E finds tabs, bookmarks, history, folders and apps from one box.">⌃⇥ 按最近使用的顺序切标签。⌘E 在一个框里找标签、书签、历史记录、文件夹和 App。</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="免费下载" data-en="Download">免费下载</a>
+    <a class="btn btn-secondary" href="#install" data-zh="安装步骤" data-en="How to install">安装步骤</a>
   </div>
-
-  <div class="demo">
-    <video src="demo.mp4" poster="demo-poster.jpg" autoplay loop muted playsinline controls></video>
-    <p class="caption"
-       data-zh="按住 ⌃ 连点 ⇥ 浏览候选，松开即切换；也可以直接点卡片。"
-       data-en="Hold ⌃ and tap ⇥ to browse, release to switch — or just click a card.">按住 ⌃ 连点 ⇥ 浏览候选，松开即切换；也可以直接点卡片。</p>
-  </div>
-
-  <div class="demo">
-    <video src="search-demo.mp4" poster="search-demo-poster.jpg" autoplay loop muted playsinline controls></video>
-    <p class="caption"
-       data-zh="⌘E 弹出搜索面板：输标题、网址或拼音，按 Tab 在全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用之间切。"
-       data-en="⌘E opens the search panel: type a title, URL or pinyin, and press Tab to cycle All, Tabs, Search, History, Bookmarks, Recently closed, Folders and Apps.">⌘E 弹出搜索面板：输标题、网址或拼音，按 Tab 在全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用之间切。</p>
-  </div>
-
-  <div class="shots">
-    <figure>
-      <img src="search-all-light.jpg" alt="" loading="lazy">
-      <figcaption data-zh="打开就是最近用过的标签，浅色外观" data-en="Opens on your most recent tabs, light appearance">打开就是最近用过的标签，浅色外观</figcaption>
-    </figure>
-    <figure>
-      <img src="search-web-dark.jpg" alt="" loading="lazy">
-      <figcaption data-zh="没有命中就搜网页：浏览器默认引擎，或 GitHub、YouTube 这类站内搜索" data-en="No match? Search the web with the browser's engine, or on sites like GitHub and YouTube">没有命中就搜网页：浏览器默认引擎，或 GitHub、YouTube 这类站内搜索</figcaption>
-    </figure>
-    <figure>
-      <img src="search-bookmarks-light.jpg" alt="" loading="lazy">
-      <figcaption data-zh="书签带文件夹路径和地址，图标取自 Chrome" data-en="Bookmarks with folder path and address, icons straight from Chrome">书签带文件夹路径和地址，图标取自 Chrome</figcaption>
-    </figure>
-    <figure>
-      <img src="search-folders-dark.jpg" alt="" loading="lazy">
-      <figcaption data-zh="收藏的文件夹：回车用上次的方式打开，⌘↩ 换一个 App" data-en="Favorite folders: Enter opens with the last app you used, ⌘↩ picks another">收藏的文件夹：回车用上次的方式打开，⌘↩ 换一个 App</figcaption>
-    </figure>
-  </div>
-
+  <p class="meta">
+    <span>macOS 14+</span><span data-zh="Chrome 等 Chromium 浏览器 116+" data-en="Chrome and Chromium browsers 116+">Chrome 等 Chromium 浏览器 116+</span><span data-zh="开源 · MIT · 免费" data-en="Open source · MIT · Free">开源 · MIT · 免费</span>
+  </p>
 </div>
 
-<section class="block alt" id="features">
-  <div class="wrap">
-    <h2 data-zh="功能" data-en="Features">功能</h2>
-    <p class="lead" data-zh="从切换到管理，每一件都做到位。"
-       data-en="From switching to managing — each piece done properly.">从切换到管理，每一件都做到位。</p>
+<section class="alt" id="switcher">
+  <div class="wrap feature">
+    <div class="copy">
+      <p class="eyebrow" data-zh="切换器 · ⌃⇥" data-en="Switcher · ⌃⇥">切换器 · ⌃⇥</p>
+      <h2 data-zh="回到上一个标签，而不是旁边那个" data-en="Back to the last tab, not the next one">回到上一个标签，而不是旁边那个</h2>
+      <p class="lead" data-zh="Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你用过的顺序走。"
+         data-en="Chrome's ⌃⇥ walks the tab strip. TabFlick makes it walk your history.">Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你用过的顺序走。</p>
+      <ul class="points">
+        <li><b data-zh="来回切换稳定。" data-en="Stable A↔B.">来回切换稳定。</b> <span data-zh="再按一次就回到出发的标签；按住时只移动游标，中途经过的不算用过。" data-en="Tap again to go back. While held only a cursor moves, so tabs you pass are not counted as used.">再按一次就回到出发的标签；按住时只移动游标，中途经过的不算用过。</span></li>
+        <li><b data-zh="网页缩略图。" data-en="Page thumbnails.">网页缩略图。</b> <span data-zh="靠页面样子认标签，不用读截断的标题。" data-en="Recognise tabs by how they look, not by truncated titles.">靠页面样子认标签，不用读截断的标题。</span></li>
+        <li><b data-zh="键盘、方向键、鼠标都行。" data-en="Keys, arrows or mouse.">键盘、方向键、鼠标都行。</b> <span data-zh="⌃⇧⇥ 反向，按住时方向键移动，或直接点卡片。" data-en="⌃⇧⇥ goes back, arrows move while held, or click a card.">⌃⇧⇥ 反向，按住时方向键移动，或直接点卡片。</span></li>
+        <li><b data-zh="按窗口分开。" data-en="Per window.">按窗口分开。</b> <span data-zh="只列当前窗口的标签，每个窗口有自己的顺序。设置里可以关。" data-en="Only the current window's tabs, each window with its own order. Can be turned off.">只列当前窗口的标签，每个窗口有自己的顺序。设置里可以关。</span></li>
+      </ul>
+    </div>
+    <div class="media">
+      <video src="demo.mp4" poster="demo-poster.jpg" autoplay loop muted playsinline></video>
+    </div>
+  </div>
+</section>
 
-    <div class="grid">
-      <div class="card">
-        <h3 data-zh="搜索面板" data-en="Search panel">搜索面板</h3>
-        <p data-zh="⌘E 弹出，输标题、网址或拼音，结果里有活标签、最近关闭、书签和历史记录。按住 ⌘ 时按 1–9 直接选，悬停行尾的 ✕ 关标签。"
-           data-en="⌘E opens it. Type a title, URL or pinyin; results include open tabs, recently closed tabs, bookmarks and history. Hold ⌘ and press 1–9 to pick, hover a row for the ✕ that closes the tab.">⌘E 弹出，输标题、网址或拼音，结果里有活标签、最近关闭、书签和历史记录。按住 ⌘ 时按 1–9 直接选，悬停行尾的 ✕ 关标签。</p>
+<section id="search">
+  <div class="wrap">
+    <div class="feature flip">
+      <div class="copy">
+        <p class="eyebrow" data-zh="搜索面板 · ⌘E" data-en="Search panel · ⌘E">搜索面板 · ⌘E</p>
+        <h2 data-zh="要找的东西，打几个字就到" data-en="Type a few letters, get there">要找的东西，打几个字就到</h2>
+        <p class="lead" data-zh="标签、最近关闭、书签、历史记录、收藏的文件夹、已装的 App，都在同一个框里。"
+           data-en="Tabs, recently closed tabs, bookmarks, history, favorite folders and installed apps — one box.">标签、最近关闭、书签、历史记录、收藏的文件夹、已装的 App，都在同一个框里。</p>
+        <ul class="points">
+          <li><b data-zh="Tab 换范围。" data-en="Tab changes scope.">Tab 换范围。</b> <span data-zh="全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用依次切，顺序和开关在设置里定。" data-en="All, Tabs, Search, History, Bookmarks, Closed, Folders, Apps — you pick which ones and in what order.">全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用依次切，顺序和开关在设置里定。</span></li>
+          <li><b data-zh="中文用拼音也能搜。" data-en="Pinyin works.">中文用拼音也能搜。</b> <span data-zh="全拼和首字母都认，mnjt 能找到「蒙牛集团」。" data-en="Full pinyin and initials both match Chinese titles.">全拼和首字母都认，mnjt 能找到「蒙牛集团」。</span></li>
+          <li><b data-zh="没找到就搜网页。" data-en="Nothing found? Search the web.">没找到就搜网页。</b> <span data-zh="用浏览器自己的默认引擎，也可以加 GitHub、YouTube 这类站内搜索。" data-en="With the browser's own engine, or site search like GitHub and YouTube.">用浏览器自己的默认引擎，也可以加 GitHub、YouTube 这类站内搜索。</span></li>
+          <li><b data-zh="在别的 App 里也能用。" data-en="From any app.">在别的 App 里也能用。</b> <span data-zh="按 ⌥Space，搜所有浏览器的标签，选中就切过去。" data-en="Press ⌥Space to search every browser's tabs and jump straight there.">按 ⌥Space，搜所有浏览器的标签，选中就切过去。</span></li>
+        </ul>
       </div>
-      <div class="card">
-        <h3 data-zh="Tab 切模式" data-en="Tab switches modes">Tab 切模式</h3>
-        <p data-zh="全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用，按 Tab 依次往下切，⇧Tab 往回。哪些进循环、什么顺序，设置里自己定。"
-           data-en="All, Tabs, Search, History, Bookmarks, Recently closed, Folders, Apps — Tab moves down the list, ⇧Tab back up. Which ones are in the cycle, and in what order, is up to you.">全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用，按 Tab 依次往下切，⇧Tab 往回。哪些进循环、什么顺序，设置里自己定。</p>
+      <div class="media">
+        <video src="search-demo.mp4" poster="search-demo-poster.jpg" autoplay loop muted playsinline></video>
       </div>
-      <div class="card">
-        <h3 data-zh="在任何 App 里用" data-en="Works from any app">在任何 App 里用</h3>
-        <p data-zh="⌥Space 在浏览器之外唤出，搜所有浏览器的标签，选中就切过去。搜网页用浏览器自己的默认引擎，站内搜索模板可以自己加。"
-           data-en="⌥Space opens it outside the browser and searches every browser's tabs; pick one and you are there. Web search uses the browser's own default engine, and you can add site-search templates.">⌥Space 在浏览器之外唤出，搜所有浏览器的标签，选中就切过去。搜网页用浏览器自己的默认引擎，站内搜索模板可以自己加。</p>
+    </div>
+
+    <div class="shots">
+      <figure>
+        <img src="search-web-dark.jpg" alt="" loading="lazy">
+        <figcaption data-zh="搜网页和站内搜索" data-en="Web and site search">搜网页和站内搜索</figcaption>
+      </figure>
+      <figure>
+        <img src="search-bookmarks-light.jpg" alt="" loading="lazy">
+        <figcaption data-zh="书签带文件夹和地址" data-en="Bookmarks with folder and address">书签带文件夹和地址</figcaption>
+      </figure>
+      <figure>
+        <img src="search-folders-dark.jpg" alt="" loading="lazy">
+        <figcaption data-zh="文件夹：回车打开，⌘↩ 换 App" data-en="Folders: Enter opens, ⌘↩ picks an app">文件夹：回车打开，⌘↩ 换 App</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2 data-zh="还有这些" data-en="Also included">还有这些</h2>
+    <div class="more">
+      <div>
+        <h3 data-zh="置顶常驻" data-en="Pins that stick">置顶常驻</h3>
+        <p data-zh="置顶的标签重启浏览器后自动回来，停在最后看的那页。" data-en="Pinned tabs come back after a restart, on the last page you visited.">置顶的标签重启浏览器后自动回来，停在最后看的那页。</p>
       </div>
-      <div class="card">
-        <h3 data-zh="文件夹和应用" data-en="Folders and apps">文件夹和应用</h3>
-        <p data-zh="状态栏收藏的文件夹也在面板里：回车用上次的方式打开，⌘↩ 换一个 App。已装的 App 也能搜，名字和拼音都认。"
-           data-en="Your favorite folders from the menu bar are in the panel too: Enter opens with the last app you used, ⌘↩ picks another. Installed apps are searchable by name or pinyin.">状态栏收藏的文件夹也在面板里：回车用上次的方式打开，⌘↩ 换一个 App。已装的 App 也能搜，名字和拼音都认。</p>
+      <div>
+        <h3 data-zh="自动清理闲置标签" data-en="Idle tab cleanup">自动清理闲置标签</h3>
+        <p data-zh="12 小时、24 小时或 7 天没用过就关掉；置顶、在放声音的、标签组里的不动。默认关。" data-en="Close tabs unused for 12 h, 24 h or 7 days; pinned, audible and grouped tabs stay. Off by default.">12 小时、24 小时或 7 天没用过就关掉；置顶、在放声音的、标签组里的不动。默认关。</p>
       </div>
-      <div class="card">
-        <h3 data-zh="最近使用顺序" data-en="Most-recently-used order">最近使用顺序</h3>
-        <p data-zh="⌃⇥ 切到你上一个待过的标签，而不是标签栏里挨着的那个。"
-           data-en="⌃⇥ takes you to the tab you were last on, not the one next to it in the strip.">⌃⇥ 切到你上一个待过的标签，而不是标签栏里挨着的那个。</p>
-      </div>
-      <div class="card">
-        <h3 data-zh="来回切换稳定" data-en="Stable A↔B toggling">来回切换稳定</h3>
-        <p data-zh="再点一次就回到出发的标签。按住时只移动游标，松开才提交，中途经过的标签不会被记成用过。"
-           data-en="Tap again and you are back. While held, only a cursor moves and the switch commits on release, so tabs you merely passed are not recorded as used.">再点一次就回到出发的标签。按住时只移动游标，松开才提交，中途经过的标签不会被记成用过。</p>
-      </div>
-      <div class="card">
-        <h3 data-zh="网页缩略图" data-en="Page thumbnails">网页缩略图</h3>
-        <p data-zh="每张卡片都是网页实时画面，靠样子认标签，不用读被截断的标题。"
-           data-en="Every card carries a live screenshot, so you recognise tabs by what they look like.">每张卡片都是网页实时画面，靠样子认标签，不用读被截断的标题。</p>
-      </div>
-      <div class="card">
-        <h3 data-zh="键盘 · 方向键 · 鼠标" data-en="Keyboard, arrows, mouse">键盘 · 方向键 · 鼠标</h3>
-        <p data-zh="⌃⇥ 与 ⌃⇧⇥ 前后移动，按住时也能用方向键，或者直接点击任意卡片。"
-           data-en="⌃⇥ and ⌃⇧⇥ move back and forth, arrow keys work while held, or click any card directly.">⌃⇥ 与 ⌃⇧⇥ 前后移动，按住时也能用方向键，或者直接点击任意卡片。</p>
-      </div>
-      <div class="card">
-        <h3 data-zh="按窗口隔离" data-en="Scoped per window">按窗口隔离</h3>
-        <p data-zh="切换器只列出你正在用的那个窗口的标签，每个窗口保留各自的历史。可在设置中关闭。"
-           data-en="The switcher lists only the tabs of the window in use, and each window keeps its own history. Can be turned off in settings.">切换器只列出你正在用的那个窗口的标签，每个窗口保留各自的历史。可在设置中关闭。</p>
-      </div>
-      <div class="card">
-        <h3 data-zh="置顶常驻" data-en="Pins that persist">置顶常驻</h3>
-        <p data-zh="置顶的标签由 TabFlick 记住并与 Chrome 双向同步：重启浏览器自动恢复置顶，并带回最后访问的页面。"
-           data-en="Pinned tabs are remembered and kept in two-way sync: after a Chrome restart they come back pinned, restored to the last page you visited.">置顶的标签由 TabFlick 记住并与 Chrome 双向同步：重启浏览器自动恢复置顶，并带回最后访问的页面。</p>
-      </div>
-      <div class="card">
+      <div>
         <h3 data-zh="菜单栏标签列表" data-en="Menu bar tab list">菜单栏标签列表</h3>
-        <p data-zh="状态栏展开所有窗口的标签：按窗口分组、显示最近使用时间，点击直接把 Chrome 带到前台并切过去。"
-           data-en="Every tab across every window, one hover away in the menu bar — grouped by window with last-used times; click to bring Chrome forward on that tab.">状态栏展开所有窗口的标签：按窗口分组、显示最近使用时间，点击直接把 Chrome 带到前台并切过去。</p>
+        <p data-zh="状态栏菜单按窗口列出所有标签和最近关闭的，点一下切过去。" data-en="The menu bar lists every tab by window, plus recently closed ones; click to go there.">状态栏菜单按窗口列出所有标签和最近关闭的，点一下切过去。</p>
       </div>
-      <div class="card">
-        <h3 data-zh="边切边关" data-en="Close while switching">边切边关</h3>
-        <p data-zh="切换器卡片上悬停出现 ✕，顺手关掉不要的标签，本轮切换不中断。默认关闭，可在设置开启。"
-           data-en="Hover a switcher card for an ✕ and close tabs as you cycle, without breaking the round. Off by default, enable in settings.">切换器卡片上悬停出现 ✕，顺手关掉不要的标签，本轮切换不中断。默认关闭，可在设置开启。</p>
+      <div>
+        <h3 data-zh="收藏的文件夹" data-en="Favorite folders">收藏的文件夹</h3>
+        <p data-zh="把常用目录收在菜单栏，选 Finder、终端或编辑器打开。" data-en="Keep your usual folders in the menu bar and open them in Finder, a terminal or an editor.">把常用目录收在菜单栏，选 Finder、终端或编辑器打开。</p>
       </div>
-      <div class="card">
-        <h3 data-zh="标签存活时间" data-en="Tab lifetime">标签存活时间</h3>
-        <p data-zh="12 小时 / 24 小时 / 7 天，超时未使用的标签自动清理；置顶、发声、标签组内和当前标签永不误伤。默认关闭。"
-           data-en="12 hours, 24 hours or 7 days — idle tabs get cleaned up automatically; pinned, audible, grouped and current tabs are never touched. Off by default.">12 小时 / 24 小时 / 7 天，超时未使用的标签自动清理；置顶、发声、标签组内和当前标签永不误伤。默认关闭。</p>
+      <div>
+        <h3 data-zh="全局切换器" data-en="Global switcher">全局切换器</h3>
+        <p data-zh="在浏览器之外按 ⌃⇥，按浏览器分组列出所有标签。默认关。" data-en="Press ⌃⇥ outside the browser to see every browser's tabs, grouped. Off by default.">在浏览器之外按 ⌃⇥，按浏览器分组列出所有标签。默认关。</p>
       </div>
-      <div class="card">
-        <h3 data-zh="自定义快捷键" data-en="Custom shortcuts">自定义快捷键</h3>
-        <p data-zh="切换器、搜索面板、置顶的快捷键都能改，各自放在自己的设置页里。浏览器内的键只在浏览器前台生效，其他应用不受影响。"
-           data-en="The switcher, search panel and pin shortcuts can all be changed, each on its own settings page. In-browser keys only fire while a browser is frontmost; other apps never see them.">切换器、搜索面板、置顶的快捷键都能改，各自放在自己的设置页里。浏览器内的键只在浏览器前台生效，其他应用不受影响。</p>
-      </div>
-      <div class="card">
-        <h3 data-zh="不会静默失灵" data-en="Never silently broken">不会静默失灵</h3>
-        <p data-zh="任一环节不可用时，⌃⇥ 会放行给 Chrome 自带的切换，而不是变成没反应的按键。"
-           data-en="If either half is unavailable, ⌃⇥ falls through to Chrome's built-in switching instead of becoming a dead key.">任一环节不可用时，⌃⇥ 会放行给 Chrome 自带的切换，而不是变成没反应的按键。</p>
+      <div>
+        <h3 data-zh="出问题不会吞键" data-en="Fails open">出问题不会吞键</h3>
+        <p data-zh="扩展没连上时，⌃⇥ 交回给 Chrome 自带的切换，不会按了没反应。" data-en="If the extension isn't connected, ⌃⇥ falls back to Chrome's own switching instead of doing nothing.">扩展没连上时，⌃⇥ 交回给 Chrome 自带的切换，不会按了没反应。</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="block">
+<section id="install">
   <div class="wrap">
-    <h2 data-zh="工作原理" data-en="How it works">工作原理</h2>
-    <p class="lead"
-       data-zh="TabFlick 由两部分组成，通过本地回环 WebSocket 通信。"
-       data-en="TabFlick runs as two parts that talk over a loopback WebSocket.">TabFlick 由两部分组成，通过本地回环 WebSocket 通信。</p>
-
+    <div class="center">
+      <h2 data-zh="安装" data-en="Install">安装</h2>
+      <p class="lead" data-zh="一个 App 加一个浏览器扩展，两分钟装好。" data-en="An app plus a browser extension. Two minutes.">一个 App 加一个浏览器扩展，两分钟装好。</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3 data-zh="装 App" data-en="Install the app">装 App</h3>
+        <p data-zh="下载 DMG，把 TabFlick 拖进「应用程序」。第一次打开如果提示无法验证开发者，在「应用程序」里右键 TabFlick 选「打开」。" data-en="Download the DMG and drag TabFlick into Applications. If macOS says the developer can't be verified, right-click TabFlick in Applications and choose Open.">下载 DMG，把 TabFlick 拖进「应用程序」。第一次打开如果提示无法验证开发者，在「应用程序」里右键 TabFlick 选「打开」。</p>
+        <div class="actions">
+          <a class="btn btn-primary btn-sm" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="下载 App" data-en="Download app">下载 App</a>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3 data-zh="装扩展" data-en="Install the extension">装扩展</h3>
+        <p data-zh="解压扩展包，打开 chrome://extensions，开启开发者模式，点「加载已解压的扩展程序」选中文件夹。" data-en="Unzip the extension, open chrome://extensions, turn on Developer mode, click Load unpacked and pick the folder.">解压扩展包，打开 chrome://extensions，开启开发者模式，点「加载已解压的扩展程序」选中文件夹。</p>
+        <div class="actions">
+          <a class="btn btn-primary btn-sm" href="https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip" rel="noreferrer" data-zh="下载扩展" data-en="Download extension">下载扩展</a>
+          <a class="btn btn-secondary btn-sm" href="install-extension.html" data-zh="图文步骤" data-en="Step by step">图文步骤</a>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3 data-zh="给辅助功能权限" data-en="Allow Accessibility">给辅助功能权限</h3>
+        <p data-zh="第一次启动会弹出引导，把 TabFlick 图标拖进「辅助功能」列表，App 会自动重启。菜单栏图标变亮就是连上了。" data-en="On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.">第一次启动会弹出引导，把 TabFlick 图标拖进「辅助功能」列表，App 会自动重启。菜单栏图标变亮就是连上了。</p>
+      </div>
+    </div>
+    <div class="note">
+      <span data-zh="扩展要标签、书签、历史记录、图标、搜索这几项权限，数据只交给本机的 TabFlick，不联网。升级后 Chrome 提示新权限时点允许，再重新加载扩展。日志在" data-en="The extension asks for tabs, bookmarks, history, favicons and search; the data only goes to TabFlick on this Mac. After an update, allow any new permissions and reload the extension. Logs live at">扩展要标签、书签、历史记录、图标、搜索这几项权限，数据只交给本机的 TabFlick，不联网。升级后 Chrome 提示新权限时点允许，再重新加载扩展。日志在</span>
+      <code class="inline">~/Library/Logs/TabFlick/tabflick.log</code><span data-zh="。" data-en=".">。</span>
+    </div>
+    <details class="how">
+      <summary data-zh="为什么要一个 App 加一个扩展" data-en="Why an app plus an extension">为什么要一个 App 加一个扩展</summary>
 <pre class="diagram">┌─────────────────────────┐         ┌──────────────────────────┐
 │  Chrome Extension (MV3) │  ws://  │  Swift Helper            │
 │                         │◄───────►│                          │
-│  · tabs.onActivated     │  :41573 │  · CGEventTap  (⌃⇥)      │
-│  · captureVisibleTab    │         │  · NSPanel     (overlay) │
-│  · tabs.update          │         │  · MRU state machine     │
+│  · tabs / bookmarks     │  :41573 │  · CGEventTap  (keys)    │
+│  · history / favicons   │         │  · NSPanel     (panels)  │
+│  · captureVisibleTab    │         │  · MRU state machine     │
 └─────────────────────────┘         └──────────────────────────┘</pre>
+      <div class="why">
+        <div>
+          <strong data-zh="扩展读不到键盘。" data-en="The extension cannot read the keyboard.">扩展读不到键盘。</strong>
+          <span data-zh="Chrome 33 起扩展就不能绑定带 Tab 的快捷键，所以要一个原生进程接管 ⌃⇥。" data-en="Since Chrome 33 extensions can't bind shortcuts with Tab, so a native process handles ⌃⇥.">Chrome 33 起扩展就不能绑定带 Tab 的快捷键，所以要一个原生进程接管 ⌃⇥。</span>
+        </div>
+        <div>
+          <strong data-zh="原生进程读不到标签。" data-en="The app cannot read the tabs.">原生进程读不到标签。</strong>
+          <span data-zh="标签、书签、历史记录和切换都要走 Chrome 的扩展 API，所以要一个扩展。两边通过本机 WebSocket 连在一起。" data-en="Tabs, bookmarks, history and switching all go through Chrome's extension APIs, so an extension is needed. The two talk over a local WebSocket.">标签、书签、历史记录和切换都要走 Chrome 的扩展 API，所以要一个扩展。两边通过本机 WebSocket 连在一起。</span>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>
 
-    <div class="why">
+<section class="alt">
+  <div class="wrap">
+    <h2 data-zh="快捷键" data-en="Shortcuts">快捷键</h2>
+    <p class="lead" data-zh="都可以在设置里改。" data-en="All of them can be changed in Settings.">都可以在设置里改。</p>
+    <div class="keys-grid">
       <div>
-        <strong data-zh="扩展读不到键盘。" data-en="The extension cannot read the keyboard.">扩展读不到键盘。</strong>
-        <span data-zh="Tab 键在 Chrome 33 时就被移出了 chrome.commands 的可用键列表，任何扩展都无法绑定 ⌃⇥ —— 这是必须有一个原生进程的原因。"
-              data-en="Tab was removed from the supported-key list of chrome.commands back in Chrome 33, so no extension can bind ⌃⇥. That is why a native process is required.">Tab 键在 Chrome 33 时就被移出了 chrome.commands 的可用键列表，任何扩展都无法绑定 ⌃⇥ —— 这是必须有一个原生进程的原因。</span>
+        <h3 data-zh="切换器" data-en="Switcher">切换器</h3>
+        <p class="hint" data-zh="浏览器在前台时" data-en="While a browser is frontmost">浏览器在前台时</p>
+        <table>
+          <tr><td class="k"><kbd>⌃</kbd> <kbd>⇥</kbd></td><td data-zh="切到上一个用过的标签" data-en="Switch to the previous tab">切到上一个用过的标签</td></tr>
+          <tr><td class="k"><kbd>⌃</kbd> <kbd>⇥</kbd> <kbd>⇥</kbd></td><td data-zh="按住 ⌃ 连点，继续往回走" data-en="Hold ⌃ and keep tapping to go further back">按住 ⌃ 连点，继续往回走</td></tr>
+          <tr><td class="k"><kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>⇥</kbd></td><td data-zh="反向" data-en="Reverse">反向</td></tr>
+          <tr><td class="k"><kbd>⌃</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td data-zh="按住 ⌃ 时用方向键移动" data-en="Move with arrows while ⌃ is held">按住 ⌃ 时用方向键移动</td></tr>
+          <tr><td class="k" data-zh="松开 ⌃" data-en="Release ⌃">松开 ⌃</td><td data-zh="切过去" data-en="Switch">切过去</td></tr>
+        </table>
       </div>
       <div>
-        <strong data-zh="原生进程读不到标签。" data-en="The helper cannot read the tabs.">原生进程读不到标签。</strong>
-        <span data-zh="标题、使用顺序、缩略图和执行切换都要通过 chrome.tabs API —— 这是必须有一个扩展的原因。"
-              data-en="Titles, ordering, thumbnails and switching all go through the chrome.tabs API. That is why an extension is required.">标题、使用顺序、缩略图和执行切换都要通过 chrome.tabs API —— 这是必须有一个扩展的原因。</span>
+        <h3 data-zh="搜索面板" data-en="Search panel">搜索面板</h3>
+        <p class="hint" data-zh="⌥Space 在任何 App 里都能用" data-en="⌥Space works from any app">⌥Space 在任何 App 里都能用</p>
+        <table>
+          <tr><td class="k"><kbd>⌘</kbd> <kbd>E</kbd></td><td data-zh="在浏览器里打开" data-en="Open inside the browser">在浏览器里打开</td></tr>
+          <tr><td class="k"><kbd>⌥</kbd> <kbd>Space</kbd></td><td data-zh="在别的 App 里打开，搜所有浏览器" data-en="Open from any app, across browsers">在别的 App 里打开，搜所有浏览器</td></tr>
+          <tr><td class="k"><kbd>⇥</kbd> / <kbd>⇧</kbd> <kbd>⇥</kbd></td><td data-zh="切换范围" data-en="Change scope">切换范围</td></tr>
+          <tr><td class="k"><kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd></td><td data-zh="直接选第几行" data-en="Pick a row">直接选第几行</td></tr>
+          <tr><td class="k"><kbd>⌘</kbd> <kbd>↩</kbd></td><td data-zh="文件夹换一个 App 打开" data-en="Open a folder with another app">文件夹换一个 App 打开</td></tr>
+          <tr><td class="k"><kbd>⌘</kbd> <kbd>,</kbd></td><td data-zh="打开设置" data-en="Open Settings">打开设置</td></tr>
+        </table>
       </div>
     </div>
   </div>
 </section>
 
-<section class="block alt" id="install">
-  <div class="wrap">
-    <h2 data-zh="安装" data-en="Installation">安装</h2>
-    <p class="lead"
-       data-zh="需要 macOS 14+ 和 Chrome 116+。"
-       data-en="Requires macOS 14+ and Chrome 116+.">需要 macOS 14+ 和 Chrome 116+。</p>
-
-    <ol class="steps">
-      <li>
-        <h3 data-zh="下载安装" data-en="Download and install">下载安装</h3>
-        <p data-zh="从 Releases 下载 DMG，把 TabFlick.app 拖进「应用程序」。首次打开如提示「无法验证开发者」，在「应用程序」里右键 TabFlick →「打开」即可 —— 应用没有付费开发者签名，DMG 内的说明文件有详细步骤。也可以按仓库 README 从源码编译。"
-           data-en="Download the DMG from Releases and drag TabFlick.app into Applications. If the first launch says the developer cannot be verified, right-click TabFlick in Applications and choose Open — the app carries no paid Apple signature; the read-me inside the DMG covers the details. Building from source is documented in the repository README.">从 Releases 下载 DMG，把 TabFlick.app 拖进「应用程序」。首次打开如提示「无法验证开发者」，在「应用程序」里右键 TabFlick →「打开」即可 —— 应用没有付费开发者签名，DMG 内的说明文件有详细步骤。也可以按仓库 README 从源码编译。</p>
-        <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest" target="_blank" rel="noreferrer" data-zh="下载 App" data-en="Download the App">下载 App</a>
-      </li>
-      <li>
-        <h3 data-zh="安装扩展" data-en="Install the extension">安装扩展</h3>
-        <p data-zh="下载扩展包并解压，打开 chrome://extensions，右上角开启开发者模式，点「加载已解压的扩展程序」选择解压出的文件夹。扩展未上架商店，需要这一步开发者模式安装 —— 详细图文见安装说明。"
-           data-en="Download and unzip the extension, open chrome://extensions, turn on Developer mode, click Load unpacked and pick the unzipped folder. The extension isn't on the Web Store, so this developer-mode step is required — the guide walks through it.">下载扩展包并解压，打开 chrome://extensions，右上角开启开发者模式，点「加载已解压的扩展程序」选择解压出的文件夹。扩展未上架商店，需要这一步开发者模式安装 —— 详细图文见安装说明。</p>
-        <a class="btn btn-primary" href="https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip" rel="noreferrer" data-zh="下载扩展" data-en="Download Extension">下载扩展</a>
-        <a class="btn btn-secondary" href="install-extension.html" data-zh="扩展安装说明" data-en="Install Guide">扩展安装说明</a>
-        <div class="note">
-          <span data-zh="扩展要的权限：标签、书签、历史记录、图标、搜索——都只用来把数据交给本机的 TabFlick，不联网、不上传。升级后如果 Chrome 提示新权限，点允许并重新加载扩展。"
-                data-en="The extension asks for tabs, bookmarks, history, favicons and search. All of it only feeds the TabFlick app on this Mac — nothing leaves the machine. If Chrome asks about new permissions after an update, allow them and reload the extension.">扩展要的权限：标签、书签、历史记录、图标、搜索——都只用来把数据交给本机的 TabFlick，不联网、不上传。升级后如果 Chrome 提示新权限，点允许并重新加载扩展。</span>
-        </div>
-      </li>
-      <li>
-        <h3 data-zh="授予辅助功能权限" data-en="Grant Accessibility permission">授予辅助功能权限</h3>
-        <p data-zh="首次启动会弹出引导浮层：把浮层里的 TabFlick 图标拖进「辅助功能」列表即完成授权，生效后应用自动重启。也可以手动前往 系统设置 → 隐私与安全性 → 辅助功能 打开开关。"
-           data-en="The first launch shows a guided overlay — drag the TabFlick icon from the overlay into the Accessibility list, and the app relaunches itself once the permission takes effect. You can also enable it manually under System Settings → Privacy &amp; Security → Accessibility.">首次启动会弹出引导浮层：把浮层里的 TabFlick 图标拖进「辅助功能」列表即完成授权，生效后应用自动重启。也可以手动前往 系统设置 → 隐私与安全性 → 辅助功能 打开开关。</p>
-      </li>
-      <li>
-        <h3 data-zh="开始使用" data-en="Start using it">开始使用</h3>
-        <p>
-          <span data-zh="菜单栏图标变亮、菜单第一行显示「已连接」，即表示两端已接上。点击 Chrome 工具栏的 TabFlick 图标可以打开设置。"
-                data-en="When the menu bar icon brightens and its first line reads Connected, both halves are talking. Click the TabFlick icon in the Chrome toolbar to open settings.">菜单栏图标变亮、菜单第一行显示「已连接」，即表示两端已接上。点击 Chrome 工具栏的 TabFlick 图标可以打开设置。</span>
-        </p>
-        <div class="note">
-          <span data-zh="日志文件在" data-en="The log file lives at">日志文件在</span>
-          <code class="inline">~/Library/Logs/TabFlick/tabflick.log</code>
-          <span data-zh="，排查问题从这里开始。" data-en="— start troubleshooting there.">，排查问题从这里开始。</span>
-        </div>
-      </li>
-    </ol>
-  </div>
-</section>
-
-<section class="block">
-  <div class="wrap">
-    <h2 data-zh="快捷键" data-en="Shortcuts">快捷键</h2>
-    <p class="lead" data-zh="除 ⌥Space 外都只在浏览器前台生效。" data-en="All but ⌥Space are active only while a browser is frontmost.">除 ⌥Space 外都只在浏览器前台生效。</p>
-    <table>
-      <thead>
-        <tr>
-          <th data-zh="按键" data-en="Keys">按键</th>
-          <th data-zh="效果" data-en="Result">效果</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="keys"><kbd>⌃</kbd> <kbd>⇥</kbd></td>
-          <td data-zh="切换到上一个使用的标签" data-en="Switch to the previously used tab">切换到上一个使用的标签</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⌃</kbd> <kbd>⇥</kbd> <kbd>⇥</kbd></td>
-          <td data-zh="按住 ⌃ 连点，沿使用历史继续往回走" data-en="Hold ⌃ and keep tapping to move further back">按住 ⌃ 连点，沿使用历史继续往回走</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>⇥</kbd></td>
-          <td data-zh="反向移动" data-en="Move in the opposite direction">反向移动</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⌃</kbd> <kbd>←</kbd> <kbd>→</kbd></td>
-          <td data-zh="按住 ⌃ 时用方向键移动游标" data-en="Move the cursor with arrow keys while ⌃ is held">按住 ⌃ 时用方向键移动游标</td>
-        </tr>
-        <tr>
-          <td class="keys" data-zh="⌃ + 点击" data-en="⌃ + click">⌃ + 点击</td>
-          <td data-zh="直接切到点中的那个标签" data-en="Switch straight to the card you click">直接切到点中的那个标签</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⌘</kbd> <kbd>E</kbd></td>
-          <td data-zh="打开搜索面板；再按一次关闭" data-en="Open the search panel; press again to close">打开搜索面板；再按一次关闭</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⌥</kbd> <kbd>Space</kbd></td>
-          <td data-zh="在任何 App 里打开搜索面板，搜所有浏览器" data-en="Open the search panel from any app, across all browsers">在任何 App 里打开搜索面板，搜所有浏览器</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⇥</kbd> / <kbd>⇧</kbd> <kbd>⇥</kbd></td>
-          <td data-zh="面板里切换模式：全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用" data-en="Cycle panel modes: All, Tabs, Search, History, Bookmarks, Recently closed, Folders, Apps">面板里切换模式：全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd></td>
-          <td data-zh="面板里按住 ⌘ 时直接选第几行" data-en="Pick a row directly while ⌘ is held in the panel">面板里按住 ⌘ 时直接选第几行</td>
-        </tr>
-        <tr>
-          <td class="keys"><kbd>⌘</kbd> <kbd>↩</kbd></td>
-          <td data-zh="文件夹行：展开打开方式，选一个 App" data-en="On a folder row: show the Open With list and pick an app">文件夹行：展开打开方式，选一个 App</td>
-        </tr>
-        <tr>
-          <td class="keys" data-zh="自定义" data-en="Custom">自定义</td>
-          <td data-zh="置顶 / 取消置顶当前标签（在 设置 → 标签管理 中录制）" data-en="Pin / unpin the current tab (record it under Settings → Tabs)">置顶 / 取消置顶当前标签（在 设置 → 标签管理 中录制）</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
 
 <footer>
   <div class="wrap">
@@ -571,13 +423,9 @@
 </footer>
 
 <script>
-  // 双语切换。文案直接放在 data-zh / data-en 属性上，不额外维护字典 ——
-  // 内容和结构在一处，改文案不用两边对照。
-  // 需要混排 <strong> / <code> 的段落，拆成多个元素各自带属性，
-  // 这样赋值全部走 textContent，不碰 innerHTML。
+  // 双语切换：文案直接放在 data-zh / data-en 上，赋值只走 textContent。
   const KEY = "tabflick-lang";
   const toggle = document.getElementById("langToggle");
-
   function apply(lang) {
     document.documentElement.lang = lang;
     for (const el of document.querySelectorAll("[data-zh][data-en]")) {
@@ -586,21 +434,16 @@
     }
     toggle.textContent = lang === "zh" ? "EN" : "中文";
     document.title = lang === "zh"
-      ? "TabFlick — Arc 式标签切换器 for Chrome"
-      : "TabFlick — Arc-style tab switcher for Chrome";
+      ? "TabFlick — Chrome 的标签切换器和搜索面板"
+      : "TabFlick — tab switcher and search panel for Chrome";
   }
-
-  let lang = localStorage.getItem(KEY)
-    || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
-
+  let lang = localStorage.getItem(KEY) || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
   apply(lang);
-
   toggle.addEventListener("click", () => {
     lang = lang === "zh" ? "en" : "zh";
     localStorage.setItem(KEY, lang);
     apply(lang);
   });
 </script>
-
 </body>
 </html>

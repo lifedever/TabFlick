@@ -193,7 +193,11 @@ func parkMouse() {
     panel.setHistory(history, for: query)
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
         MainActor.assumeIsolated {
-            let f = panelFrame().insetBy(dx: -70, dy: -70)
+            // 网页里三张并排，要同样大小：固定 820×440 的画幅，面板顶边下 50pt 起，
+            // 行数不同的面板下面留的背景多少不一，但外框整齐（大列表 all 模式另外放宽）
+            let p = panelFrame()
+            let height: CGFloat = shotName.hasPrefix("tall") ? p.height + 120 : 440
+            let f = NSRect(x: p.midX - 410, y: p.maxY + 50 - height, width: 820, height: height)
             capture("./\(shotName).png", rect: f)
             exit(0)
         }
