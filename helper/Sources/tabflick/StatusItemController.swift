@@ -135,10 +135,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // 只能属于一个菜单 —— 不先从旧菜单摘下来，第二次 buildMenu（init 后的
         // showUnauthorized、或语言切换的 rebuildMenu）会在 insertItem 处抛
         // NSInternalInconsistencyException 直接崩掉。
-        statusLine.menu?.removeItem(statusLine)
-        favoriteItem.menu?.removeItem(favoriteItem)
-        warningItem.menu?.removeItem(warningItem)
-        addFinderFolderItem.menu?.removeItem(addFinderFolderItem)
+        //
+        // 曾经逐个摘，后来加的 addFolderItem / excludeAppItem 忘了摘：切语言时第二次
+        // buildMenu 抛异常，整条语言刷新链在这里断掉，状态栏菜单、设置分页名、主菜单
+        // 全都停在旧语言（2026-09-27 用户报的）。改成先把旧菜单整个清空，再加复用项也不会漏。
+        statusItem.menu?.removeAllItems()
+        for item in [statusLine, favoriteItem, warningItem, addFinderFolderItem, addFolderItem, excludeAppItem] {
+            item.menu?.removeItem(item)
+        }
 
         let menu = NSMenu()
         // 自动启用会把「子菜单还是空的」的状态行判成禁用（子菜单在展开时才
@@ -652,43 +656,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let info = sender.representedObject as? [String: Any],
               let path = info["path"] as? String,
               let opener = info["opener"] as? OpenerApp else { return }
-        let folder = URL(fileURLWithPath: path, isDirectory: true)
-        let appName = opener.name
-        let folderName = folder.lastPathComponent
-        // toast 等真打开了再报：冷启动的 App 要一两秒，提前说「已打开」是撒谎
-        let report: (Error?) -> Void = { error in
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    if let error {
-                        log("⚠️  open folder failed: \(error.localizedDescription)")
-                        // 错误描述往往一长句，塞进标题只会被掐成一截 ——
-                        // 让它走副标题那行，标题只说成没成
-                        Toast.show(L10n.t("打开失败", "Failed to open"),
-                                   detail: error.localizedDescription, kind: .failure)
-                    } else {
-                        Toast.show(L10n.t("已在 \(appName) 打开「\(folderName)」",
-                                          "Opened “\(folderName)” in \(appName)"),
-                                   detail: path)
-                    }
-                }
-            }
-        }
-        switch opener.launch {
-        case .document:
-            NSWorkspace.shared.open([folder], withApplicationAt: opener.url,
-                                    configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                report(error)
-            }
-        case .claudeCode:
-            guard let link = OpenerCatalog.claudeCodeURL(folder: path) else {
-                log("⚠️  claude code deep link failed to build for \(path)")
-                return
-            }
-            NSWorkspace.shared.open(link, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                report(error)
-            }
-        }
-        log("📁 open \(path) with \(opener.id)")
+        OpenerCatalog.open(folder: path, with: opener)
         onFolderOpened?(path, opener)
     }
 

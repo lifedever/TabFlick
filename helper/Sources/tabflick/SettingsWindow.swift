@@ -5,7 +5,17 @@ import UniformTypeIdentifiers
 /// 所有设置 pane 的统一宽度。**必须全体一致**：宽度不一的话切 tab 时窗口
 /// 会跟着伸缩跳动（2026-09-02 用户反馈「跳来跳去体验不好」）。取 560 是
 /// 因为「文件夹管理」要放完整路径，460 截断太狠 —— 就全体跟它对齐。
-private let kSettingsPaneWidth: CGFloat = 560
+/// 设置各页的宽度。基准 560；工具栏八个分页名放不下时按需加宽，否则后几个分页会
+/// 被挤进 >> 溢出菜单（2026-09-27 日语截图；估算下来西法德也放不下）。
+/// 每次取都按当前语言重算：切语言时各页 rootView 重建，窗口跟着新宽度走。
+@MainActor private var kSettingsPaneWidth: CGFloat {
+    let font = NSFont.systemFont(ofSize: 11)
+    let needed = SettingsWindowController.paneTitles.reduce(CGFloat(0)) { sum, title in
+        // 每个按钮：max(文字宽, 图标宽) + 左右内边距。系数按日语截图反推（6 个按钮 + >> 约 550pt）
+        sum + max(ceil((title as NSString).size(withAttributes: [.font: font]).width), 40) + 24
+    } + 16
+    return max(560, needed)
+}
 
 // MARK: - 通用
 
@@ -76,90 +86,6 @@ private struct GeneralPane: View {
                     }
                 }
             }
-        }
-        .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
-    }
-}
-
-// MARK: - 切换器
-
-private struct SwitcherPane: View {
-    @ObservedObject var settings: AppSettings
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle(isOn: $settings.scopeToWindow) {
-                    Text(L10n.t("只切换当前窗口的标签", "Limit switching to the current window"))
-                }
-                .toggleStyle(.switch)
-
-                Text(L10n.t(
-                    "关掉则合并所有窗口的标签。每个窗口的使用顺序都是独立记的。",
-                    "Off means all windows share one list. Each window keeps its own order either way."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            } header: {
-                Text(L10n.t("范围", "Scope"))
-            }
-
-            Section {
-                Picker(L10n.t("样式", "Style"), selection: $settings.switcherLayout) {
-                    ForEach(SwitcherLayout.allCases) { layout in
-                        Text(layout.label).tag(layout)
-                    }
-                }
-
-                Text(L10n.t(
-                    "长条排成一行，宫格换行铺满一屏。宫格下 ⌃ + 方向键可以四向移动。",
-                    "Strip is one row; grid wraps to fill the screen. In grid mode, ⌃ plus arrows moves in all four directions."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            } header: {
-                Text(L10n.t("布局", "Layout"))
-            }
-
-            Section {
-                Toggle(isOn: $settings.globalSwitcher) {
-                    Text(L10n.t("在浏览器之外也能唤出", "Open outside the browser"))
-                }
-                .toggleStyle(.switch)
-
-                Picker(L10n.t("样式", "Style"), selection: $settings.globalSwitcherStyle) {
-                    ForEach(GlobalSwitcherStyle.allCases) { style in
-                        Text(style.label).tag(style)
-                    }
-                }
-                .disabled(!settings.globalSwitcher)
-
-                Text(L10n.t(
-                    "列出所有浏览器的标签，按浏览器分组。默认沿用切换器快捷键，只在浏览器之外唤出；想在浏览器里也能用，去「快捷键」单独给它设一个。",
-                    "Lists tabs from every browser, grouped by browser. It reuses the switcher shortcut and only opens outside a browser — give it its own key under Shortcuts to use it anywhere."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            } header: {
-                Text(L10n.t("全局切换器", "Global switcher"))
-            }
-
-            Section {
-                Toggle(isOn: $settings.tabSearch) {
-                    Text(L10n.t("搜索标签", "Search tabs"))
-                }
-                .toggleStyle(.switch)
-
-                Text(L10n.t(
-                    "按 \(settings.searchHotkey?.displaySpaced ?? "⌘ E") 弹出搜索框，输标题、网址或拼音找标签，也搜最近关闭的和书签；按住 ⌘ 时用 1–\(kSearchQuickPickCount) 直接选，⌘⌫ 关掉选中的标签。网页自己的 \(settings.searchHotkey?.displaySpaced ?? "⌘ E") 会被盖住，可以在「快捷键」里换一个。",
-                    "Press \(settings.searchHotkey?.displaySpaced ?? "⌘ E") to search tabs by title, URL or pinyin, plus recently closed tabs and bookmarks; hold ⌘ and press 1–\(kSearchQuickPickCount) to pick directly, ⌘⌫ closes the selected tab. It overrides the page's own \(settings.searchHotkey?.displaySpaced ?? "⌘ E") — change the key under Shortcuts."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            } header: {
-                Text(L10n.t("标签搜索", "Tab search"))
-            }
 
             excludedSection
         }
@@ -167,14 +93,13 @@ private struct SwitcherPane: View {
         .frame(width: kSettingsPaneWidth)
     }
 
-    /// 排除名单：这些 App 在前台时全局切换器不接管快捷键。
+    /// 排除名单：这些 App 在前台时不接管全局切换器的键（搜索面板不看它，用户定的：
+    /// 那是全局工具，要关就关开关）。放在「通用」（2026-09-26 从切换器页搬来）。
     ///
     /// 只有手工这一份。自动检测做过一版又拆了（2026-09-11）：AX 只读得到
     /// 摆进菜单栏的绑定，Electron / 自绘界面的 App（Claude、VS Code）把
     /// ⌃⇥ 判在自己的代码里，系统根本不知道 —— 一个「自动排除」开关打开后
     /// 照样被抢，比没有这个开关更糟。状态栏菜单的「排除 XX」是快捷入口。
-    ///
-    /// 整段跟着全局切换器开关禁用：关着的时候它一个键都不拦，名单没有含义。
     @ViewBuilder
     private var excludedSection: some View {
         Section {
@@ -188,10 +113,14 @@ private struct SwitcherPane: View {
                 Label(L10n.t("添加 App…", "Add App…"), systemImage: "plus")
             }
             .buttonStyle(.borderless)
+
+            Text(L10n.t("这些 App 在前台时不接管全局切换器的快捷键。浏览器里的键和搜索面板不受影响。",
+                        "The global switcher shortcut is left alone while these apps are frontmost. In-browser keys and the search panel are unaffected."))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
         } header: {
             Text(L10n.t("排除的 App", "Excluded apps"))
         }
-        .disabled(!settings.globalSwitcher)
     }
 
     /// 按名字排序（添加顺序对找一项没有帮助）。
@@ -263,6 +192,89 @@ private struct SwitcherPane: View {
             .buttonStyle(.borderless)
             .help(L10n.t("取消排除", "Stop excluding"))
         }
+    }
+}
+
+// MARK: - 切换器
+
+private struct SwitcherPane: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        Form {
+            Section {
+                HotkeyRow(label: L10n.t("唤出切换器（按住修饰键循环）", "Open the switcher (hold to cycle)"),
+                          config: $settings.switcherHotkey, placeholder: "⌃ ⇥")
+                hotkeyNote("至少带一个 ⌘ / ⌃ / ⌥，⇧ 留给反向切换。Esc 取消录制。只在浏览器前台生效，别撞上终端和编辑器的 ⌃⇥。",
+                           "Use at least one of ⌘ / ⌃ / ⌥; ⇧ is reserved for reverse. Esc cancels. Works only while a browser is frontmost — watch out for the ⌃⇥ in terminals and editors.")
+            } header: {
+                Text(L10n.t("快捷键", "Shortcut"))
+            }
+
+            Section {
+                Toggle(isOn: $settings.scopeToWindow) {
+                    Text(L10n.t("只切换当前窗口的标签", "Limit switching to the current window"))
+                }
+                .toggleStyle(.switch)
+
+                Text(L10n.t(
+                    "关掉则合并所有窗口的标签。每个窗口的使用顺序都是独立记的。",
+                    "Off means all windows share one list. Each window keeps its own order either way."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("范围", "Scope"))
+            }
+
+            Section {
+                Picker(L10n.t("样式", "Style"), selection: $settings.switcherLayout) {
+                    ForEach(SwitcherLayout.allCases) { layout in
+                        Text(layout.label).tag(layout)
+                    }
+                }
+
+                Text(L10n.t(
+                    "长条排成一行，宫格换行铺满一屏。宫格下 ⌃ + 方向键可以四向移动。",
+                    "Strip is one row; grid wraps to fill the screen. In grid mode, ⌃ plus arrows moves in all four directions."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("布局", "Layout"))
+            }
+
+            Section {
+                Toggle(isOn: $settings.globalSwitcher) {
+                    Text(L10n.t("在浏览器之外也能唤出", "Open outside the browser"))
+                }
+                .toggleStyle(.switch)
+
+                Picker(L10n.t("样式", "Style"), selection: $settings.globalSwitcherStyle) {
+                    ForEach(GlobalSwitcherStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .disabled(!settings.globalSwitcher)
+
+                HotkeyRow(label: L10n.t("快捷键", "Shortcut"),
+                          config: $settings.globalHotkey,
+                          placeholder: L10n.t("同切换器键", "Same as switcher"))
+                    .disabled(!settings.globalSwitcher)
+
+                Text(L10n.t(
+                    "列出所有浏览器的标签，按浏览器分组。默认沿用切换器快捷键，只在浏览器之外唤出；想在浏览器里也能用，单独给它设一个键。排除的 App 在「通用」里。",
+                    "Lists tabs from every browser, grouped by browser. It reuses the switcher shortcut and only opens outside a browser — give it its own key to use it anywhere. Excluded apps live under General."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("全局切换器", "Global switcher"))
+            }
+
+        }
+        .formStyle(.grouped)
+        .frame(width: kSettingsPaneWidth)
     }
 }
 
@@ -431,6 +443,15 @@ private struct TabManagementPane: View {
                 .foregroundStyle(.secondary)
             } header: {
                 Text(L10n.t("标签存活时间", "Tab lifetime"))
+            }
+
+            Section {
+                HotkeyRow(label: L10n.t("置顶 / 取消置顶当前标签", "Pin / unpin current tab"),
+                          config: $settings.pinHotkey, placeholder: nil)
+                hotkeyNote("至少带一个 ⌘ / ⌃ / ⌥。Esc 取消录制。只在浏览器前台生效，别撞上 ⌘T、⌘D。",
+                           "Use at least one of ⌘ / ⌃ / ⌥. Esc cancels. Works only while a browser is frontmost — watch out for ⌘T and ⌘D.")
+            } header: {
+                Text(L10n.t("快捷键", "Shortcut"))
             }
         }
         .formStyle(.grouped)
@@ -717,100 +738,171 @@ private struct OpenWithPane: View {
     }
 }
 
-// MARK: - 快捷键
+// MARK: - 搜索
 
-private struct HotkeyPane: View {
+/// ⌘E 搜索面板的设置。从「切换器」页拆出来（2026-09-26）：加了站内搜索列表后那一页
+/// 一屏放不下。
+private struct SearchPane: View {
     @ObservedObject var settings: AppSettings
-
-    private enum Target { case switcher, global, search, pin }
-    @State private var recording: Target?
-    @State private var monitor: Any?
 
     var body: some View {
         Form {
             Section {
-                row(label: L10n.t("唤出切换器（按住修饰键循环）", "Open the switcher (hold to cycle)"),
-                    target: .switcher,
-                    current: settings.switcherHotkey?.displaySpaced,
-                    placeholder: "⌃ ⇥",
-                    clear: { settings.switcherHotkey = nil })
-
-                row(label: L10n.t("唤出全局切换器（所有浏览器）", "Open the global switcher (all browsers)"),
-                    target: .global,
-                    current: settings.globalHotkey?.displaySpaced,
-                    placeholder: L10n.t("同切换器键", "Same as switcher"),
-                    clear: { settings.globalHotkey = nil })
-                    .disabled(!settings.globalSwitcher)
-
-                row(label: L10n.t("搜索标签", "Search tabs"),
-                    target: .search,
-                    current: settings.searchHotkey?.displaySpaced,
-                    placeholder: "⌘ E",
-                    clear: { settings.searchHotkey = nil })
-                    .disabled(!settings.tabSearch)
-
-                row(label: L10n.t("置顶 / 取消置顶当前标签", "Pin / unpin current tab"),
-                    target: .pin,
-                    current: settings.pinHotkey?.displaySpaced,
-                    placeholder: nil,
-                    clear: { settings.pinHotkey = nil })
+                Toggle(isOn: $settings.tabSearch) {
+                    Text(L10n.t("启用搜索面板", "Enable the search panel"))
+                }
+                .toggleStyle(.switch)
 
                 Text(L10n.t(
-                    "至少带一个 ⌘ / ⌃ / ⌥，⇧ 留给反向切换。Esc 取消录制。\n除全局切换器外都只在浏览器前台生效。别撞上 ⌘T、⌘D，或终端和编辑器的 ⌃⇥。",
-                    "Use at least one of ⌘ / ⌃ / ⌥; ⇧ is reserved for reverse. Esc cancels.\nAll but the global switcher work only while a browser is frontmost. Watch out for ⌘T, ⌘D, and the ⌃⇥ in terminals and editors."
+                    "输标题、网址或拼音找标签；Tab 在全部、搜索、历史记录、书签、最近关闭之间切。按住 ⌘ 时用 1–\(kSearchQuickPickCount) 直接选，悬停行尾的 ✕ 关标签。",
+                    "Matches titles, URLs and pinyin; Tab cycles through All, Search, History, Bookmarks and Recently closed. Hold ⌘ and press 1–\(kSearchQuickPickCount) to pick, hover a row for the ✕ that closes it."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-
-                if !settings.globalSwitcher {
-                    Text(L10n.t("全局切换器还没开，去「切换器」里打开。",
-                                "The global switcher is off — turn it on under Switcher."))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
             } header: {
-                Text(L10n.t("快捷键", "Shortcuts"))
+                Text(L10n.t("搜索面板", "Search panel"))
             }
+
+            Section {
+                HotkeyRow(label: L10n.t("浏览器里", "In a browser"),
+                          config: $settings.searchHotkey, placeholder: "⌘ E")
+                HotkeyRow(label: L10n.t("别的 App 里（搜所有浏览器）", "In any other app (all browsers)"),
+                          config: $settings.globalSearchHotkey, placeholder: "⌥ Space")
+                hotkeyNote("至少带一个 ⌘ / ⌃ / ⌥。Esc 取消录制。浏览器里那个会盖住网页自己的同名快捷键；别的 App 里那个在所有 App 里都生效。",
+                           "Use at least one of ⌘ / ⌃ / ⌥. Esc cancels. The in-browser key overrides the page's own; the other one works in every app.")
+            }
+            .disabled(!settings.tabSearch)
+
+            Section {
+                Picker(L10n.t("「全部」没输入时显示", "“All” shows when empty"),
+                       selection: Binding(
+                           get: { settings.allEmptyContent?.rawValue ?? "none" },
+                           set: { settings.allEmptyContent = SearchMode(rawValue: $0) })) {
+                    ForEach(AppSettings.allEmptyChoices) { mode in
+                        Text(mode.label).tag(mode.rawValue)
+                    }
+                    Text(L10n.t("不显示", "Nothing")).tag("none")
+                }
+            }
+
+            Section {
+                ForEach(Array(settings.searchModeOrder.enumerated()), id: \.element) { index, mode in
+                    HStack(spacing: 8) {
+                        Toggle("", isOn: Binding(
+                            get: { settings.searchModesEnabled.contains(mode) },
+                            set: { on in
+                                if on { settings.searchModesEnabled.insert(mode) }
+                                else { settings.searchModesEnabled.remove(mode) }
+                            }))
+                            .toggleStyle(.checkbox)
+                            .labelsHidden()
+                        Text(mode.label)
+                        Spacer()
+                        Button {
+                            settings.searchModeOrder.swapAt(index, index - 1)
+                        } label: { Image(systemName: "chevron.up") }
+                            .buttonStyle(.borderless)
+                            .disabled(index == 0)
+                        Button {
+                            settings.searchModeOrder.swapAt(index, index + 1)
+                        } label: { Image(systemName: "chevron.down") }
+                            .buttonStyle(.borderless)
+                            .disabled(index == settings.searchModeOrder.count - 1)
+                    }
+                }
+                Text(L10n.t("勾上的进循环。面板打开时是第一个，按 Tab 依次往下切，⇧Tab 往回。「文件夹」是状态栏收藏的那些，回车用上次的方式打开，⌘↩ 换一个；「应用」默认关，装了 Raycast 的用不上。",
+                            "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("Tab 顺序", "Tab order"))
+            }
+            .disabled(!settings.tabSearch)
+
+            Section {
+                ForEach($settings.siteSearches) { $site in
+                    siteSearchRow($site)
+                }
+                Button(L10n.t("添加站点…", "Add site…")) {
+                    settings.siteSearches.append(SiteSearch(name: "", template: "https://"))
+                }
+                Text(L10n.t("「搜索」模式里列在搜索引擎后面的「在 X 搜索」。网址里的 %s 换成关键词。",
+                            "The “Search X” rows shown under Search mode after the search engine. %s in the URL is replaced with the query."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("站内搜索", "Site search"))
+            }
+            .disabled(!settings.tabSearch)
+
         }
         .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
-        .onDisappear { stopRecording() }
+        // 这一页五段叠起来比屏幕还高（用户 2026-09-26 截图）：整页限高，超出在页内滚
+        //（grouped Form 本身就是滚动视图，给个高度就滚）
+        .frame(width: kSettingsPaneWidth, height: 620)
     }
 
-    /// placeholder 是「没设置时胶囊里显示什么」，非空即表示清除后有兜底行为；
-    /// nil 表示清除即禁用。
-    ///
-    /// 样式照 Raycast（2026-09-15 用户给的参考图）：键位是一颗贴着内容宽度的
-    /// 灰色胶囊，右边一颗圆形「恢复」钮；不再用系统 Button 拉到固定宽度。
-    /// 没设置时胶囊里用次级色写默认值，一眼能分出「这是兜底」。
-    @ViewBuilder
-    private func row(label: String, target: Target,
-                     current: String?, placeholder: String?,
-                     clear: @escaping () -> Void) -> some View {
-        let isRecording = recording == target
+    private func siteSearchRow(_ site: Binding<SiteSearch>) -> some View {
+        HStack(spacing: 8) {
+            // 分组表单里 TextField 的第一个参数会被当成前置标签画出来，
+            // 占位要走 prompt、标签隐藏
+            TextField("", text: site.name, prompt: Text(L10n.t("名字", "Name")))
+                .labelsHidden()
+                .frame(width: 110)
+            TextField("", text: site.template, prompt: Text("https://example.com/search?q=%s"))
+                .labelsHidden()
+            Button {
+                settings.siteSearches.removeAll { $0.id == site.wrappedValue.id }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.t("删除", "Delete"))
+        }
+    }
+}
+
+// MARK: - 快捷键录制行
+
+/// 一行快捷键设置：标签 + 键位胶囊 + 圆形恢复钮。哪个功能的键就放在哪个功能的页里
+///（2026-09-26 撤掉了集中的「快捷键」页）。
+///
+/// placeholder 是「没设置时胶囊里显示什么」，非空即表示清除后有兜底行为；
+/// nil 表示清除即禁用。样式照 Raycast（2026-09-15 用户给的参考图）：键位是一颗
+/// 贴着内容宽度的灰色胶囊，右边一颗圆形「恢复」钮；没设置时胶囊里用次级色写默认值。
+private struct HotkeyRow: View {
+    let label: String
+    @Binding var config: HotkeyConfig?
+    let placeholder: String?
+
+    @State private var recording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        let current = config?.displaySpaced
         HStack(spacing: 8) {
             Text(label)
             Spacer()
             Button {
-                isRecording ? stopRecording() : startRecording(target)
+                recording ? stopRecording() : startRecording()
             } label: {
-                Text(isRecording
+                Text(recording
                      ? L10n.t("按下快捷键…", "Press shortcut…")
                      : (current ?? placeholder ?? L10n.t("录制", "Record")))
                     .font(.system(size: 13, weight: .medium))
                     .monospacedDigit()
-                    .foregroundStyle(current != nil || isRecording ? .primary : .secondary)
+                    .foregroundStyle(current != nil || recording ? .primary : .secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(isRecording ? Color.accentColor.opacity(0.18)
-                                              : Color.primary.opacity(0.08))
+                            .fill(recording ? Color.accentColor.opacity(0.18)
+                                            : Color.primary.opacity(0.08))
                     )
             }
             .buttonStyle(.plain)
-            if current != nil && !isRecording {
-                Button(action: clear) {
+            if current != nil && !recording {
+                Button { config = nil } label: {
                     Image(systemName: "arrow.counterclockwise")
                         .font(.system(size: 12, weight: .medium))
                         .frame(width: 28, height: 28)
@@ -821,26 +913,21 @@ private struct HotkeyPane: View {
                                          : L10n.t("恢复默认", "Reset to default"))
             }
         }
+        .onDisappear { stopRecording() }
     }
 
-    private func startRecording(_ target: Target) {
+    private func startRecording() {
         stopRecording()
-        recording = target
+        recording = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             defer { stopRecording() }
             if event.keyCode == 53 { return nil }   // Esc 取消
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             guard !mods.intersection([.command, .control, .option]).isEmpty,
                   let chars = event.charactersIgnoringModifiers, !chars.isEmpty else { return nil }
-            let config = HotkeyConfig(keyCode: event.keyCode,
-                                      modifiers: mods.rawValue,
-                                      character: chars.lowercased())
-            switch target {
-            case .switcher: settings.switcherHotkey = config
-            case .global:   settings.globalHotkey = config
-            case .search:   settings.searchHotkey = config
-            case .pin:      settings.pinHotkey = config
-            }
+            config = HotkeyConfig(keyCode: event.keyCode,
+                                  modifiers: mods.rawValue,
+                                  character: chars.lowercased())
             return nil   // 这次按键被录制吃掉，不下发
         }
     }
@@ -848,8 +935,15 @@ private struct HotkeyPane: View {
     private func stopRecording() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
-        recording = nil
+        recording = false
     }
+}
+
+/// 录制行下面那句通用说明。
+private func hotkeyNote(_ zh: L10nText, _ en: L10nText) -> some View {
+    Text(L10n.t(zh, en))
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
 }
 
 // MARK: - 关于
@@ -953,11 +1047,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private var generalHost: NSHostingController<GeneralPane>?
     private var switcherHost: NSHostingController<SwitcherPane>?
+    private var searchHost: NSHostingController<SearchPane>?
     private var tabManagementHost: NSHostingController<TabManagementPane>?
     private var foldersHost: NSHostingController<FoldersPane>?
     private var openWithHost: NSHostingController<OpenWithPane>?
     private var browserHost: NSHostingController<BrowserPane>?
-    private var hotkeyHost: NSHostingController<HotkeyPane>?
     private var aboutHost: NSHostingController<AboutPane>?
 
     private var browserStatuses: [MRUController.BrowserStatus] = []
@@ -988,18 +1082,28 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         for (item, title) in zip(tabController.tabViewItems, Self.paneTitles) {
             item.label = title
         }
+        // 工具栏按钮是开窗时按 tabViewItem 生成的，改 label 不保证同步过去，直接改按钮。
+        // 按钮顺序和分页顺序一致；两头可能有居中用的空白项，滤掉。
+        let buttons = window?.toolbar?.items.filter {
+            $0.itemIdentifier != .flexibleSpace && $0.itemIdentifier != .space
+        } ?? []
+        for (button, title) in zip(buttons, Self.paneTitles) {
+            button.label = title
+            button.paletteLabel = title
+        }
         tabController.title = L10n.t("设置", "Settings")
+        window?.title = tabController.title ?? ""
         refreshContentIfVisible()
     }
 
-    private static var paneTitles: [String] {
+    fileprivate static var paneTitles: [String] {
         [L10n.t("通用", "General"),
          L10n.t("切换器", "Switcher"),
+         L10n.t("搜索面板", "Search"),
          L10n.t("标签管理", "Tabs"),
          L10n.t("文件夹管理", "Folders"),
          L10n.t("打开方式", "Open With"),
          L10n.t("浏览器", "Browsers"),
-         L10n.t("快捷键", "Shortcuts"),
          L10n.t("关于", "About")]
     }
 
@@ -1007,11 +1111,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         guard let window, window.isVisible else { return }
         generalHost?.rootView = GeneralPane(settings: settings)
         switcherHost?.rootView = SwitcherPane(settings: settings)
+        searchHost?.rootView = SearchPane(settings: settings)
         tabManagementHost?.rootView = TabManagementPane(settings: settings)
         foldersHost?.rootView = FoldersPane(folders: folders, settings: settings)
         openWithHost?.rootView = OpenWithPane(folders: folders)
         browserHost?.rootView = BrowserPane(browsers: browserStatuses)
-        hotkeyHost?.rootView = HotkeyPane(settings: settings)
         aboutHost?.rootView = AboutPane(updates: updates)
     }
 
@@ -1026,35 +1130,35 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if window == nil {
             let general = NSHostingController(rootView: GeneralPane(settings: settings))
             let switcher = NSHostingController(rootView: SwitcherPane(settings: settings))
+            let searchPane = NSHostingController(rootView: SearchPane(settings: settings))
             let tabManagement = NSHostingController(rootView: TabManagementPane(settings: settings))
             let foldersPane = NSHostingController(rootView: FoldersPane(folders: folders, settings: settings))
             let openWith = NSHostingController(rootView: OpenWithPane(folders: folders))
             let browser = NSHostingController(rootView: BrowserPane(browsers: browserStatuses))
-            let hotkey = NSHostingController(rootView: HotkeyPane(settings: settings))
             let about = NSHostingController(rootView: AboutPane(updates: updates))
             // 让 preferredContentSize 跟随 SwiftUI 内容：NSTabViewController
             // 切 tab 时按它做窗口尺寸动画（顶边锚定是 AppKit 原生行为）
             general.sizingOptions = [.preferredContentSize]
             switcher.sizingOptions = [.preferredContentSize]
+            searchPane.sizingOptions = [.preferredContentSize]
             tabManagement.sizingOptions = [.preferredContentSize]
             foldersPane.sizingOptions = [.preferredContentSize]
             openWith.sizingOptions = [.preferredContentSize]
             browser.sizingOptions = [.preferredContentSize]
-            hotkey.sizingOptions = [.preferredContentSize]
             about.sizingOptions = [.preferredContentSize]
             generalHost = general
             switcherHost = switcher
+            searchHost = searchPane
             tabManagementHost = tabManagement
             foldersHost = foldersPane
             openWithHost = openWith
             browserHost = browser
-            hotkeyHost = hotkey
             aboutHost = about
 
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
-            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "rectangle.stack", "folder", "arrow.up.forward.app", "globe", "command", "info.circle"]
-            for (index, controller) in ([general, switcher, tabManagement, foldersPane, openWith, browser, hotkey, about] as [NSViewController]).enumerated() {
+            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "magnifyingglass", "rectangle.stack", "folder", "arrow.up.forward.app", "globe", "info.circle"]
+            for (index, controller) in ([general, switcher, searchPane, tabManagement, foldersPane, openWith, browser, about] as [NSViewController]).enumerated() {
                 let item = NSTabViewItem(viewController: controller)
                 item.label = Self.paneTitles[index]
                 item.image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: nil)

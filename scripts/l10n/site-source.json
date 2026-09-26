@@ -1,0 +1,512 @@
+[
+ {
+  "key": "Switcher",
+  "zh": "切换器",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Search",
+  "zh": "搜索面板",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Install",
+  "zh": "安装",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Sponsor",
+  "zh": "赞助",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "A tab switcher and search panel for Chrome",
+  "zh": "Chrome 的标签切换器和搜索面板",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "⌃⇥ switches tabs in the order you used them. ⌘E finds tabs, bookmarks, history, folders and apps from one box.",
+  "zh": "⌃⇥ 按最近使用的顺序切标签。⌘E 在一个框里找标签、书签、历史记录、文件夹和 App。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Download",
+  "zh": "免费下载",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "How to install",
+  "zh": "安装步骤",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Chrome and Chromium browsers 116+",
+  "zh": "Chrome 等 Chromium 浏览器 116+",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Open source · MIT · Free",
+  "zh": "开源 · MIT · 免费",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Switcher · ⌃⇥",
+  "zh": "切换器 · ⌃⇥",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Back to the last tab, not the next one",
+  "zh": "回到上一个标签，而不是旁边那个",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Chrome's ⌃⇥ walks the tab strip. TabFlick makes it walk your history.",
+  "zh": "Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你用过的顺序走。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Stable A↔B.",
+  "zh": "来回切换稳定。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Tap again to go back. While held only a cursor moves, so tabs you pass are not counted as used.",
+  "zh": "再按一次就回到出发的标签；按住时只移动游标，中途经过的不算用过。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Page thumbnails.",
+  "zh": "网页缩略图。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Recognise tabs by how they look, not by truncated titles.",
+  "zh": "靠页面样子认标签，不用读截断的标题。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Keys, arrows or mouse.",
+  "zh": "键盘、方向键、鼠标都行。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "⌃⇧⇥ goes back, arrows move while held, or click a card.",
+  "zh": "⌃⇧⇥ 反向，按住时方向键移动，或直接点卡片。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Per window.",
+  "zh": "按窗口分开。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Only the current window's tabs, each window with its own order. Can be turned off.",
+  "zh": "只列当前窗口的标签，每个窗口有自己的顺序。设置里可以关。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Search panel · ⌘E",
+  "zh": "搜索面板 · ⌘E",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Type a few letters, get there",
+  "zh": "要找的东西，打几个字就到",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Tabs, recently closed tabs, bookmarks, history, favorite folders and installed apps — one box.",
+  "zh": "标签、最近关闭、书签、历史记录、收藏的文件夹、已装的 App，都在同一个框里。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Tab changes scope.",
+  "zh": "Tab 换范围。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "All, Tabs, Search, History, Bookmarks, Closed, Folders, Apps — you pick which ones and in what order.",
+  "zh": "全部、标签、搜索、历史记录、书签、最近关闭、文件夹、应用依次切，顺序和开关在设置里定。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Pinyin works.",
+  "zh": "中文用拼音也能搜。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Full pinyin and initials both match Chinese titles.",
+  "zh": "全拼和首字母都认，mnjt 能找到「蒙牛集团」。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Nothing found? Search the web.",
+  "zh": "没找到就搜网页。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "With the browser's own engine, or site search like GitHub and YouTube.",
+  "zh": "用浏览器自己的默认引擎，也可以加 GitHub、YouTube 这类站内搜索。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "From any app.",
+  "zh": "在别的 App 里也能用。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Press ⌥Space to search every browser's tabs and jump straight there.",
+  "zh": "按 ⌥Space，搜所有浏览器的标签，选中就切过去。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Web and site search",
+  "zh": "搜网页和站内搜索",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Bookmarks with folder and address",
+  "zh": "书签带文件夹和地址",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Folders: Enter opens, ⌘↩ picks an app",
+  "zh": "文件夹：回车打开，⌘↩ 换 App",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Also included",
+  "zh": "还有这些",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Pins that stick",
+  "zh": "置顶常驻",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Pinned tabs come back after a restart, on the last page you visited.",
+  "zh": "置顶的标签重启浏览器后自动回来，停在最后看的那页。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Idle tab cleanup",
+  "zh": "自动清理闲置标签",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Close tabs unused for 12 h, 24 h or 7 days; pinned, audible and grouped tabs stay. Off by default.",
+  "zh": "12 小时、24 小时或 7 天没用过就关掉；置顶、在放声音的、标签组里的不动。默认关。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Menu bar tab list",
+  "zh": "菜单栏标签列表",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "The menu bar lists every tab by window, plus recently closed ones; click to go there.",
+  "zh": "状态栏菜单按窗口列出所有标签和最近关闭的，点一下切过去。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Favorite folders",
+  "zh": "收藏的文件夹",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Keep your usual folders in the menu bar and open them in Finder, a terminal or an editor.",
+  "zh": "把常用目录收在菜单栏，选 Finder、终端或编辑器打开。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Global switcher",
+  "zh": "全局切换器",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Press ⌃⇥ outside the browser to see every browser's tabs, grouped. Off by default.",
+  "zh": "在浏览器之外按 ⌃⇥，按浏览器分组列出所有标签。默认关。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Fails open",
+  "zh": "出问题不会吞键",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "If the extension isn't connected, ⌃⇥ falls back to Chrome's own switching instead of doing nothing.",
+  "zh": "扩展没连上时，⌃⇥ 交回给 Chrome 自带的切换，不会按了没反应。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "An app plus a browser extension. Two minutes.",
+  "zh": "一个 App 加一个浏览器扩展，两分钟装好。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Install the app",
+  "zh": "装 App",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Download the DMG and drag TabFlick into Applications. If macOS says the developer can't be verified, right-click TabFlick in Applications and choose Open.",
+  "zh": "下载 DMG，把 TabFlick 拖进「应用程序」。第一次打开如果提示无法验证开发者，在「应用程序」里右键 TabFlick 选「打开」。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Download app",
+  "zh": "下载 App",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Install the extension",
+  "zh": "装扩展",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Unzip the extension, open chrome://extensions, turn on Developer mode, click Load unpacked and pick the folder.",
+  "zh": "解压扩展包，打开 chrome://extensions，开启开发者模式，点「加载已解压的扩展程序」选中文件夹。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Download extension",
+  "zh": "下载扩展",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Step by step",
+  "zh": "图文步骤",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Allow Accessibility",
+  "zh": "给辅助功能权限",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.",
+  "zh": "第一次启动会弹出引导，把 TabFlick 图标拖进「辅助功能」列表，App 会自动重启。菜单栏图标变亮就是连上了。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "The extension asks for tabs, bookmarks, history, favicons and search; the data only goes to TabFlick on this Mac. After an update, allow any new permissions and reload the extension. Logs live at",
+  "zh": "扩展要标签、书签、历史记录、图标、搜索这几项权限，数据只交给本机的 TabFlick，不联网。升级后 Chrome 提示新权限时点允许，再重新加载扩展。日志在",
+  "page": "docs/index.html"
+ },
+ {
+  "key": ".",
+  "zh": "。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Why an app plus an extension",
+  "zh": "为什么要一个 App 加一个扩展",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "The extension cannot read the keyboard.",
+  "zh": "扩展读不到键盘。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Since Chrome 33 extensions can't bind shortcuts with Tab, so a native process handles ⌃⇥.",
+  "zh": "Chrome 33 起扩展就不能绑定带 Tab 的快捷键，所以要一个原生进程接管 ⌃⇥。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "The app cannot read the tabs.",
+  "zh": "原生进程读不到标签。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Tabs, bookmarks, history and switching all go through Chrome's extension APIs, so an extension is needed. The two talk over a local WebSocket.",
+  "zh": "标签、书签、历史记录和切换都要走 Chrome 的扩展 API，所以要一个扩展。两边通过本机 WebSocket 连在一起。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Shortcuts",
+  "zh": "快捷键",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "All of them can be changed in Settings.",
+  "zh": "都可以在设置里改。",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "While a browser is frontmost",
+  "zh": "浏览器在前台时",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Switch to the previous tab",
+  "zh": "切到上一个用过的标签",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Hold ⌃ and keep tapping to go further back",
+  "zh": "按住 ⌃ 连点，继续往回走",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Reverse",
+  "zh": "反向",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Move with arrows while ⌃ is held",
+  "zh": "按住 ⌃ 时用方向键移动",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Release ⌃",
+  "zh": "松开 ⌃",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Switch",
+  "zh": "切过去",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Search panel",
+  "zh": "搜索面板",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "⌥Space works from any app",
+  "zh": "⌥Space 在任何 App 里都能用",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Open inside the browser",
+  "zh": "在浏览器里打开",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Open from any app, across browsers",
+  "zh": "在别的 App 里打开，搜所有浏览器",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Change scope",
+  "zh": "切换范围",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Pick a row",
+  "zh": "直接选第几行",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Open a folder with another app",
+  "zh": "文件夹换一个 App 打开",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Open Settings",
+  "zh": "打开设置",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Docs",
+  "zh": "文档",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Issues",
+  "zh": "反馈",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "More apps",
+  "zh": "更多作品",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "TabFlick — tab switcher and search panel for Chrome",
+  "zh": "TabFlick — Chrome 的标签切换器和搜索面板",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "TabFlick — Installing the extension",
+  "zh": "TabFlick — 扩展安装说明",
+  "page": "docs/index.html"
+ },
+ {
+  "key": "Installing the extension",
+  "zh": "扩展安装说明",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.",
+  "zh": "TabFlick Bridge 扩展暂未上架 Chrome 应用商店，需要通过开发者模式安装，一次装好长期使用。",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Download and unzip",
+  "zh": "下载并解压扩展包",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.",
+  "zh": "下载 TabFlick-Extension.zip，双击解压得到 TabFlick-Extension 文件夹。建议把它放到一个不会误删的位置（如「文稿」）—— Chrome 会持续从这个文件夹加载扩展，删掉文件夹扩展就失效了。",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Download the extension",
+  "zh": "下载扩展包",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Open the extensions page",
+  "zh": "打开扩展管理页",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Type chrome://extensions in the address bar, or use Menu → Extensions → Manage Extensions.",
+  "zh": "在 Chrome 地址栏输入 chrome://extensions 回车，或菜单 → 扩展程序 → 管理扩展程序。",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Turn on Developer mode",
+  "zh": "开启开发者模式",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Flip the Developer mode toggle in the top-right corner; a new row of buttons appears.",
+  "zh": "页面右上角有「开发者模式」开关，打开它，页面顶部会多出一排按钮。",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Load the extension",
+  "zh": "加载扩展",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.",
+  "zh": "点「加载已解压的扩展程序」，选择第 1 步解压出的 TabFlick-Extension 文件夹。列表里出现 TabFlick Bridge 即安装成功。",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Confirm the connection",
+  "zh": "确认连接",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.",
+  "zh": "保持 TabFlick 运行，菜单栏图标变亮、菜单里列出浏览器和标签数，就是两端接通了。之后按住 ⌃ 点 ⇥ 就能唤出切换器。",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.",
+  "zh": "升级说明：TabFlick 应用发新版时，如果发版说明提到扩展有更新，下载新的扩展包解压覆盖原文件夹，然后在 chrome://extensions 点击 TabFlick Bridge 卡片上的刷新按钮（↻）即可。",
+  "page": "docs/install-extension.html"
+ },
+ {
+  "key": "← Back to home",
+  "zh": "← 返回首页",
+  "page": "docs/install-extension.html"
+ }
+]

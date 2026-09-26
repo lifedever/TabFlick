@@ -93,11 +93,70 @@ function scheduleRetry() {
   retryTimer = setTimeout(connect, RETRY_MS);
 }
 
+// ── favicon（书签 / 历史行用）────────────────────────────────────────────
+//
+// Chrome 给扩展的 _favicon 接口在 service worker 里 fetch 拿到的永远是默认图
+//（2026-09-26 实测：连刚访问过的站都是 0 hit），官方文档的用法是在扩展页面里
+// 用 <img> 加载。offscreen 页就是扩展页面，在这里画到 canvas 取 PNG 字节。
+// 没访问过的站 Chrome 会给默认地球图 —— 拿一个假地址取一次做比对，一样的报「缺」。
+
+function faviconURL(pageUrl) {
+  return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(pageUrl)}&size=32`);
+}
+
+async function faviconDataURL(pageUrl) {
+  const img = new Image();
+  img.src = faviconURL(pageUrl);
+  await img.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 32;
+  canvas.getContext("2d").drawImage(img, 0, 0, 32, 32);
+  return canvas.toDataURL("image/png");
+}
+
+let defaultFavicon;
+async function defaultFaviconDataURL() {
+  if (defaultFavicon === undefined) {
+    try {
+      defaultFavicon = await faviconDataURL("http://tabflick-no-such-site.invalid/");
+    } catch {
+      defaultFavicon = null;
+    }
+  }
+  return defaultFavicon;
+}
+
+async function handleFaviconQuery(items) {
+  const fallback = await defaultFaviconDataURL();
+  const hits = [];
+  const missing = [];
+  for (const { key, url } of (items ?? []).slice(0, 60)) {
+    if (typeof key !== "string" || typeof url !== "string") continue;
+    try {
+      const dataURL = await faviconDataURL(url);
+      if (dataURL && dataURL !== fallback) {
+        hits.push({ key, data: dataURL.slice(dataURL.indexOf(",") + 1) });
+      } else {
+        missing.push(key);
+      }
+    } catch {
+      missing.push(key);
+    }
+  }
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "favicons", items: hits, missing }));
+    ws.send(JSON.stringify({ type: "log", message: `favicons: ${hits.length} hit, ${missing.length} missing (default ${fallback ? "known" : "unknown"})` }));
+  }
+}
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.target !== "offscreen") return;
 
   if (message.type === "ws-send") {
     if (ws?.readyState === WebSocket.OPEN) ws.send(message.data);
+  } else if (message.type === "favicon-query") {
+    handleFaviconQuery(message.items);
   } else if (message.type === "ws-poke") {
     // SW 想确认连接还在
     if (ws?.readyState === WebSocket.OPEN) {

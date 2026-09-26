@@ -28,6 +28,41 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// 搜索面板的模式，按 Tab 循环（2026-09-26 用户定的），顺序在设置里可调。
+enum SearchMode: String, CaseIterable, Identifiable, Codable {
+    /// 混排：活标签在前，有输入时后面挂最近关闭 / 书签 / 历史各几条
+    case all
+    /// 只搜活着的标签（当前浏览器所有窗口）
+    case tabs
+    /// 对当前输入的操作：搜索引擎、站内搜索
+    case actions
+    case history
+    case bookmarks
+    case closed
+    /// 收藏的文件夹（状态栏那份），回车用上次的方式打开、⌘↩ 选打开方式
+    case folders
+    /// 已安装的 App，回车启动。默认不开 —— 装了 Raycast 的人用不上
+    case apps
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all:       return L10n.t("全部", "All")
+        case .tabs:      return L10n.t("标签", "Tabs")
+        case .actions:   return L10n.t("搜索", "Search")
+        case .history:   return L10n.t("历史记录", "History")
+        case .bookmarks: return L10n.t("书签", "Bookmarks")
+        case .closed:    return L10n.t("最近关闭", "Recently closed")
+        case .folders:   return L10n.t("文件夹", "Folders")
+        case .apps:      return L10n.t("应用", "Apps")
+        }
+    }
+
+    /// 默认进循环的模式。
+    static let defaultEnabled: Set<SearchMode> = [.all, .tabs, .actions, .history, .bookmarks, .closed, .folders]
+}
+
 /// 切换器浮层的排布方式。
 enum SwitcherLayout: String, CaseIterable, Identifiable {
     /// 横向一行，放不下时左右滚动（默认，和 macOS ⌘⇥ 一个形态）。
@@ -75,6 +110,33 @@ struct ExcludedApp: Codable, Identifiable, Equatable {
     let name: String
 
     var id: String { bundleID }
+}
+
+/// 站内搜索模板（⌘E 面板按 Tab 后的「在 X 搜索」）。`template` 里的 `%s` 换成关键词。
+struct SiteSearch: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var name: String
+    var template: String
+
+    /// 默认只给两个（用户 2026-09-26 定的：B 站、掘金不进默认）。设置里可以改、删、加。
+    static let defaults: [SiteSearch] = [
+        SiteSearch(name: "GitHub", template: "https://github.com/search?q=%s"),
+        SiteSearch(name: "YouTube", template: "https://www.youtube.com/results?search_query=%s"),
+    ]
+
+    /// 模板的域名，面板行的副标题用。
+    var host: String {
+        URL(string: template.replacingOccurrences(of: "%s", with: "x"))?.host ?? template
+    }
+
+    /// 把关键词填进模板。只放行 RFC 3986 unreserved 字符，别换成 `URLComponents`——
+    /// 它不编码 `+`，对端按空格解（同 OpenerCatalog.claudeCodeURL 那条）。
+    func url(for query: String) -> String? {
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) else { return nil }
+        let url = template.replacingOccurrences(of: "%s", with: encoded)
+        return url.hasPrefix("http") ? url : nil
+    }
 }
 
 /// 收藏的标签：浏览器每次连上都保证它存在且置顶（Arc 收藏位的 Chrome 版）。
@@ -263,7 +325,12 @@ final class AppSettings: ObservableObject {
         static let switcherHotkey = "switcherHotkey"
         static let globalHotkey = "globalHotkey"
         static let searchHotkey = "searchHotkey"
+        static let globalSearchHotkey = "globalSearchHotkey"
         static let tabSearch = "tabSearch"
+        static let siteSearches = "siteSearches"
+        static let searchModeOrder = "searchModeOrder"
+        static let searchModesEnabled = "searchModesEnabled"
+        static let allEmptyContent = "allEmptyContent"
         static let globalSwitcher = "globalSwitcher"
         static let globalSwitcherStyle = "globalSwitcherStyle"
         static let globalExcludedApps = "globalExcludedApps"
@@ -431,12 +498,80 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 搜索面板 Tab 循环的顺序。存的是 rawValue 数组；解出来缺的补在末尾、多的丢掉，
+    /// 这样以后加模式老设置照样能用。
+    @Published var searchModeOrder: [SearchMode] {
+        didSet {
+            guard oldValue != searchModeOrder else { return }
+            UserDefaults.standard.set(searchModeOrder.map(\.rawValue), forKey: Key.searchModeOrder)
+        }
+    }
+
+    /// 哪些模式进 Tab 循环（设置里勾选）。至少留一个，全去掉就退回「全部」。
+    @Published var searchModesEnabled: Set<SearchMode> {
+        didSet {
+            guard oldValue != searchModesEnabled else { return }
+            UserDefaults.standard.set(searchModesEnabled.map(\.rawValue).sorted(), forKey: Key.searchModesEnabled)
+        }
+    }
+
+    /// 「全部」模式没输入时列什么。nil = 空着。默认标签（用户 2026-09-26 定的）。
+    @Published var allEmptyContent: SearchMode? {
+        didSet {
+            guard oldValue != allEmptyContent else { return }
+            UserDefaults.standard.set(allEmptyContent?.rawValue ?? "none", forKey: Key.allEmptyContent)
+        }
+    }
+    /// 可以选的项（「全部」和「搜索」本身没有「没输入时的内容」）。
+    static let allEmptyChoices: [SearchMode] = [.tabs, .history, .bookmarks, .closed, .folders, .apps]
+
+    /// 按顺序、只取勾选的；一个都没勾就退回「全部」。
+    var activeSearchModes: [SearchMode] {
+        let active = searchModeOrder.filter { searchModesEnabled.contains($0) }
+        return active.isEmpty ? [.all] : active
+    }
+
+    static func normalizedModeOrder(_ raw: [String]?) -> [SearchMode] {
+        var order = (raw ?? []).compactMap(SearchMode.init(rawValue:))
+        // 「标签」是后加的（2026-09-26），老设置里没有它时插在「全部」后面而不是末尾
+        if !order.contains(.tabs), let allIndex = order.firstIndex(of: .all) {
+            order.insert(.tabs, at: allIndex + 1)
+        }
+        for mode in SearchMode.allCases where !order.contains(mode) { order.append(mode) }
+        return order
+    }
+
+    /// 站内搜索模板（⌘E 面板 Tab 操作里的「在 X 搜索」）。未设置时用默认那几个。
+    /// 纯 helper 侧，面板每次打开时读。
+    @Published var siteSearches: [SiteSearch] {
+        didSet {
+            guard oldValue != siteSearches else { return }
+            if let data = try? JSONEncoder().encode(siteSearches) {
+                UserDefaults.standard.set(data, forKey: Key.siteSearches)
+            }
+        }
+    }
+
     /// 标签搜索面板的开关。默认开。纯 helper 侧，改的是拦截范围，走 onHotkeyChange
     /// 一并重挂（它和搜索键在 event tap 里是同一组状态）。
     @Published var tabSearch: Bool {
         didSet {
             guard oldValue != tabSearch else { return }
             UserDefaults.standard.set(tabSearch, forKey: Key.tabSearch)
+            onHotkeyChange?()
+        }
+    }
+
+    /// 浏览器之外的搜索键。nil = 默认 ⌥Space。任何 App 前台都生效（排除名单除外），
+    /// 弹出跨浏览器的搜索。
+    @Published var globalSearchHotkey: HotkeyConfig? {
+        didSet {
+            guard oldValue != globalSearchHotkey else { return }
+            if let hk = globalSearchHotkey, let data = try? JSONEncoder().encode(hk) {
+                UserDefaults.standard.set(data, forKey: Key.globalSearchHotkey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Key.globalSearchHotkey)
+            }
             onHotkeyChange?()
         }
     }
@@ -561,7 +696,15 @@ final class AppSettings: ObservableObject {
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
         searchHotkey = defaults.data(forKey: Key.searchHotkey)
             .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
+        globalSearchHotkey = defaults.data(forKey: Key.globalSearchHotkey)
+            .flatMap { try? JSONDecoder().decode(HotkeyConfig.self, from: $0) }
         tabSearch = defaults.object(forKey: Key.tabSearch) == nil ? true : defaults.bool(forKey: Key.tabSearch)
+        siteSearches = defaults.data(forKey: Key.siteSearches)
+            .flatMap { try? JSONDecoder().decode([SiteSearch].self, from: $0) } ?? SiteSearch.defaults
+        searchModeOrder = Self.normalizedModeOrder(defaults.stringArray(forKey: Key.searchModeOrder))
+        searchModesEnabled = defaults.stringArray(forKey: Key.searchModesEnabled)
+            .map { Set($0.compactMap(SearchMode.init(rawValue:))) } ?? SearchMode.defaultEnabled
+        allEmptyContent = defaults.string(forKey: Key.allEmptyContent).map { SearchMode(rawValue: $0) } ?? .tabs
         globalSwitcher = defaults.bool(forKey: Key.globalSwitcher)   // 未设置即默认 false
         globalSwitcherStyle = GlobalSwitcherStyle(rawValue: defaults.string(forKey: Key.globalSwitcherStyle) ?? "") ?? .list
         globalExcludedApps = defaults.data(forKey: Key.globalExcludedApps)

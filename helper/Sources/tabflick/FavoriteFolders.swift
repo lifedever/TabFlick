@@ -362,6 +362,47 @@ enum OpenerCatalog {
         return result
     }
 
+    /// 用某个 App 打开一个目录，并给 toast 回响。状态栏菜单和搜索面板共用这一份。
+    /// toast 等真打开了再报：冷启动的 App 要一两秒，提前说「已打开」是撒谎。
+    static func open(folder path: String, with opener: OpenerApp) {
+        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        let appName = opener.name
+        let folderName = folder.lastPathComponent
+        let report: (Error?) -> Void = { error in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    if let error {
+                        log("⚠️  open folder failed: \(error.localizedDescription)")
+                        // 错误描述往往一长句，塞进标题只会被掐成一截 ——
+                        // 让它走副标题那行，标题只说成没成
+                        Toast.show(L10n.t("打开失败", "Failed to open"),
+                                   detail: error.localizedDescription, kind: .failure)
+                    } else {
+                        Toast.show(L10n.t("已在 \(appName) 打开「\(folderName)」",
+                                          "Opened “\(folderName)” in \(appName)"),
+                                   detail: path)
+                    }
+                }
+            }
+        }
+        switch opener.launch {
+        case .document:
+            NSWorkspace.shared.open([folder], withApplicationAt: opener.url,
+                                    configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                report(error)
+            }
+        case .claudeCode:
+            guard let link = OpenerCatalog.claudeCodeURL(folder: path) else {
+                log("⚠️  claude code deep link failed to build for \(path)")
+                return
+            }
+            NSWorkspace.shared.open(link, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                report(error)
+            }
+        }
+        log("📁 open \(path) with \(opener.id)")
+    }
+
     /// 菜单里的最终列表：滤掉被关掉的，点过的按最近点击排前。
     static func menuOpeners(store: FavoriteFolderStore) -> [OpenerApp] {
         // 账本 key 一律用 id 而不是 path：Claude 和 Claude Code 同 path，

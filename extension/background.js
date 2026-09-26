@@ -762,6 +762,50 @@ async function handleHelperMessage(raw) {
         }
       }
       break;
+    case "faviconQuery":
+      // 书签 / 历史行的图标。取图必须在扩展页面里用 <img>（见 offscreen.js），
+      // SW 里 fetch _favicon 拿到的永远是默认图。offscreen 页取完直接经 WS 回给 helper。
+      if (Array.isArray(msg.items)) {
+        await ensureOffscreen();
+        chrome.runtime
+          .sendMessage({ target: "offscreen", type: "favicon-query", items: msg.items })
+          .catch(() => {});
+      }
+      break;
+    case "historyQuery":
+      // ⌘E 面板按输入实时查浏览器历史。让 Chrome 自己匹配（和地址栏一个口径），
+      // 几万条也快；helper 只拿前几条。requestId 原样带回，helper 用它丢掉过期回包。
+      // 空串 = 最近访问的（面板「历史记录」模式没输入时列这个）
+      if (typeof msg.text === "string" && chrome.history) {
+        try {
+          const results = await chrome.history.search({
+            text: msg.text,
+            maxResults: msg.text.trim() ? 20 : 40,
+            startTime: Date.now() - 90 * 24 * 3600 * 1000,
+          });
+          send({
+            type: "history",
+            requestId: msg.requestId,
+            items: results
+              .filter((r) => typeof r.url === "string" && r.url.startsWith("http"))
+              .map((r) => ({ title: r.title ?? "", url: r.url, lastVisitTime: r.lastVisitTime ?? 0 })),
+          });
+        } catch (e) {
+          send({ type: "log", message: `history.search failed: ${e}` });
+        }
+      }
+      break;
+    case "search":
+      // ⌘E 面板里按 Tab 选「搜索」：用浏览器自己设的默认搜索引擎，新标签打开。
+      // 走 chrome.search 而不是拼某家的网址 —— 引擎归浏览器管，我们不另设一份。
+      if (typeof msg.text === "string" && msg.text.trim() && chrome.search) {
+        try {
+          await chrome.search.query({ text: msg.text, disposition: "NEW_TAB" });
+        } catch (e) {
+          send({ type: "log", message: `search failed: ${e}` });
+        }
+      }
+      break;
     case "reopen":
       // 从已关闭列表里找回一个标签
       if (typeof msg.url === "string" && msg.url.startsWith("http")) {

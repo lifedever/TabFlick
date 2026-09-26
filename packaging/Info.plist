@@ -18,6 +18,24 @@
     <string>6.0</string>
 
     <!-- 由 scripts/build-app.sh 注入 -->
+    <!-- 没有 .lproj，进程首选本地化会退成英文，Launch Services 给 App 名字做本地化
+         时就全是英文（搜索面板「应用」模式里 Weather / WeChat 而不是天气 / 微信）。
+         允许混合本地化后按系统语言取。 -->
+    <!-- 声明支持的语言：系统设置 → 通用 → 语言与地区 → App 里才能单独给 TabFlick 选语言。
+         文案本身不在 .lproj 里（见 L10n.swift），这里只是告诉系统有哪些。 -->
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>en</string>
+        <string>ja</string>
+        <string>ko</string>
+        <string>es</string>
+        <string>fr</string>
+        <string>de</string>
+    </array>
+    <key>CFBundleAllowMixedLocalizations</key>
+    <true/>
     <key>CFBundleShortVersionString</key>
     <string>__VERSION__</string>
     <key>CFBundleVersion</key>

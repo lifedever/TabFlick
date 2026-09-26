@@ -110,7 +110,7 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated {
                 let outdated = controller.browserStatuses.filter(\.needsUpdate)
                 guard !outdated.isEmpty else { return nil }
-                let names = outdated.map(\.name).joined(separator: "、")
+                let names = outdated.map(\.name).joined(separator: L10n.listSeparator)
                 return L10n.t("扩展需要更新：\(names)", "Extension update needed: \(names)")
             }
         }
@@ -171,6 +171,15 @@ MainActor.assumeIsolated {
         }
         statusItem.folderOpenersProvider = {
             MainActor.assumeIsolated { OpenerCatalog.menuOpeners(store: folders) }
+        }
+        // 搜索面板「文件夹」模式：同一份收藏、同一份打开方式、同一段打开逻辑
+        controller.openSettings = { settingsWindow.show() }
+        controller.folderProvider = { folders.entries }
+        controller.openerProvider = { OpenerCatalog.menuOpeners(store: folders) }
+        controller.openFolderHandler = { folder, opener in
+            OpenerCatalog.open(folder: folder.path, with: opener)
+            folders.touch(path: folder.path)
+            folders.touchOpener(appPath: opener.id)
         }
         // 收藏一个目录并给回响。「收藏当前 Finder 目录」和「添加文件夹…」
         // 两个入口只差「路径从哪来」，落库和 toast 是同一段。
@@ -294,6 +303,13 @@ MainActor.assumeIsolated {
                                       enabled: settings.tabSearch) {
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated { controller.toggleTabSearch() }
+                    }
+                }
+                configureGlobalSearchHotkey(keyCode: settings.globalSearchHotkey.map { Int64($0.keyCode) },
+                                            flags: settings.globalSearchHotkey?.cgFlags ?? [],
+                                            enabled: settings.tabSearch) {
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { controller.toggleTabSearch(global: true) }
                     }
                 }
             }
@@ -428,14 +444,14 @@ MainActor.assumeIsolated {
                                                    "Accessibility permission was removed")
                         alert.informativeText = L10n.t(
                             """
-                            TabFlick 已经停用键盘钩子，不影响你正常打字。⌃⇥ 回落到                             Chrome 自带的切换方式。
+                            TabFlick 已经停用键盘钩子，不影响你正常打字。⌃⇥ 回落到 Chrome 自带的切换方式。
 
-                            重新授予权限后，需要退出并重新打开 TabFlick 才会生效 ——                             macOS 只在进程启动时读取这项权限。
+                            重新授予权限后，需要退出并重新打开 TabFlick 才会生效 —— macOS 只在进程启动时读取这项权限。
                             """,
                             """
-                            TabFlick disabled its keyboard hook immediately, so your typing is                             unaffected. ⌃⇥ falls back to Chrome's built-in switching.
+                            TabFlick disabled its keyboard hook immediately, so your typing is unaffected. ⌃⇥ falls back to Chrome's built-in switching.
 
-                            After granting the permission again, quit and reopen TabFlick —                             macOS only reads this permission when a process starts.
+                            After granting the permission again, quit and reopen TabFlick — macOS only reads this permission when a process starts.
                             """
                         )
                         alert.addButton(withTitle: L10n.t("好", "OK"))

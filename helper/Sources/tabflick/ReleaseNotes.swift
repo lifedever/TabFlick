@@ -160,7 +160,7 @@ enum ReleaseNotes {
         let parsed = body.map {
             ReleaseNotesParser.blocks(
                 from: ReleaseNotesParser.section(from: $0,
-                                                 heading: L10n.t("更新内容", "What's New")))
+                                                 heading: L10n.prefersChineseContent ? "更新内容" : "What's New"))
         } ?? []
 
         // 打开窗口时临时变成普通 app（同设置窗口）：有 Dock 图标、能 ⌘⇥ 切回来

@@ -1,5 +1,4 @@
 import AppKit
-import CoreImage
 import Foundation
 
 struct TabInfo: Decodable {
@@ -19,12 +18,28 @@ extension TabInfo {
     var relativeLastAccessed: String? { relativeTime(msEpoch: lastAccessed) }
 }
 
+/// 一条浏览器历史（扩展按输入实时查回来的）。
+struct HistoryInfo: Decodable {
+    let title: String
+    let url: String
+    /// 最近访问时刻（ms epoch），口径同 lastAccessed。
+    let lastVisitTime: Double
+    /// 归属连接（helper 填，不在协议里）。
+    var clientID: UUID? = nil
+
+    private enum CodingKeys: String, CodingKey { case title, url, lastVisitTime }
+}
+
 /// 一条书签（扩展把整棵树摊平后发来的）。
 struct BookmarkInfo: Decodable {
     let title: String
     let url: String
     /// 所在文件夹路径，如「书签栏 / 工具」；直接放在根下的为空。
     let path: String
+    /// 归属连接。跨浏览器搜索时打开它要发给这一条；协议里没有，helper 自己填。
+    var clientID: UUID? = nil
+
+    private enum CodingKeys: String, CodingKey { case title, url, path }
 }
 
 /// 一枚 favicon 及其视觉属性。
@@ -44,30 +59,154 @@ final class IconCache {
 
     func image(for url: String) -> IconInfo? { images[url] }
 
+    /// 本机文件 / App 的图标（文件夹、应用行用），键 `file:<path>`。同步取、缩到 64、缓存。
+    func fileIcon(path: String) -> IconInfo? {
+        let key = "file:" + path
+        if let hit = images[key] { return hit }
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        let raw = NSWorkspace.shared.icon(forFile: path)
+        guard let image = Self.downscaled(raw, to: 64) else { return nil }
+        let info = IconInfo(image: image, isLight: false)
+        images[key] = info
+        return info
+    }
+
+    /// 扩展取回来的图标（书签 / 历史行按域名要的），直接入缓存。
+    func store(_ data: Data, for key: String) {
+        guard let image = NSImage(data: data).flatMap({ Self.downscaled($0, to: 64) }) else { return }
+        images[key] = IconInfo(image: image, isLight: Self.isLight(image))
+    }
+
+    // MARK: 站点图标（书签 / 历史行，浏览器自己也没有的那些）
+
+    /// 落盘目录：成功的存 PNG，失败的记时间。helper 重启不重拉。
+    private let siteIconDirectory: URL = {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/TabFlick/favicons", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+    /// 拉过但没拉到的站：24 小时内不再试。不记的话一个挂掉的站每次出现在列表里都
+    /// 会再发两个请求（用户 2026-09-26 点名的风险）。
+    private var siteMisses: [String: Date] = [:]
+    private static let missTTL: TimeInterval = 24 * 3600
+    private var siteMissesLoaded = false
+    /// 同时在跑的站点请求数上限，多的排队；面板一屏最多几十行，别一下子全发出去。
+    private var activeSiteFetches = 0
+    private var siteFetchQueue: [(host: String, key: String, onLoaded: () -> Void)] = []
+    private static let maxConcurrentSiteFetches = 4
+
+    private func siteIconFile(_ key: String) -> URL {
+        let name = key.replacingOccurrences(of: "site:", with: "")
+            .replacingOccurrences(of: "/", with: "_")
+        return siteIconDirectory.appendingPathComponent(name).appendingPathExtension("png")
+    }
+
+    private func loadSiteMissesIfNeeded() {
+        guard !siteMissesLoaded else { return }
+        siteMissesLoaded = true
+        let file = siteIconDirectory.appendingPathComponent("misses.json")
+        if let data = try? Data(contentsOf: file),
+           let raw = try? JSONDecoder().decode([String: Double].self, from: data) {
+            let now = Date()
+            for (key, ts) in raw {
+                let date = Date(timeIntervalSince1970: ts)
+                if now.timeIntervalSince(date) < Self.missTTL { siteMisses[key] = date }
+            }
+        }
+    }
+
+    private func saveSiteMisses() {
+        let file = siteIconDirectory.appendingPathComponent("misses.json")
+        let raw = siteMisses.mapValues { $0.timeIntervalSince1970 }
+        if let data = try? JSONEncoder().encode(raw) { try? data.write(to: file, options: .atomic) }
+    }
+
+    /// 浏览器没有这个站的图标（书签收了但从没打开过）：自己去站上取。
+    /// 先试站点根目录的 favicon.ico，取不到再走 DuckDuckGo 的图标服务（不用 Google，
+    /// 国内也通）。两条都不行就记一笔 miss，24 小时内不再碰，视图用类型图标占位。
+    func fetchSiteIcon(host: String, key: String, onLoaded: @escaping () -> Void) {
+        guard !host.isEmpty, images[key] == nil, !inflight.contains(key) else { return }
+        loadSiteMissesIfNeeded()
+        if let missed = siteMisses[key], Date().timeIntervalSince(missed) < Self.missTTL { return }
+        // 磁盘上有就直接用，不发请求
+        if let data = try? Data(contentsOf: siteIconFile(key)), let image = NSImage(data: data) {
+            images[key] = IconInfo(image: image, isLight: Self.isLight(image))
+            onLoaded()
+            return
+        }
+        inflight.insert(key)
+        siteFetchQueue.append((host, key, onLoaded))
+        pumpSiteFetches()
+    }
+
+    private func pumpSiteFetches() {
+        while activeSiteFetches < Self.maxConcurrentSiteFetches, !siteFetchQueue.isEmpty {
+            let job = siteFetchQueue.removeFirst()
+            activeSiteFetches += 1
+            let candidates = [
+                "https://\(job.host)/favicon.ico",
+                "https://icons.duckduckgo.com/ip3/\(job.host).ico",
+            ].compactMap(URL.init(string:))
+            Self.fetchFirst(candidates) { [weak self] image, png in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.activeSiteFetches -= 1
+                    self.inflight.remove(job.key)
+                    if let image {
+                        self.images[job.key] = IconInfo(image: image, isLight: Self.isLight(image))
+                        if let png { try? png.write(to: self.siteIconFile(job.key), options: .atomic) }
+                        job.onLoaded()
+                    } else {
+                        log("🖼  site icon miss: \(job.host)")
+                        self.siteMisses[job.key] = Date()
+                        self.saveSiteMisses()
+                    }
+                    self.pumpSiteFetches()
+                }
+            }
+        }
+    }
+
+    /// 依次试这几个地址，第一个能解出图的就用（在下载线程上缩好、连同 PNG 字节一起回来）。
+    private nonisolated static func fetchFirst(_ urls: [URL], completion: @escaping (NSImage?, Data?) -> Void) {
+        guard let first = urls.first else { completion(nil, nil); return }
+        var request = URLRequest(url: first)
+        request.timeoutInterval = 8
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            let ok = (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+            if ok, let data, data.count > 16,
+               let image = NSImage(data: data).flatMap({ downscaled($0, to: 64) }) {
+                let png = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                    .flatMap { NSBitmapImageRep(cgImage: $0).representation(using: .png, properties: [:]) }
+                completion(image, png)
+            } else {
+                fetchFirst(Array(urls.dropFirst()), completion: completion)
+            }
+        }.resume()
+    }
+
     /// 判断图标整体偏亮还是偏暗。
     ///
     /// favicon 大多带透明背景，直接取平均色会被透明区拉向黑色，所以要按
     /// alpha 反预乘，只看真正画了东西的那部分。
+    ///
+    /// 把整张图缩画到 1×1 的 CGContext 里取平均，**不用 Core Image**：之前每张
+    /// 图新建一个 `CIContext`（自带几 MB 的缓存），几百个 favicon 攒下来几十 MB
+    /// 的 Malloc Large（2026-09-26 量 footprint 时发现）。
     private static func isLight(_ image: NSImage) -> Bool {
-        guard let tiff = image.tiffRepresentation,
-              let ciImage = CIImage(data: tiff) else { return false }
-
-        let parameters: [String: Any] = [
-            kCIInputImageKey: ciImage,
-            kCIInputExtentKey: CIVector(cgRect: ciImage.extent),
-        ]
-        guard let average = CIFilter(name: "CIAreaAverage", parameters: parameters)?.outputImage
-        else { return false }
-
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return false }
         var pixel = [UInt8](repeating: 0, count: 4)
-        CIContext(options: [.workingColorSpace: NSNull()]).render(
-            average,
-            toBitmap: &pixel,
-            rowBytes: 4,
-            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-            format: .RGBA8,
-            colorSpace: nil
-        )
+        let ok = pixel.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: 1, height: 1,
+                                          bitsPerComponent: 8, bytesPerRow: 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.interpolationQuality = .high
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            return true
+        }
+        guard ok else { return false }
 
         let alpha = CGFloat(pixel[3]) / 255
         guard alpha > 0.05 else { return false }   // 几乎全透明，无从判断，当作暗的
@@ -79,12 +218,30 @@ final class IconCache {
         return (0.299 * r + 0.587 * g + 0.114 * b) > 0.62
     }
 
+    /// 缩成不超过 `side` 见方的独立位图（不保留原图引用）。已经够小的原样返回。
+    private nonisolated static func downscaled(_ image: NSImage, to side: CGFloat) -> NSImage? {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let w = cg.width, h = cg.height
+        guard max(w, h) > Int(side) else { return image }
+        let scale = side / CGFloat(max(w, h))
+        let tw = max(1, Int(CGFloat(w) * scale)), th = max(1, Int(CGFloat(h) * scale))
+        guard let ctx = CGContext(data: nil, width: tw, height: th, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: tw, height: th))
+        guard let small = ctx.makeImage() else { return nil }
+        return NSImage(cgImage: small, size: NSSize(width: tw, height: th))
+    }
+
     func prefetch(_ urls: [String], onLoaded: @escaping () -> Void) {
         for url in urls where !url.isEmpty && images[url] == nil && !inflight.contains(url) {
             guard let parsed = URL(string: url) else { continue }
             inflight.insert(url)
             URLSession.shared.dataTask(with: parsed) { data, _, _ in
-                let image = data.flatMap { NSImage(data: $0) }
+                // 下载线程上就缩成 64×64：不少站点的 favicon 是 192×192 以上的 PNG，
+                // 几百张原尺寸位图攒起来几十 MB，而界面最大只画 22pt
+                let image = data.flatMap { NSImage(data: $0) }.flatMap { Self.downscaled($0, to: 64) }
                 Task { @MainActor in
                     self.inflight.remove(url)
                     guard let image else { return }   // 拿不到就让视图走 globe 占位
@@ -415,6 +572,7 @@ final class MRUController {
         setEventTapReady(connected && switcherTabs.count > 1)
         // 搜索面板不按窗口过滤，也不要求两个以上：一个标签也搜得到
         setEventTapSearchReady(connected && !tabs.isEmpty)
+        setEventTapGlobalSearchReady(connected && globalTabCount > 0)
 
         // 全局切换器「按了没反应」有两种完全不同的原因：拦截没开（就绪为 false，
         // 键被放行）和路由判错（吞了却没弹）。日志里要能一眼分开，所以
@@ -459,6 +617,30 @@ final class MRUController {
         }
         search.closeHandler = { [weak self] itemID in
             self?.closeFromSearch(itemID: itemID)
+        }
+        search.queryHandler = { [weak self] query in
+            self?.scheduleHistoryQuery(query)
+        }
+        search.model.iconProvider = { [weak self] keys in
+            guard let self else { return [:] }
+            var map: [String: IconInfo] = [:]
+            for key in keys where !key.isEmpty && map[key] == nil {
+                if key.hasPrefix("file:") {
+                    if let info = self.icons.fileIcon(path: String(key.dropFirst(5))) { map[key] = info }
+                } else if let info = self.icons.image(for: key) {
+                    map[key] = info
+                }
+            }
+            return map
+        }
+        search.model.onMissingIcons = { [weak self] pairs in self?.requestFavicons(pairs) }
+        search.openSettingsHandler = { [weak self] in self?.openSettings?() }
+        search.modeHandler = { [weak self] mode in
+            // 切到历史记录模式（或设成列历史的「全部」）时没输入也要拉一次最近访问的
+            guard let self else { return }
+            if mode == .history || (mode == .all && self.settings.allEmptyContent == .history) {
+                self.scheduleHistoryQuery(self.search.model.query)
+            }
         }
         search.onClose = { setEventTapSearchPanelOpen(false) }
         // 启动收尾后离屏预热搜索面板（照 PasteMemo 快捷面板的做法），首次 ⌘E 不再
@@ -560,6 +742,62 @@ final class MRUController {
         activeClientID.flatMap { clients[$0]?.bookmarks } ?? []
     }
 
+    /// 本轮搜索面板是不是跨浏览器的（⌥⌘E 唤出）。打开那一刻定死，刷新和选定都按它走。
+    private var searchIsGlobal = false
+
+    // MARK: 文件夹 / 应用（搜索面板的两个模式，数据在 helper 自己手里）
+
+    /// 面板里按 ⌘, 要开设置（main.swift 接进来）。
+    var openSettings: (() -> Void)?
+    /// 收藏的文件夹（状态栏那份，main.swift 接进来）。
+    var folderProvider: (() -> [FavoriteFolder])?
+    /// 「打开方式」候选，按最近用过排，第一个就是回车的默认。
+    var openerProvider: (() -> [OpenerApp])?
+    /// 用某个 App 打开文件夹（落库 + toast 由 main.swift 那边做）。
+    var openFolderHandler: ((FavoriteFolder, OpenerApp) -> Void)?
+    private let appCatalog = AppCatalog()
+
+    private var searchFolders: [FavoriteFolder] {
+        FavoriteFolderStore.byRecency(folderProvider?() ?? [])
+    }
+
+    /// 跨浏览器搜索：所有浏览器的活标签合成一张按最近使用排的列表（不分组——搜索要的是
+    /// 「找那个标签」，分组只会把命中的拆散），条目带归属浏览器，选定后先激活它再切。
+    private var globalSearchItems: [SwitcherItem] {
+        var items: [SwitcherItem] = []
+        for (id, client) in clients {
+            let browser = effectiveBrowser(of: id)
+            items += client.tabs.map { SwitcherItem(tab: $0, browser: browser, clientID: id) }
+        }
+        return items.sorted { a, b in
+            let x = a.tab.lastAccessed ?? 0, y = b.tab.lastAccessed ?? 0
+            return x != y ? x > y : a.id < b.id
+        }
+    }
+
+    private var globalSearchClosed: [ClosedTab] { Array(closedTabs.entries.prefix(300)) }
+
+    private var globalSearchBookmarks: [BookmarkInfo] {
+        clients.flatMap { id, client in
+            client.bookmarks.map { var bm = $0; bm.clientID = id; return bm }
+        }
+    }
+
+    /// 跨浏览器时「搜索 / 打开网址」这类没有归属的动作发给谁：最近用过的那个浏览器。
+    private var mostRecentClientID: UUID? {
+        clients.max { a, b in
+            (a.value.tabs.first?.lastAccessed ?? 0) < (b.value.tabs.first?.lastAccessed ?? 0)
+        }?.key ?? activeClientID
+    }
+
+    /// 把某个连接所属的浏览器激活到前台（跨 App 的激活必须 helper 做）。
+    private func activateBrowser(of clientID: UUID) {
+        _ = NSRunningApplication
+            .runningApplications(withBundleIdentifier: effectiveBrowser(of: clientID))
+            .first?
+            .activate(options: [])
+    }
+
     /// favicon 按 favIconUrl 索引（活标签和已关闭记录共用）。
     private func iconMap(for items: [SwitcherItem], closed: [ClosedTab]) -> [String: IconInfo] {
         var map: [String: IconInfo] = [:]
@@ -569,52 +807,207 @@ final class MRUController {
         return map
     }
 
+    // MARK: 书签 / 历史行的图标（按域名问扩展）
+
+    private var faviconInflight: Set<String> = []
+    private var faviconTimer: Timer?
+    private var faviconQueue: [(key: String, url: String)] = []
+
+    /// 面板里出现了还没有图标的书签 / 历史行。合并 150ms 攒一批发。
+    private func requestFavicons(_ pairs: [(key: String, url: String)]) {
+        for pair in pairs where !faviconInflight.contains(pair.key) && icons.image(for: pair.key) == nil {
+            faviconInflight.insert(pair.key)
+            faviconQueue.append(pair)
+        }
+        guard !faviconQueue.isEmpty else { return }
+        faviconTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.15, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.flushFaviconQueue() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        faviconTimer = timer
+    }
+
+    private func flushFaviconQueue() {
+        guard let clientID = searchIsGlobal ? mostRecentClientID : activeClientID else {
+            faviconQueue.removeAll(); faviconInflight.removeAll(); return
+        }
+        let batch = faviconQueue
+        faviconQueue.removeAll()
+        log("🖼  favicon query: \(batch.count) site(s)")
+        server.send(["type": "faviconQuery",
+                     "items": batch.map { ["key": $0.key, "url": $0.url] }], to: clientID)
+    }
+
+    private func handleFaviconReply(_ root: [String: Any]) {
+        guard let raw = root["items"] as? [[String: Any]] else { return }
+        log("🖼  favicon reply: \(raw.count) hit, \((root["missing"] as? [String])?.count ?? 0) missing")
+        for item in raw {
+            guard let key = item["key"] as? String,
+                  let base64 = item["data"] as? String,
+                  let data = Data(base64Encoded: base64) else { continue }
+            faviconInflight.remove(key)
+            icons.store(data, for: key)
+        }
+        // 浏览器也没有的（书签收了从没打开过）：自己去站上补（用户 2026-09-26 要的）
+        for key in root["missing"] as? [String] ?? [] {
+            faviconInflight.remove(key)
+            let host = key.hasPrefix("site:") ? String(key.dropFirst(5)) : ""
+            icons.fetchSiteIcon(host: host, key: key) { [weak self] in self?.refreshOverlayImages() }
+        }
+        refreshOverlayImages()
+    }
+
+    // MARK: 历史记录（按输入实时问扩展）
+
+    private var historyTimer: Timer?
+    private var historyRequestID = 0
+    /// 每次查询的回包要合并几条连接（跨浏览器模式）；按 requestId 攒，最后一条到了再给面板。
+    private var historyPending: [Int: (query: String, waiting: Set<UUID>, items: [HistoryInfo])] = [:]
+
+    /// 输入变了：合并 120ms 再发，用户还在敲的时候别一键一个请求。
+    private func scheduleHistoryQuery(_ query: String) {
+        historyTimer?.invalidate()
+        let text = query.trimmingCharacters(in: .whitespaces)
+        // 空输入只有两种情况要问：历史记录模式、或「全部」设成没输入时列历史
+        let wantsRecent = search.currentMode == .history
+            || (search.currentMode == .all && settings.allEmptyContent == .history)
+        guard !text.isEmpty || wantsRecent else { search.setHistory([], for: ""); return }
+        let timer = Timer(timeInterval: 0.12, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.sendHistoryQuery(text) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        historyTimer = timer
+    }
+
+    private func sendHistoryQuery(_ text: String) {
+        guard search.isVisible else { return }
+        let targets: [UUID] = searchIsGlobal ? Array(clients.keys) : [activeClientID].compactMap { $0 }
+        guard !targets.isEmpty else { return }
+        historyRequestID += 1
+        let id = historyRequestID
+        historyPending = [id: (text, Set(targets), [])]   // 旧请求一律作废
+        for clientID in targets {
+            server.send(["type": "historyQuery", "text": text, "requestId": id], to: clientID)
+        }
+    }
+
+    private func handleHistoryReply(_ root: [String: Any], from clientID: UUID) {
+        guard let id = (root["requestId"] as? NSNumber)?.intValue,
+              var pending = historyPending[id],
+              let raw = root["items"],
+              let payload = try? JSONSerialization.data(withJSONObject: raw),
+              let decoded = try? JSONDecoder().decode([HistoryInfo].self, from: payload) else { return }
+        pending.items += decoded.map { var h = $0; h.clientID = clientID; return h }
+        pending.waiting.remove(clientID)
+        if pending.waiting.isEmpty {
+            historyPending.removeValue(forKey: id)
+            search.setHistory(pending.items.sorted { $0.lastVisitTime > $1.lastVisitTime }, for: pending.query)
+        } else {
+            historyPending[id] = pending
+        }
+    }
+
     /// 面板开着时把当前数据推过去。
     private func refreshSearch(animated: Bool = false) {
         guard search.isVisible else { return }
-        let items = searchItems
-        let closed = searchClosed
-        search.update(items: items, closed: closed, bookmarks: searchBookmarks,
+        let items = searchIsGlobal ? globalSearchItems : searchItems
+        let closed = searchIsGlobal ? globalSearchClosed : searchClosed
+        let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
+        search.update(items: items, closed: closed, bookmarks: bookmarks,
+                      folders: searchFolders, apps: appCatalog.entries, openers: openerProvider?() ?? [],
                       icons: iconMap(for: items, closed: closed), animated: animated)
     }
 
     /// 搜索快捷键：开着就关，关着就开。cycling 中不开 —— 两个浮层叠一起没法用。
-    func toggleTabSearch() {
+    /// `global` = ⌥⌘E 唤出的跨浏览器搜索：所有浏览器的标签合成一张表、贴屏幕居中。
+    func toggleTabSearch(global: Bool = false) {
         if search.isVisible {
             search.close()
             return
         }
         guard !cycling else { return }
-        let items = searchItems
+        searchIsGlobal = global
+        let items = global ? globalSearchItems : searchItems
         guard !items.isEmpty else { return }
-        let closed = searchClosed
+        let closed = global ? globalSearchClosed : searchClosed
         // 已关闭记录的 favicon 平时只预热了菜单那 20 条，搜索候选多得多，补最近 60 条
         //（再往前的命中了也就显示 globe，不值得每次打开都发几百个请求）
         icons.prefetch(closed.prefix(60).map(\.favIconUrl)) { [weak self] in self?.refreshOverlayImages() }
-        let bookmarks = searchBookmarks
+        let bookmarks = global ? globalSearchBookmarks : searchBookmarks
+        // 多浏览器时行尾用浏览器图标认归属；只有一个浏览器时和浏览器内没区别
+        let browsers = Set(items.compactMap(\.browser))
+        // App 清单：「全部」模式里应用排第一，所以每次打开都保证清单是新的
+        //（后台线程扫、一分钟内不重扫，扫完刷新面板）
+        appCatalog.refreshIfStale { [weak self] in self?.refreshSearch() }
         search.show(items: items, closed: closed, bookmarks: bookmarks,
-                    icons: iconMap(for: items, closed: closed))
+                    folders: searchFolders, apps: appCatalog.entries, openers: openerProvider?() ?? [],
+                    siteSearches: settings.siteSearches, modes: settings.activeSearchModes,
+                    allEmptyContent: settings.allEmptyContent,
+                    icons: iconMap(for: items, closed: closed),
+                    global: global, showBrowserBadges: global && browsers.count > 1,
+                    searchBrowser: (global ? mostRecentClientID : activeClientID).map { effectiveBrowser(of: $0) })
         setEventTapSearchPanelOpen(true)
-        log("🔍 tab search opened: \(items.count) tabs, \(closed.count) closed, \(bookmarks.count) bookmarks")
+        // 「全部」没输入时要列历史的话，打开就得去要一次最近访问的
+        if settings.allEmptyContent == .history { scheduleHistoryQuery("") }
+        log("🔍 tab search opened\(global ? " (global)" : ""): \(items.count) tabs, \(closed.count) closed, \(bookmarks.count) bookmarks")
     }
 
     /// 面板里选定了一项。面板已经关掉、键盘焦点回到了浏览器。
     private func pickFromSearch(_ pick: SearchPick) {
+        // 跨浏览器模式下目标多半在别的 App 里：扩展的 windows.update(focused:) 只管
+        // 浏览器自家窗口，跨 App 激活必须 helper 做（和全局切换器提交同一条路）。
+        // 浏览器内模式前台就是它，不用动。
+        let fallbackClient = searchIsGlobal ? mostRecentClientID : activeClientID
+        func target(_ clientID: UUID?) -> UUID? {
+            guard let clientID else { return nil }
+            if searchIsGlobal { activateBrowser(of: clientID) }
+            return clientID
+        }
         switch pick {
         case .tab(let item):
             log("🔍 pick → \(item.tab.title.prefix(50)) (tabId \(item.tab.id))")
-            server.send(["type": "switch", "tabId": item.tab.id], to: item.clientID)
+            guard let clientID = target(item.clientID) else { return }
+            server.send(["type": "switch", "tabId": item.tab.id], to: clientID)
         case .closed(let entry):
             log("🔍 reopen closed → \(entry.displayTitle.prefix(50))")
-            reopenClosedTab(id: entry.id, browser: entry.browser)
+            reopenClosedTab(id: entry.id, browser: entry.browser)   // 自己会激活浏览器
         case .url(let url):
-            guard let clientID = activeClientID else { return }
+            guard let clientID = target(fallbackClient) else { return }
             log("🔍 open url → \(url.prefix(80))")
             server.send(["type": "reopen", "url": url], to: clientID)
         case .bookmark(let bookmark):
-            guard let clientID = activeClientID else { return }
+            guard let clientID = target(bookmark.clientID ?? fallbackClient) else { return }
             log("🔍 open bookmark → \(bookmark.title.prefix(50))")
             server.send(["type": "reopen", "url": bookmark.url], to: clientID)
+        case .history(let entry):
+            guard let clientID = target(entry.clientID ?? fallbackClient) else { return }
+            log("🔍 open history → \(entry.title.prefix(50))")
+            server.send(["type": "reopen", "url": entry.url], to: clientID)
+        case .action(.webSearch(let text)):
+            guard let clientID = target(fallbackClient) else { return }
+            log("🔍 web search → \(text.prefix(60))")
+            server.send(["type": "search", "text": text], to: clientID)
+        case .action(.siteSearch(let site, let text)):
+            guard let url = site.url(for: text), let clientID = target(fallbackClient) else { return }
+            log("🔍 site search \(site.name) → \(text.prefix(60))")
+            server.send(["type": "reopen", "url": url], to: clientID)
+        case .folder(let folder, let opener):
+            // 没指定就用最近用过的那个方式；一个都没有就 Finder
+            let chosen = opener ?? openerProvider?().first
+                ?? OpenerApp(name: "Finder", url: URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"))
+            log("🔍 open folder → \(folder.name) with \(chosen.name)")
+            openFolderHandler?(folder, chosen)
+        case .app(let app):
+            log("🔍 launch app → \(app.name)")
+            NSWorkspace.shared.openApplication(at: app.url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                if let error {
+                    Task { @MainActor in
+                        Toast.show(L10n.t("打不开 \(app.name)", "Couldn't open \(app.name)"),
+                                   detail: error.localizedDescription, kind: .failure)
+                    }
+                }
+            }
         }
     }
 
@@ -652,10 +1045,16 @@ final class MRUController {
             }
             updateReadiness()
             publishStatus()
-            if clientID == activeClientID { refreshSearch() }
+            if searchIsGlobal || clientID == activeClientID { refreshSearch() }
             if !cycling, clientID == activeClientID {
                 log("MRU updated: \(decoded.count) tabs, current: \(decoded.first?.title.prefix(40) ?? "?")")
             }
+
+        case "history":
+            handleHistoryReply(root, from: clientID)
+
+        case "favicons":
+            handleFaviconReply(root)
 
         case "bookmarks":
             guard clients[clientID] != nil,
@@ -665,7 +1064,7 @@ final class MRUController {
             clients[clientID]?.bookmarks = decoded
             Pinyin.prewarm(decoded.map(\.title))
             log("🔖 bookmarks: \(decoded.count) from \(effectiveBrowser(of: clientID))")
-            if clientID == activeClientID { refreshSearch() }
+            if searchIsGlobal || clientID == activeClientID { refreshSearch() }
 
         case "thumb":
             guard let url = root["url"] as? String, !url.isEmpty,
@@ -875,8 +1274,8 @@ final class MRUController {
             endCycling()
             resetEventTapCycling()
         }
-        // 面板里列的是这条连接的标签，连接没了选什么都发进空气
-        if wasActive { search.close() }
+        // 面板里列的是这条连接的标签，连接没了选什么都发进空气；跨浏览器模式刷新即可
+        if searchIsGlobal { refreshSearch() } else if wasActive { search.close() }
         updateReadiness()
         publishStatus()
     }
@@ -1267,9 +1666,7 @@ final class MRUController {
         }
         overlay.model.icons = iconMap
         overlay.model.thumbs = thumbMap
-        if search.isVisible {
-            search.model.icons = self.iconMap(for: search.model.all, closed: search.model.closed)
-        }
+        if search.isVisible { search.model.reloadIcons() }
 
         // 折射背景的源图：当前标签（MRU 第一个）那张**完整视口**的截图。
         // 浮层会按自己盖住了窗口的哪一块去裁它 —— 裁剪归浮层做，这里只负责
