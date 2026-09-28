@@ -1218,6 +1218,9 @@ final class MRUController {
         case .revealInFinder:
             guard let path = target.filePath else { return }
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        case .getInfo:
+            guard let path = target.filePath else { return }
+            showFinderInfo(path)
         case .unfavorite:
             guard case .folder(let folder) = target else { return }
             unfavoriteFolderHandler?(folder)
@@ -1230,6 +1233,43 @@ final class MRUController {
                 ?? NSWorkspace.shared.runningApplications.filter { $0.bundleURL?.standardizedFileURL.path == app.path }
             // 普通退出：有没存的文档由那个 App 自己问，不强退
             running.forEach { $0.terminate() }
+        }
+    }
+
+    /// 让访达打开这一项的「显示简介」窗口。没有公开 API，只能请访达自己开：osascript 子进程、
+    /// 后台队列（同「收藏当前 Finder 目录」那条：首次会弹「自动化」授权，NSAppleScript 会把
+    /// 主线程卡在授权框上）。路径走 argv 传进脚本，不拼进脚本源码，带引号的路径也安全。
+    private func showFinderInfo(_ path: String) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = [
+                "-e", "on run argv",
+                "-e", "tell application \"Finder\"",
+                "-e", "activate",
+                "-e", "open information window of (POSIX file (item 1 of argv) as alias)",
+                "-e", "end tell",
+                "-e", "end run",
+                path,
+            ]
+            let errors = Pipe()
+            process.standardError = errors
+            do {
+                try process.run()
+                process.waitUntilExit()
+            } catch {
+                log("ℹ️ get info failed to launch: \(error)")
+                return
+            }
+            guard process.terminationStatus != 0 else { return }
+            let message = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            log("ℹ️ get info failed: \(message.trimmingCharacters(in: .whitespacesAndNewlines))")
+            Task { @MainActor in
+                Toast.show(L10n.t("打不开简介", "Couldn't open Get Info"),
+                           detail: L10n.t("系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「访达」。",
+                                          "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation."),
+                           kind: .failure)
+            }
         }
     }
 

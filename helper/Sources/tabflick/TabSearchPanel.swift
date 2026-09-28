@@ -281,6 +281,8 @@ enum RowCommand: String {
     case reloadTab
     case copyURL, copyTitle, copyMarkdown, copyPath
     case revealInFinder
+    /// 访达的「显示简介」窗口（App 的二级菜单，用户 2026-09-28 要的）
+    case getInfo
     case closeTab
     /// 关掉和它同网址的其余标签（同一个浏览器 / Profile），留下它自己
     case closeDuplicates
@@ -310,6 +312,7 @@ enum RowCommand: String {
         case .copyMarkdown:   return L10n.t("拷贝 Markdown 链接", "Copy Markdown link")
         case .copyPath:       return L10n.t("拷贝路径", "Copy path")
         case .revealInFinder: return L10n.t("在访达中显示", "Show in Finder")
+        case .getInfo:        return L10n.t("显示简介", "Get Info")
         case .closeTab:       return L10n.t("关闭标签", "Close tab")
         case .closeDuplicates: return L10n.t("关闭其余重复的标签", "Close other duplicate tabs")
         case .removeClosed:   return L10n.t("从最近关闭中移除", "Remove from recently closed")
@@ -335,6 +338,7 @@ enum RowCommand: String {
         // 列表里就是四种形状抢眼，反而看不出它们是一类
         case .copyURL, .copyTitle, .copyMarkdown, .copyPath: return "doc.on.doc"
         case .revealInFinder: return "folder"
+        case .getInfo:        return "info.circle"
         case .closeTab:       return "xmark"
         case .closeDuplicates: return "square.on.square.dashed"
         case .removeClosed, .deleteHistory: return "trash"
@@ -682,7 +686,7 @@ final class TabSearchModel: ObservableObject {
             return openers.map { .opener($0, folder) }
                 + [RowCommand.copyPath, .revealInFinder, .unfavorite].map { .command($0, target) }
         case .app(let app):
-            commands = [.primary, .revealInFinder, .copyPath] + (app.isRunning ? [.quitApp] : [])
+            commands = [.primary, .getInfo, .revealInFinder, .copyPath] + (app.isRunning ? [.quitApp] : [])
         case .url, .action, .opener, .command:
             return []
         }
@@ -953,7 +957,9 @@ final class TabSearchModel: ObservableObject {
 
     private func appCandidate(_ app: AppEntry) -> SearchCandidate {
         // 英文原名和 bundle id 放进「网址」栏参与匹配（得分低于标题命中）
-        candidate(title: app.name, url: [app.alternateName, app.bundleID].compactMap { $0 }.joined(separator: " "),
+        // 访达注释拼进标题一起匹配（和显示名同档、也认拼音）：名字古怪的 App 靠它起个好认的名字
+        candidate(title: [app.name, app.comment].compactMap { $0 }.joined(separator: " "),
+                  url: [app.alternateName, app.bundleID].compactMap { $0 }.joined(separator: " "),
                   identity: app.path)
     }
 
@@ -1766,7 +1772,9 @@ private struct SearchRowView: View {
         case .action(let a):     return a.subtitle
         case .folder(let f):     return (f.path as NSString).abbreviatingWithTildeInPath
         case .opener(_, let f):  return L10n.t("打开「\(f.name)」", "Open “\(f.name)”")
-        case .app(let a):        return (a.path as NSString).deletingLastPathComponent
+        // 有访达注释就先写注释：搜注释命中时能看出是因为它
+        case .app(let a):        return [a.comment, (a.path as NSString).deletingLastPathComponent]
+                                     .compactMap { $0 }.joined(separator: " · ")
         case .command:           return ""
         }
     }

@@ -279,5 +279,8 @@
  "Type a title, URL or pinyin to find tabs, bookmarks, history, folders and apps. Tab changes scope, ⌘↩ shows actions for the selected item, and ⌘1–{0} picks a row.": "Titel, URL oder Pinyin eingeben, um Tabs, Lesezeichen, Verlauf, Ordner und Apps zu finden. Tab wechselt den Bereich, ⌘↩ zeigt Aktionen für das ausgewählte Element, ⌘1–{0} wählt eine Zeile.",
  "{0} more tab(s) with this page are open; ⌘↩ closes them": "{0} weitere(r) Tab(s) mit dieser Seite offen; ⌘↩ schließt sie",
  "Search the same thing again and what you picked last time comes first. Stored only on this Mac.": "Suchst du dasselbe noch einmal, steht zuerst, was du beim letzten Mal gewählt hast. Nur auf diesem Mac gespeichert.",
- "Close other duplicate tabs": "Andere doppelte Tabs schließen"
+ "Close other duplicate tabs": "Andere doppelte Tabs schließen",
+ "Get Info": "Informationen",
+ "Couldn't open Get Info": "Informationen konnten nicht geöffnet werden",
+ "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, den Finder zu steuern."
 }

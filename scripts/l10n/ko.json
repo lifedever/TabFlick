@@ -279,5 +279,8 @@
  "Type a title, URL or pinyin to find tabs, bookmarks, history, folders and apps. Tab changes scope, ⌘↩ shows actions for the selected item, and ⌘1–{0} picks a row.": "제목, URL 또는 병음으로 탭, 북마크, 방문 기록, 폴더, 앱을 찾습니다. Tab으로 범위를 바꾸고, ⌘↩로 선택한 항목의 작업을 열고, ⌘1–{0}로 행을 바로 고릅니다.",
  "{0} more tab(s) with this page are open; ⌘↩ closes them": "같은 페이지가 {0}개 더 열려 있음. ⌘↩로 함께 닫을 수 있음",
  "Search the same thing again and what you picked last time comes first. Stored only on this Mac.": "같은 검색을 다시 하면 지난번에 고른 항목이 위로 옵니다. 이 Mac에만 저장됩니다.",
- "Close other duplicate tabs": "나머지 중복 탭 닫기"
+ "Close other duplicate tabs": "나머지 중복 탭 닫기",
+ "Get Info": "정보 가져오기",
+ "Couldn't open Get Info": "정보 윈도우를 열 수 없음",
+ "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 Finder를 제어하도록 허용하세요."
 }

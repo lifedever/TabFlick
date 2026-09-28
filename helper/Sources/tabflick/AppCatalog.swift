@@ -10,6 +10,9 @@ struct AppEntry: Identifiable, Equatable {
     let bundleID: String?
     /// 上次打开的时间（Spotlight 记的 `kMDItemLastUsedDate`），排序用；Spotlight 关了就是 nil。
     var lastUsed: Date? = nil
+    /// 你在访达「简介 → 注释」里写的字（Spotlight 的 `kMDItemFinderComment`）。名字古怪的 App
+    /// 靠它起个好认的名字，搜索和显示名同等对待（用户 2026-09-28 要的）。
+    var comment: String? = nil
 
     var id: String { path }
     /// 最近切到时间的记账 key：有 bundle id 用它，没有用路径。
@@ -121,19 +124,25 @@ final class AppCatalog {
                 let raw = (bundle?.infoDictionary?["CFBundleDisplayName"] as? String)
                     ?? (bundle?.infoDictionary?["CFBundleName"] as? String)
                     ?? url.deletingPathExtension().lastPathComponent
+                let meta = metadata(of: url)
                 result.append(AppEntry(name: name,
                                        alternateName: raw == name ? nil : raw,
                                        path: path,
                                        bundleID: bundle?.bundleIdentifier,
-                                       lastUsed: lastUsedDate(of: url)))
+                                       lastUsed: meta.lastUsed,
+                                       comment: meta.comment))
             }
         }
         return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     /// Spotlight 记的上次打开时间。一个 App 一次元数据读取，后台线程上跑，百来个 App 几十毫秒。
-    private nonisolated static func lastUsedDate(of url: URL) -> Date? {
-        guard let item = MDItemCreateWithURL(kCFAllocatorDefault, url as CFURL) else { return nil }
-        return MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date
+    /// Spotlight 记的上次打开时间和访达注释：同一个元数据对象取两样，后台线程上跑。
+    private nonisolated static func metadata(of url: URL) -> (lastUsed: Date?, comment: String?) {
+        guard let item = MDItemCreateWithURL(kCFAllocatorDefault, url as CFURL) else { return (nil, nil) }
+        let comment = (MDItemCopyAttribute(item, kMDItemFinderComment) as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date,
+                comment?.isEmpty == false ? comment : nil)
     }
 }
