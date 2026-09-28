@@ -83,8 +83,9 @@ enum SearchRow: Identifiable {
     case app(AppEntry)
     /// ⌘↩ 展开的「操作」里的一项：对 target 那一行做什么
     indirect case command(RowCommand, SearchRow)
-    /// 内置命令（`AppCommands`）：有输入且命中时跟在它的 App 下面，App 的 ⌘↩ 里也有
-    case appCommand(AppCommand, AppEntry)
+    /// 内置命令（`AppCommands`）：有输入且命中时跟在它的 App 下面，App 的 ⌘↩ 里也有。
+    /// App 为 nil 是系统命令（锁屏），一级里单独列在「应用」段末尾
+    case appCommand(AppCommand, AppEntry?)
 
     var id: String {
         switch self {
@@ -117,7 +118,7 @@ enum SearchRow: Identifiable {
         case .opener(let o, _):  return "file:" + o.path
         case .app(let a):        return "file:" + a.path
         // 命令用它那个 App 的图标（Raycast 的做法）：一眼看出是谁的命令
-        case .appCommand(_, let a): return "file:" + a.path
+        case .appCommand(_, let a): return a.map { "file:" + $0.path } ?? ""
         case .command(.primary, let target): return target.favIconUrl
         case .url, .action, .command: return ""
         }
@@ -368,7 +369,7 @@ enum SearchPick {
     /// 文件夹；opener 为 nil = 用最近用过的方式
     case folder(FavoriteFolder, OpenerApp?)
     case app(AppEntry)
-    case appCommand(AppCommand, AppEntry)
+    case appCommand(AppCommand, AppEntry?)
 }
 
 // MARK: - 视图模型
@@ -992,24 +993,27 @@ final class TabSearchModel: ObservableObject {
     /// 不输入时一条都不列：命令只在找它的时候出现（一级别变成 Raycast 那样满屏命令）。
     private func commandHits(_ trimmed: String) -> [SearchRow] {
         guard !trimmed.isEmpty else { return [] }
-        let table = Dictionary(grouping: AppCommands.all, by: \.bundleID)
-        guard !table.isEmpty else { return [] }
-        var pairs: [(command: AppCommand, app: AppEntry)] = []
+        let commands = AppCommands.all
+        var table: [String: [AppCommand]] = [:]
+        for command in commands { if let id = command.bundleID { table[id, default: []].append(command) } }
+        var pairs: [(command: AppCommand, app: AppEntry?)] = []
         var seen = Set<String>()
         for app in apps {
-            guard let id = app.bundleID, let commands = table[id], !seen.contains(id) else { continue }
+            guard let id = app.bundleID, let owned = table[id], !seen.contains(id) else { continue }
             seen.insert(id)
-            pairs += commands.map { ($0, app) }
+            pairs += owned.map { ($0, app) }
         }
+        // 系统命令不看装没装
+        pairs += commands.filter { $0.bundleID == nil }.map { ($0, nil) }
         let candidates = pairs.map { commandCandidate($0.command, $0.app) }
         return TabSearch.rank(candidates, query: trimmed, boosts: boosts).map { SearchRow.appCommand(pairs[$0].command, pairs[$0].app) }
     }
 
     /// 命令名进标题（认拼音）；另一种语言的名字、别名、App 名放「网址」栏：打「amp」时
     /// App 下面跟出它的命令，打「end」「结束」直接命中命令。一级和二级的过滤共用这一份。
-    private func commandCandidate(_ command: AppCommand, _ app: AppEntry) -> SearchCandidate {
+    private func commandCandidate(_ command: AppCommand, _ app: AppEntry?) -> SearchCandidate {
         candidate(title: command.title,
-                  url: (command.keywords + [app.name, app.alternateName].compactMap { $0 }).joined(separator: " "),
+                  url: (command.keywords + [app?.name, app?.alternateName].compactMap { $0 }).joined(separator: " "),
                   identity: "appcmd:" + command.id)
     }
 
@@ -1022,7 +1026,7 @@ final class TabSearchModel: ObservableObject {
             out.append(row)
             guard case .app(let app) = row else { continue }
             for command in commands {
-                guard case .appCommand(_, let owner) = command, owner.path == app.path, !used.contains(command.id) else { continue }
+                guard case .appCommand(_, let owner) = command, owner?.path == app.path, !used.contains(command.id) else { continue }
                 used.insert(command.id)
                 out.append(command)
             }
@@ -1737,6 +1741,11 @@ private struct SearchRowIcon: View {
                     .font(.system(size: symbolSize, weight: .regular))
                     .foregroundStyle(.secondary)
             }
+        case .appCommand(let command, nil):
+            // 系统命令没有 App 图标，画它自己的符号
+            Image(systemName: command.symbol)
+                .font(.system(size: symbolSize, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(0.7))
         case .folder, .opener, .app, .appCommand:
             // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标
             if let icon {
@@ -1877,7 +1886,9 @@ private struct SearchRowView: View {
         // 有访达注释就先写注释：搜注释命中时能看出是因为它
         case .app(let a):        return [a.comment, (a.path as NSString).deletingLastPathComponent]
                                      .compactMap { $0 }.joined(separator: " · ")
-        case .appCommand(_, let a): return a.name
+        // 副标题写命令的主人：App 的写 App 名，系统命令写 macOS（品牌名不翻译；别用 L10n.t("系统", "System")，
+        // 英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）
+        case .appCommand(_, let a): return a?.name ?? "macOS"
         case .command:           return ""
         }
     }

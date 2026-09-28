@@ -290,5 +290,6 @@
  "Session ended": "已結束工作階段",
  "Couldn't run “{0}”": "無法執行「{0}」",
  "Command": "指令",
- "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制「{0}」。"
+ "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制「{0}」。",
+ "Lock Screen": "鎖定螢幕"
 }

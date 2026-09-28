@@ -290,5 +290,6 @@
  "Session ended": "세션을 종료했습니다",
  "Couldn't run “{0}”": "‘{0}’ 실행할 수 없음",
  "Command": "명령",
- "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 {0}을(를) 제어하도록 허용하세요."
+ "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 {0}을(를) 제어하도록 허용하세요.",
+ "Lock Screen": "화면 잠금"
 }

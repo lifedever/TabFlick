@@ -290,5 +290,6 @@
  "Session ended": "セッションを終了しました",
  "Couldn't run “{0}”": "「{0}」を実行できませんでした",
  "Command": "コマンド",
- "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "「システム設定 → プライバシーとセキュリティ → オートメーション」で TabFlick に {0} の制御を許可してください。"
+ "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "「システム設定 → プライバシーとセキュリティ → オートメーション」で TabFlick に {0} の制御を許可してください。",
+ "Lock Screen": "画面をロック"
 }

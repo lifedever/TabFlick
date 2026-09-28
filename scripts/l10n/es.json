@@ -290,5 +290,6 @@
  "Session ended": "Sesión finalizada",
  "Couldn't run “{0}”": "No se pudo ejecutar “{0}”",
  "Command": "Comando",
- "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Permite que TabFlick controle {0} en Ajustes del Sistema → Privacidad y seguridad → Automatización."
+ "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Permite que TabFlick controle {0} en Ajustes del Sistema → Privacidad y seguridad → Automatización.",
+ "Lock Screen": "Bloquear pantalla"
 }

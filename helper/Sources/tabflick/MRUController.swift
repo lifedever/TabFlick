@@ -1146,8 +1146,8 @@ final class MRUController {
             log("🔍 open folder → \(folder.name) with \(chosen.name)")
             openFolderHandler?(folder, chosen)
         case .appCommand(let command, let app):
-            log("🔍 app command → \(app.name): \(command.id)")
-            AppCommands.run(command, appName: app.name)
+            log("🔍 app command → \(app?.name ?? "system"): \(command.id)")
+            AppCommands.run(command, appName: app?.name)
         case .app(let app):
             log("🔍 launch app → \(app.name)")
             NSWorkspace.shared.openApplication(at: app.url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
