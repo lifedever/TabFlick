@@ -51,7 +51,7 @@
     <!-- 「收藏当前 Finder 目录」要向 Finder 询问前窗口位置（Apple Events）。
          缺这个 key 的话 macOS 直接拒绝，连「自动化」授权框都不弹。 -->
     <key>NSAppleEventsUsageDescription</key>
-    <string>TabFlick 需要询问 Finder 当前窗口的文件夹位置，用于「收藏当前 Finder 目录」。TabFlick asks Finder for its front window's folder when you favorite it.</string>
+    <string>TabFlick 用它读访达当前窗口的文件夹（收藏当前 Finder 目录），以及执行搜索面板里的 App 命令（比如让 Amphetamine 开始会话）。TabFlick uses this to read the folder of Finder's front window, and to run app commands from the search panel, such as starting an Amphetamine session.</string>
 
     <key>NSHumanReadableCopyright</key>
     <string>MIT License © lifedever</string>

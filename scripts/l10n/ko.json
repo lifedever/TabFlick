@@ -282,5 +282,13 @@
  "Close other duplicate tabs": "나머지 중복 탭 닫기",
  "Get Info": "정보 가져오기",
  "Couldn't open Get Info": "정보 윈도우를 열 수 없음",
- "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 Finder를 제어하도록 허용하세요."
+ "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 Finder를 제어하도록 허용하세요.",
+ "Start New Session": "새 세션 시작",
+ "End Current Session": "현재 세션 종료",
+ "Session started": "세션을 시작했습니다",
+ "No session is running": "진행 중인 세션이 없습니다",
+ "Session ended": "세션을 종료했습니다",
+ "Couldn't run “{0}”": "‘{0}’ 실행할 수 없음",
+ "Command": "명령",
+ "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 {0}을(를) 제어하도록 허용하세요."
 }

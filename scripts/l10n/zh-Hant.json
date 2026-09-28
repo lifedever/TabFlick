@@ -282,5 +282,13 @@
  "Close other duplicate tabs": "關閉其餘重複的分頁",
  "Get Info": "取得資訊",
  "Couldn't open Get Info": "打不開資訊視窗",
- "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制 Finder。"
+ "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制 Finder。",
+ "Start New Session": "開始新工作階段",
+ "End Current Session": "結束目前的工作階段",
+ "Session started": "已開始新工作階段",
+ "No session is running": "目前沒有進行中的工作階段",
+ "Session ended": "已結束工作階段",
+ "Couldn't run “{0}”": "無法執行「{0}」",
+ "Command": "指令",
+ "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制「{0}」。"
 }

@@ -282,5 +282,13 @@
  "Close other duplicate tabs": "Andere doppelte Tabs schließen",
  "Get Info": "Informationen",
  "Couldn't open Get Info": "Informationen konnten nicht geöffnet werden",
- "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, den Finder zu steuern."
+ "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, den Finder zu steuern.",
+ "Start New Session": "Neue Sitzung starten",
+ "End Current Session": "Aktuelle Sitzung beenden",
+ "Session started": "Sitzung gestartet",
+ "No session is running": "Keine Sitzung aktiv",
+ "Session ended": "Sitzung beendet",
+ "Couldn't run “{0}”": "„{0}“ konnte nicht ausgeführt werden",
+ "Command": "Befehl",
+ "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, {0} zu steuern."
 }

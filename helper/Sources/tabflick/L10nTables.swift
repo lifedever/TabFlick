@@ -15,6 +15,13 @@ enum L10nTables {
     }
 
     private static let zhHant: [String: String] = [
+        "Start New Session": "開始新工作階段",
+        "Session started": "已開始新工作階段",
+        "End Current Session": "結束目前的工作階段",
+        "No session is running": "目前沒有進行中的工作階段",
+        "Session ended": "已結束工作階段",
+        "Couldn't run “{0}”": "無法執行「{0}」",
+        "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制「{0}」。",
         "System": "跟隨系統",
         "Light": "淺色",
         "Dark": "深色",
@@ -259,6 +266,7 @@ enum L10nTables {
         "closed {0}": "{0}關閉",
         "Browser bookmark": "瀏覽器書籤",
         "visited {0}": "{0}造訪",
+        "Command": "指令",
         "Running": "執行中",
         "GitHub returned {0}": "GitHub 回傳 {0}",
         "Could not parse the release info": "無法解析發布資訊",
@@ -302,6 +310,13 @@ enum L10nTables {
     ]
 
     private static let ja: [String: String] = [
+        "Start New Session": "新しいセッションを開始",
+        "Session started": "セッションを開始しました",
+        "End Current Session": "現在のセッションを終了",
+        "No session is running": "実行中のセッションはありません",
+        "Session ended": "セッションを終了しました",
+        "Couldn't run “{0}”": "「{0}」を実行できませんでした",
+        "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "「システム設定 → プライバシーとセキュリティ → オートメーション」で TabFlick に {0} の制御を許可してください。",
         "System": "システムに合わせる",
         "Light": "ライト",
         "Dark": "ダーク",
@@ -546,6 +561,7 @@ enum L10nTables {
         "closed {0}": "{0}に閉じた",
         "Browser bookmark": "ブラウザのブックマーク",
         "visited {0}": "{0}にアクセス",
+        "Command": "コマンド",
         "Running": "実行中",
         "GitHub returned {0}": "GitHubが{0}を返しました",
         "Could not parse the release info": "リリース情報を解析できませんでした",
@@ -589,6 +605,13 @@ enum L10nTables {
     ]
 
     private static let ko: [String: String] = [
+        "Start New Session": "새 세션 시작",
+        "Session started": "세션을 시작했습니다",
+        "End Current Session": "현재 세션 종료",
+        "No session is running": "진행 중인 세션이 없습니다",
+        "Session ended": "세션을 종료했습니다",
+        "Couldn't run “{0}”": "‘{0}’ 실행할 수 없음",
+        "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 {0}을(를) 제어하도록 허용하세요.",
         "System": "시스템 설정에 따름",
         "Light": "라이트",
         "Dark": "다크",
@@ -833,6 +856,7 @@ enum L10nTables {
         "closed {0}": "{0} 닫음",
         "Browser bookmark": "브라우저 북마크",
         "visited {0}": "{0} 방문",
+        "Command": "명령",
         "Running": "실행 중",
         "GitHub returned {0}": "GitHub 응답: {0}",
         "Could not parse the release info": "릴리스 정보를 해석할 수 없음",
@@ -876,6 +900,13 @@ enum L10nTables {
     ]
 
     private static let es: [String: String] = [
+        "Start New Session": "Iniciar nueva sesión",
+        "Session started": "Sesión iniciada",
+        "End Current Session": "Finalizar sesión actual",
+        "No session is running": "No hay ninguna sesión en curso",
+        "Session ended": "Sesión finalizada",
+        "Couldn't run “{0}”": "No se pudo ejecutar “{0}”",
+        "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Permite que TabFlick controle {0} en Ajustes del Sistema → Privacidad y seguridad → Automatización.",
         "System": "Sistema",
         "Light": "Claro",
         "Dark": "Oscuro",
@@ -1120,6 +1151,7 @@ enum L10nTables {
         "closed {0}": "cerrada {0}",
         "Browser bookmark": "Marcador del navegador",
         "visited {0}": "visitada {0}",
+        "Command": "Comando",
         "Running": "En ejecución",
         "GitHub returned {0}": "GitHub devolvió {0}",
         "Could not parse the release info": "No se pudo leer la información de la versión",
@@ -1163,6 +1195,13 @@ enum L10nTables {
     ]
 
     private static let fr: [String: String] = [
+        "Start New Session": "Démarrer une nouvelle session",
+        "Session started": "Session démarrée",
+        "End Current Session": "Terminer la session en cours",
+        "No session is running": "Aucune session en cours",
+        "Session ended": "Session terminée",
+        "Couldn't run “{0}”": "Impossible d’exécuter « {0} »",
+        "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Autorisez TabFlick à contrôler {0} dans Réglages Système → Confidentialité et sécurité → Automatisation.",
         "System": "Système",
         "Light": "Clair",
         "Dark": "Sombre",
@@ -1407,6 +1446,7 @@ enum L10nTables {
         "closed {0}": "fermé {0}",
         "Browser bookmark": "Favori du navigateur",
         "visited {0}": "consulté {0}",
+        "Command": "Commande",
         "Running": "Ouverte",
         "GitHub returned {0}": "GitHub a renvoyé {0}",
         "Could not parse the release info": "Impossible de lire les infos de version",
@@ -1450,6 +1490,13 @@ enum L10nTables {
     ]
 
     private static let de: [String: String] = [
+        "Start New Session": "Neue Sitzung starten",
+        "Session started": "Sitzung gestartet",
+        "End Current Session": "Aktuelle Sitzung beenden",
+        "No session is running": "Keine Sitzung aktiv",
+        "Session ended": "Sitzung beendet",
+        "Couldn't run “{0}”": "„{0}“ konnte nicht ausgeführt werden",
+        "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, {0} zu steuern.",
         "System": "System",
         "Light": "Hell",
         "Dark": "Dunkel",
@@ -1694,6 +1741,7 @@ enum L10nTables {
         "closed {0}": "{0} geschlossen",
         "Browser bookmark": "Browser-Lesezeichen",
         "visited {0}": "{0} besucht",
+        "Command": "Befehl",
         "Running": "Läuft",
         "GitHub returned {0}": "GitHub antwortete mit {0}",
         "Could not parse the release info": "Release-Infos konnten nicht gelesen werden",

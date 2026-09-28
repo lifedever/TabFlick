@@ -83,6 +83,8 @@ enum SearchRow: Identifiable {
     case app(AppEntry)
     /// ⌘↩ 展开的「操作」里的一项：对 target 那一行做什么
     indirect case command(RowCommand, SearchRow)
+    /// 内置命令（`AppCommands`）：有输入且命中时跟在它的 App 下面，App 的 ⌘↩ 里也有
+    case appCommand(AppCommand, AppEntry)
 
     var id: String {
         switch self {
@@ -98,6 +100,7 @@ enum SearchRow: Identifiable {
         // 用 rawValue 拼：第一版给 RowCommand 写了 description = String(reflecting: self)，
         // 而 String(reflecting:) 会回头调 description —— 无限递归，打开面板画第一行操作就栈溢出崩溃
         case .command(let c, let target): return "cmd#\(c.rawValue)#\(target.id)"
+        case .appCommand(let c, _): return "appcmd#\(c.id)"
         }
     }
 
@@ -113,6 +116,8 @@ enum SearchRow: Identifiable {
         case .folder(let f):     return "file:" + f.path
         case .opener(let o, _):  return "file:" + o.path
         case .app(let a):        return "file:" + a.path
+        // 命令用它那个 App 的图标（Raycast 的做法）：一眼看出是谁的命令
+        case .appCommand(_, let a): return "file:" + a.path
         case .command(.primary, let target): return target.favIconUrl
         case .url, .action, .command: return ""
         }
@@ -147,6 +152,7 @@ enum SearchRow: Identifiable {
         case .opener(let o, _):  return o.name
         case .app(let a):        return a.name
         case .command(let c, let target): return c.title(for: target)
+        case .appCommand(let c, _): return c.title
         }
     }
 
@@ -173,6 +179,7 @@ enum SearchRow: Identifiable {
         case .opener(let o, _):  return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
         case .app:               return L10n.t("打开应用", "Open application")
         case .command(let c, let target): return c.title(for: target)
+        case .appCommand(let c, _): return c.title
         }
     }
 
@@ -188,6 +195,8 @@ enum SearchRow: Identifiable {
         case .folder(let f):     return f.path
         case .opener(_, let f):  return f.path
         case .app(let a):        return a.path
+        // 记下「amp 选了结束会话」：常用的那条在它的 App 下面排前面
+        case .appCommand(let c, _): return "appcmd:" + c.id
         case .command(.primary, let target): return target.memoryIdentity
         case .action, .command:  return nil
         }
@@ -359,6 +368,7 @@ enum SearchPick {
     /// 文件夹；opener 为 nil = 用最近用过的方式
     case folder(FavoriteFolder, OpenerApp?)
     case app(AppEntry)
+    case appCommand(AppCommand, AppEntry)
 }
 
 // MARK: - 视图模型
@@ -686,8 +696,11 @@ final class TabSearchModel: ObservableObject {
             return openers.map { .opener($0, folder) }
                 + [RowCommand.copyPath, .revealInFinder, .unfavorite].map { .command($0, target) }
         case .app(let app):
-            commands = [.primary, .getInfo, .revealInFinder, .copyPath] + (app.isRunning ? [.quitApp] : [])
-        case .url, .action, .opener, .command:
+            // 内置命令排在「打开」后面：回车默认仍是打开，常用命令一个 ↓ 就到
+            let builtins = AppCommands.commands(for: app.bundleID).map { SearchRow.appCommand($0, app) }
+            return [.command(.primary, target)] + builtins
+                + ([.getInfo, .revealInFinder, .copyPath] + (app.isRunning ? [.quitApp] : [])).map { .command($0, target) }
+        case .url, .action, .opener, .command, .appCommand:
             return []
         }
         return commands.map { .command($0, target) }
@@ -758,7 +771,11 @@ final class TabSearchModel: ObservableObject {
         if let target = actionTarget {
             // 操作列表：输入过滤操作名（同样认拼音）
             let all = commandRows(for: target)
-            let candidates = all.map { candidate(title: $0.displayTitle, url: "") }
+            let candidates = all.map { row -> SearchCandidate in
+                // 内置命令带着别名过滤（二级里打「end」也要能找到「结束当前会话」）
+                if case .appCommand(let command, let app) = row { return commandCandidate(command, app) }
+                return candidate(title: row.displayTitle, url: "")
+            }
             next = TabSearch.rank(candidates, query: trimmed).map { all[$0] }
         } else {
             next = mode == .all ? allRows(trimmed) : modeRows(mode, trimmed)
@@ -822,7 +839,9 @@ final class TabSearchModel: ObservableObject {
         case .apps:
             // 英文原名和 bundle id 放进「网址」栏参与匹配（得分低于标题命中）
             let candidates = apps.map { appCandidate($0) }
-            next = TabSearch.rank(candidates, query: trimmed, boosts: boosts).prefix(Self.soloLimit).map { .app(apps[$0]) }
+            let hits = TabSearch.rank(candidates, query: trimmed, boosts: boosts).prefix(Self.soloLimit).map { SearchRow.app(apps[$0]) }
+            let attached = attach(commandHits(trimmed), to: Array(hits))
+            next = attached.rows + attached.rest
         }
         return next
     }
@@ -856,6 +875,7 @@ final class TabSearchModel: ObservableObject {
         // 「最佳匹配」也得在截断前挑。
         let appCandidates = apps.map { appCandidate($0) }
         var appHits = TabSearch.rank(appCandidates, query: trimmed, boosts: boosts).map { SearchRow.app(apps[$0]) }
+        var builtinHits = commandHits(trimmed)
         let liveCandidates = all.map { candidate(title: $0.tab.title, url: $0.tab.url) }
         var liveHits = TabSearch.rank(liveCandidates, query: trimmed, boosts: boosts).map { SearchRow.tab(all[$0]) }
 
@@ -932,8 +952,21 @@ final class TabSearchModel: ObservableObject {
                                      hidden: countKnown ? hidden : 0, moreUnknown: !countKnown && hidden > 0))
             body += shown
         }
-        if let topHit { cut(.top, [topHit], 1) }
-        cut(.apps, appHits, Self.appLimit)
+        if let topHit {
+            // 被提到最前的是 App 的话，它的命令跟着过去（「amp」→ Amphetamine 和它的两条命令一起在最前）
+            let attached = attach(builtinHits, to: [topHit])
+            builtinHits = attached.rest
+            cut(.top, attached.rows, attached.rows.count)
+        }
+        // 应用段：上限按 App 数算，命令跟在自己的 App 后面、不占名额（每个 App 就两三条，挑过的）；
+        // App 本身没列出来的命令（打「end」只命中命令）垫在段尾
+        let shownApps = Array(appHits.prefix(Self.appLimit))
+        let attachedApps = attach(builtinHits, to: shownApps)
+        let appRows = attachedApps.rows + attachedApps.rest
+        if !appRows.isEmpty {
+            specs.append(SectionSpec(kind: .apps, count: appRows.count, hidden: appHits.count - shownApps.count))
+            body += appRows
+        }
         cut(.tabs, liveHits, Self.tabLimit)
         cut(.closed, closedHits, Self.closedLimit)
         cut(.bookmarks, bookmarkHits, Self.bookmarkLimit)
@@ -953,6 +986,48 @@ final class TabSearchModel: ObservableObject {
         }
         layout = specs + [opsSpec]
         return body + ops
+    }
+
+    /// 有输入时命中的内置命令，按得分排。只列装了的 App 的（同一个 bundle id 装了两份只算第一份）。
+    /// 不输入时一条都不列：命令只在找它的时候出现（一级别变成 Raycast 那样满屏命令）。
+    private func commandHits(_ trimmed: String) -> [SearchRow] {
+        guard !trimmed.isEmpty else { return [] }
+        let table = Dictionary(grouping: AppCommands.all, by: \.bundleID)
+        guard !table.isEmpty else { return [] }
+        var pairs: [(command: AppCommand, app: AppEntry)] = []
+        var seen = Set<String>()
+        for app in apps {
+            guard let id = app.bundleID, let commands = table[id], !seen.contains(id) else { continue }
+            seen.insert(id)
+            pairs += commands.map { ($0, app) }
+        }
+        let candidates = pairs.map { commandCandidate($0.command, $0.app) }
+        return TabSearch.rank(candidates, query: trimmed, boosts: boosts).map { SearchRow.appCommand(pairs[$0].command, pairs[$0].app) }
+    }
+
+    /// 命令名进标题（认拼音）；另一种语言的名字、别名、App 名放「网址」栏：打「amp」时
+    /// App 下面跟出它的命令，打「end」「结束」直接命中命令。一级和二级的过滤共用这一份。
+    private func commandCandidate(_ command: AppCommand, _ app: AppEntry) -> SearchCandidate {
+        candidate(title: command.title,
+                  url: (command.keywords + [app.name, app.alternateName].compactMap { $0 }).joined(separator: " "),
+                  identity: "appcmd:" + command.id)
+    }
+
+    /// 把命令插到各自 App 那一行后面。没跟上的（App 没在这几行里）放进 `rest`，由调用方垫在段尾。
+    private func attach(_ commands: [SearchRow], to rows: [SearchRow]) -> (rows: [SearchRow], rest: [SearchRow]) {
+        guard !commands.isEmpty else { return (rows, []) }
+        var used = Set<String>()
+        var out: [SearchRow] = []
+        for row in rows {
+            out.append(row)
+            guard case .app(let app) = row else { continue }
+            for command in commands {
+                guard case .appCommand(_, let owner) = command, owner.path == app.path, !used.contains(command.id) else { continue }
+                used.insert(command.id)
+                out.append(command)
+            }
+        }
+        return (out, commands.filter { !used.contains($0.id) })
     }
 
     private func appCandidate(_ app: AppEntry) -> SearchCandidate {
@@ -1117,6 +1192,8 @@ private struct SearchField: NSViewRepresentable {
     let onCancel: () -> Void
     /// Tab = +1，⇧Tab = -1。
     let onTab: (Int) -> Void
+    /// 输入框已经空了还按 ⌫。返回 true 表示接住了（二级退回一级）。
+    let onDeleteWhenEmpty: () -> Bool
 
     func makeNSView(context: Context) -> NSTextField {
         // **必须是 NSSearchField，不能是 NSTextField**（2026-09-26 二分出来的）：
@@ -1167,6 +1244,9 @@ private struct SearchField: NSViewRepresentable {
     final class Coordinator: NSObject, NSSearchFieldDelegate {
         let parent: SearchField
         init(_ parent: SearchField) { self.parent = parent }
+        /// 这一下 ⌫ 刚把二级退回一级：还按着不放的话，后面自动连发的 ⌫ 全部吞掉，
+        /// 不然会接着删一级恢复出来的输入。松开再按（不是连发）就清掉。
+        private var swallowDeleteRepeats = false
 
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
@@ -1185,8 +1265,23 @@ private struct SearchField: NSViewRepresentable {
             case #selector(NSResponder.cancelOperation(_:)): parent.onCancel()
             case #selector(NSResponder.insertTab(_:)):       parent.onTab(1)
             case #selector(NSResponder.insertBacktab(_:)):   parent.onTab(-1)
+            case #selector(NSResponder.deleteBackward(_:)):  return deleteBackward(in: textView)
             default: return false
             }
+            return true
+        }
+
+        /// 空了再按 ⌫ = 退回上一级（照 Raycast，用户 2026-09-28 要的）。只认「重新按下」的那一下：
+        /// 按住 ⌫ 删过滤词时，删空之后还在自动连发，那几下要是也算，就会一路退回一级、
+        /// 再接着把一级恢复出来的输入删掉。组字期间 ⌫ 归输入法，走不到这里。
+        private func deleteBackward(in textView: NSTextView) -> Bool {
+            let isRepeat = NSApp.currentEvent.map { $0.type == .keyDown && $0.isARepeat } ?? false
+            if !isRepeat { swallowDeleteRepeats = false }
+            if isRepeat, swallowDeleteRepeats { return true }
+            guard textView.string.isEmpty, !textView.hasMarkedText() else { return false }
+            if isRepeat { return true }
+            guard parent.onDeleteWhenEmpty() else { return false }
+            swallowDeleteRepeats = true
             return true
         }
     }
@@ -1206,7 +1301,9 @@ private struct TabSearchView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: kSearchIconGap) {
-                Image(systemName: "magnifyingglass")
+                // 在 ⌘↩ 的二级里换成「‹」：一眼看出在第几层，点它返回（点击由面板的鼠标监视器
+                // 处理 —— 这一格同时是拖面板的把手，见 TabSearchPanel.isDragHandle）
+                Image(systemName: model.actionTarget != nil ? "chevron.left" : "magnifyingglass")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: kSearchRowIconSize)
@@ -1219,7 +1316,12 @@ private struct TabSearchView: View {
                                 model.onPick?(model.rows[model.cursor])
                             },
                             onCancel: { if !model.escape() { onCancel() } },
-                            onTab: { model.tabPressed($0) })
+                            onTab: { model.tabPressed($0) },
+                            onDeleteWhenEmpty: {
+                                // 只有二级才有「上一级」；一级里空着按 ⌫ 什么都不做
+                                guard model.actionTarget != nil else { return false }
+                                return model.escape()
+                            })
                     .frame(maxWidth: .infinity)
 
                 modeIndicator
@@ -1635,8 +1737,8 @@ private struct SearchRowIcon: View {
                     .font(.system(size: symbolSize, weight: .regular))
                     .foregroundStyle(.secondary)
             }
-        case .folder, .opener, .app:
-            // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）
+        case .folder, .opener, .app, .appCommand:
+            // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标
             if let icon {
                 let isApp: Bool = { if case .folder = row { return false } else { return true } }()
                 Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
@@ -1775,6 +1877,7 @@ private struct SearchRowView: View {
         // 有访达注释就先写注释：搜注释命中时能看出是因为它
         case .app(let a):        return [a.comment, (a.path as NSString).deletingLastPathComponent]
                                      .compactMap { $0 }.joined(separator: " · ")
+        case .appCommand(_, let a): return a.name
         case .command:           return ""
         }
     }
@@ -1944,6 +2047,13 @@ private struct SearchRowView: View {
                 }
             case .app(let a):
                 if a.isRunning { RunningDot() }
+            case .appCommand:
+                // 一级里它和 App 挨着、图标一样，写明是命令；二级里全是操作，不用写
+                if !compact {
+                    Text(L10n.t("命令", "Command"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.30))
+                }
             case .command:
                 EmptyView()
             }
@@ -2170,6 +2280,7 @@ final class TabSearchPanel {
             case .folder(let f):     pick?(.folder(f, nil))
             case .opener(let o, let f): pick?(.folder(f, o))
             case .app(let a):        pick?(.app(a))
+            case .appCommand(let c, let a): pick?(.appCommand(c, a))
             case .command:           break   // 上面已处理
             }
         }
@@ -2440,8 +2551,12 @@ final class TabSearchPanel {
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self, event.window === self.panel, event.clickCount == 1,
                   self.isDragHandle(event.locationInWindow) else { return event }
-            if !self.trackDrag(), let editor = self.fieldHandle.field?.currentEditor() as? NSTextView,
-               !editor.hasMarkedText() {
+            let onIcon = self.isLeftOfField(event.locationInWindow)
+            if self.trackDrag() { return nil }
+            if onIcon, self.model.actionTarget != nil {
+                // 二级里那一格是「‹」：点一下返回（拖动照样拖面板）
+                _ = self.model.escape()
+            } else if let editor = self.fieldHandle.field?.currentEditor() as? NSTextView, !editor.hasMarkedText() {
                 // 只是点了一下：和点在输入框空白处一样，光标放到末尾
                 editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
             }
@@ -2489,6 +2604,12 @@ final class TabSearchPanel {
         let fieldRect = field.convert(field.bounds, to: nil)
         if point.x < fieldRect.minX { return true }
         return point.x <= fieldRect.maxX && point.x > textEnd(of: field) + 6
+    }
+
+    /// 按在输入框左边那一格（放大镜 / 二级里的「‹」）。
+    private func isLeftOfField(_ point: NSPoint) -> Bool {
+        guard let field = fieldHandle.field else { return false }
+        return point.x < field.convert(field.bounds, to: nil).minX
     }
 
     /// 输入框里文字（含组字中的）末尾的 x，窗口坐标。没字时就是输入框左边。
