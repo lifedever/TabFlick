@@ -22,8 +22,14 @@ struct SwitcherItem: Identifiable {
     let browser: String?
     /// 这一项的命令要发给哪条连接。
     let clientID: UUID
+    /// 同一个浏览器开了多个 Profile 时，它属于哪个（给用户看的名字）；只有一个时 nil。
+    /// 全局切换器按「浏览器 + Profile」分组，组头写「Google Chrome · 工作」。
+    let profile: String?
 
-    init(tab: TabInfo, browser: String?, clientID: UUID) {
+    /// 分组依据：浏览器 + Profile。
+    var groupKey: String { (browser ?? "") + "|" + (profile ?? "") }
+
+    init(tab: TabInfo, browser: String?, clientID: UUID, profile: String? = nil) {
         // 用连接 id 而不是 bundle id 做前缀：同一个浏览器多开 profile 时
         // 是两条连接，各有各的 tabId 空间。ForEach 撞 id 会让 SwiftUI
         // 渲染错乱，这里用构造保证唯一，不靠「大概不会撞」。
@@ -31,6 +37,7 @@ struct SwitcherItem: Identifiable {
         self.tab = tab
         self.browser = browser
         self.clientID = clientID
+        self.profile = profile
     }
 }
 
@@ -327,7 +334,7 @@ private struct SwitcherView: View {
         case .globalCards(let columns):
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: kGroupSpacing) {
-                    ForEach(groups, id: \.browser) { group in
+                    ForEach(groups, id: \.key) { group in
                         VStack(alignment: .leading, spacing: 0) {
                             // 分组头对齐缩略图左缘（卡片自身还有一圈内边距）
                             if presentation.grouped {
@@ -347,7 +354,7 @@ private struct SwitcherView: View {
         case .globalList:
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: kGroupSpacing) {
-                    ForEach(groups, id: \.browser) { group in
+                    ForEach(groups, id: \.key) { group in
                         VStack(alignment: .leading, spacing: 0) {
                             if presentation.grouped {
                                 groupHeader(group, inset: kRowInset)
@@ -399,16 +406,15 @@ private struct SwitcherView: View {
         Array(repeating: GridItem(.fixed(metrics.width), spacing: kCardSpacing), count: max(1, columns))
     }
 
-    /// 按浏览器切段。items 进来时同一浏览器的项已经连在一起（MRUController
-    /// 就是按组拼的），这里只做**连续切分**、不重排 —— 排序权归状态机。
-    private var groups: [(browser: String, items: [SwitcherItem])] {
-        var result: [(browser: String, items: [SwitcherItem])] = []
+    /// 按浏览器（多 Profile 时按浏览器 + Profile）切段。items 进来时同一组的项已经连在一起
+    ///（MRUController 就是按组拼的），这里只做**连续切分**、不重排 —— 排序权归状态机。
+    private var groups: [(key: String, browser: String, items: [SwitcherItem])] {
+        var result: [(key: String, browser: String, items: [SwitcherItem])] = []
         for item in model.items {
-            let key = item.browser ?? ""
-            if result.last?.browser == key {
+            if result.last?.key == item.groupKey {
                 result[result.count - 1].items.append(item)
             } else {
-                result.append((key, [item]))
+                result.append((item.groupKey, item.browser ?? "", [item]))
             }
         }
         return result
@@ -424,7 +430,7 @@ private struct SwitcherView: View {
     /// 光靠「图标 + 加粗名字」分不开：那个组合和下面的标签行长得太像，
     /// 读起来只是「又一行」。所以头部反过来做——**字更小、更淡、字距拉开**，
     /// 明确是标签而不是内容；真正划清界限的是那道横线。
-    private func groupHeader(_ group: (browser: String, items: [SwitcherItem]),
+    private func groupHeader(_ group: (key: String, browser: String, items: [SwitcherItem]),
                              inset: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: kRowIconGap) {
@@ -439,7 +445,8 @@ private struct SwitcherView: View {
                 .frame(width: kRowIconSize, height: kRowIconSize)
                 .opacity(0.85)
 
-                Text(BrowserSupport.displayName(group.browser))
+                Text(BrowserSupport.displayName(group.browser)
+                     + (group.items.first?.profile.map { " · \($0)" } ?? ""))
                     .font(.system(size: 10, weight: .semibold))
                     .tracking(0.6)
                     .foregroundStyle(Color.primary.opacity(0.45))
@@ -1248,13 +1255,14 @@ final class OverlayPanel {
                               screenMaxHeight: CGFloat) -> (size: NSSize, presentation: SwitcherPresentation) {
         // 每个浏览器的标签数（顺序即 items 里的连续分段）
         var groupSizes: [Int] = []
-        var lastBrowser: String?
+        var lastKey: String?
         for item in items {
-            if item.browser == lastBrowser, !groupSizes.isEmpty {
+            // 和视图的 `groups` 同一个分组依据（浏览器 + Profile），不然高度算少一个组头
+            if item.groupKey == lastKey, !groupSizes.isEmpty {
                 groupSizes[groupSizes.count - 1] += 1
             } else {
                 groupSizes.append(1)
-                lastBrowser = item.browser
+                lastKey = item.groupKey
             }
         }
         let groupCount = max(1, groupSizes.count)
@@ -1547,6 +1555,21 @@ enum ChromeWindowLocator {
                       y: primaryHeight - bounds.maxY,
                       width: bounds.width,
                       height: bounds.height)
+    }
+
+    /// 浏览器焦点窗口的标题（AX）。多 Profile 时拿它认前台是哪个 Profile 的窗口
+    ///（Chrome 的窗口标题就是当前标签的标题），见 `ProfilePicker`。取不到返回 nil。
+    static func focusedWindowTitle() -> String? {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: activeBundleID)
+        guard let pid = running.first?.processIdentifier else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.15)
+        guard let window = axElement(app, kAXFocusedWindowAttribute) ?? axElement(app, kAXMainWindowAttribute)
+        else { return nil }
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &raw) == .success,
+              let title = raw as? String, !title.isEmpty else { return nil }
+        return title
     }
 
     /// 浏览器自己认定的焦点窗口。

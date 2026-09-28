@@ -106,8 +106,14 @@ function faviconURL(pageUrl) {
 
 async function faviconDataURL(pageUrl) {
   const img = new Image();
-  img.src = faviconURL(pageUrl);
-  await img.decode();
+  // 用 load 事件 + 超时，不用 img.decode()：offscreen 页没有渲染机会时 decode 可能永远
+  // 不落定，一个卡住整批都回不去（2026-09-27 helper 那边十几次请求零回包）。
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("favicon timeout")), 3000);
+    img.onload = () => { clearTimeout(timer); resolve(); };
+    img.onerror = () => { clearTimeout(timer); reject(new Error("favicon load failed")); };
+    img.src = faviconURL(pageUrl);
+  });
   const canvas = document.createElement("canvas");
   canvas.width = 32;
   canvas.height = 32;

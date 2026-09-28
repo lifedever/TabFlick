@@ -1,5 +1,6 @@
 import Cocoa
 
+
 let kPort: UInt16 = 41573
 
 /// 授权流程。必须持有强引用，否则轮询计时器会被释放。
@@ -108,9 +109,9 @@ MainActor.assumeIsolated {
         // 状态栏的扩展版本警告（橙色项，点击直达升级说明）
         statusItem.extensionWarning = {
             MainActor.assumeIsolated {
-                let outdated = controller.browserStatuses.filter(\.needsUpdate)
+                let outdated = controller.outdatedExtensionNames
                 guard !outdated.isEmpty else { return nil }
-                let names = outdated.map(\.name).joined(separator: L10n.listSeparator)
+                let names = outdated.joined(separator: L10n.listSeparator)
                 return L10n.t("扩展需要更新：\(names)", "Extension update needed: \(names)")
             }
         }
@@ -134,16 +135,16 @@ MainActor.assumeIsolated {
         statusItem.menuBrowsersProvider = {
             MainActor.assumeIsolated { controller.menuBrowsers }
         }
-        statusItem.onPickTabInBrowser = { tabId, browser in
-            MainActor.assumeIsolated { controller.activateFromMenu(tabId: tabId, browser: browser) }
+        statusItem.onPickTabInBrowser = { tabId, client in
+            MainActor.assumeIsolated { controller.activateFromMenu(tabId: tabId, client: client) }
         }
 
         // 子菜单末尾的「最近关闭」：点一条把它重新打开
-        statusItem.onReopenClosedTab = { id, browser in
-            MainActor.assumeIsolated { controller.reopenClosedTab(id: id, browser: browser) }
+        statusItem.onReopenClosedTab = { id, client in
+            MainActor.assumeIsolated { controller.reopenClosedTab(id: id, via: client) }
         }
-        statusItem.onClearClosedTabs = { browser in
-            MainActor.assumeIsolated { controller.clearClosedTabs(browser: browser) }
+        statusItem.onClearClosedTabs = { client in
+            MainActor.assumeIsolated { controller.clearClosedTabs(client: client) }
         }
 
         // 收藏的文件夹：状态栏直接列出，子菜单选 App 打开；
@@ -172,10 +173,17 @@ MainActor.assumeIsolated {
         statusItem.folderOpenersProvider = {
             MainActor.assumeIsolated { OpenerCatalog.menuOpeners(store: folders) }
         }
+        ProfileNames.provider = { key in controller.profileLabel(forKey: key) }
         // 搜索面板「文件夹」模式：同一份收藏、同一份打开方式、同一段打开逻辑
         controller.openSettings = { settingsWindow.show() }
         controller.folderProvider = { folders.entries }
         controller.openerProvider = { OpenerCatalog.menuOpeners(store: folders) }
+        controller.unfavoriteFolderHandler = { folder in
+            folders.remove(path: folder.path)
+            Toast.show(L10n.t("已取消收藏「\(folder.name)」",
+                              "Removed “\(folder.name)” from favorites"),
+                       detail: folder.path)
+        }
         controller.openFolderHandler = { folder, opener in
             OpenerCatalog.open(folder: folder.path, with: opener)
             folders.touch(path: folder.path)

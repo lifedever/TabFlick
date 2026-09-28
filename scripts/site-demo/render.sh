@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SRC="$ROOT/helper/Sources/tabflick"
 WORK="$(mktemp -d)"
-cp "$SRC"/{TabSearchPanel,TabSearch,Pinyin,L10n,Log,AppSettings,LoginItem,FavoriteFolders,Toast,WindowShadow,AppCatalog}.swift "$WORK/"
+cp "$SRC"/{TabSearchPanel,TabSearch,Pinyin,L10n,L10nTables,Log,AppSettings,LoginItem,FavoriteFolders,Toast,WindowShadow,AppCatalog,SearchMemory}.swift "$WORK/"
 sed -i '' 's/^private final class SearchPanel: NSPanel/final class SearchPanel: NSPanel/' "$WORK/TabSearchPanel.swift"
 cp "$ROOT/scripts/site-demo/main.swift" "$WORK/"
 python3 - "$SRC/OverlayPanel.swift" "$WORK/stubs.swift" <<'PY'
@@ -25,14 +25,15 @@ enum CursorSource { case keyboard, mouse }
 struct TabInfo: Decodable { let id: Int; let windowId: Int; let title: String; let url: String; let favIconUrl: String; let lastAccessed: Double?; let pinned: Bool? }
 extension TabInfo { var relativeLastAccessed: String? { relativeTime(msEpoch: lastAccessed) } }
 struct IconInfo { let image: NSImage; let isLight: Bool }
-struct SwitcherItem: Identifiable { let id: String; let tab: TabInfo; let browser: String?; let clientID: UUID
-    init(tab: TabInfo, browser: String?, clientID: UUID) { self.id = "\\(clientID.uuidString)#\\(tab.id)"; self.tab = tab; self.browser = browser; self.clientID = clientID } }
+struct SwitcherItem: Identifiable { let id: String; let tab: TabInfo; let browser: String?; let clientID: UUID; let profile: String?
+    var groupKey: String { (browser ?? "") + "|" + (profile ?? "") }
+    init(tab: TabInfo, browser: String?, clientID: UUID, profile: String? = nil) { self.id = "\\(clientID.uuidString)#\\(tab.id)"; self.tab = tab; self.browser = browser; self.clientID = clientID; self.profile = profile } }
 struct BookmarkInfo: Decodable { let title: String; let url: String; let path: String; var clientID: UUID? = nil
     private enum CodingKeys: String, CodingKey { case title, url, path } }
 struct HistoryInfo: Decodable { let title: String; let url: String; let lastVisitTime: Double; var clientID: UUID? = nil
     private enum CodingKeys: String, CodingKey { case title, url, lastVisitTime } }
 enum CloseReason: String, Codable { case manual }
-struct ClosedTab: Identifiable, Codable, Equatable { let id: String; let url: String; let title: String; let favIconUrl: String; let browser: String; let reason: CloseReason; let closedAt: Double
+struct ClosedTab: Identifiable, Codable, Equatable { let id: String; let url: String; let title: String; let favIconUrl: String; let browser: String; var profile: String? = nil; let reason: CloseReason; let closedAt: Double
     var displayTitle: String { title.isEmpty ? url : title } }
 @MainActor enum ChromeWindowLocator { static func frontmostWindowFrame() -> NSRect? { nil }; static var activeBundleID = "com.google.Chrome" }
 private let kPanelCornerRadius: CGFloat = 14
@@ -44,7 +45,7 @@ private let kGlassBackdrop = true
 open(sys.argv[2],'w').write(stubs)
 PY
 cd "$WORK"
-swiftc -O main.swift stubs.swift TabSearchPanel.swift TabSearch.swift Pinyin.swift L10n.swift Log.swift AppSettings.swift LoginItem.swift FavoriteFolders.swift Toast.swift WindowShadow.swift AppCatalog.swift -o demo -sdk "$(xcrun --show-sdk-path --sdk macosx)"
+swiftc -O main.swift stubs.swift TabSearchPanel.swift TabSearch.swift Pinyin.swift L10n.swift L10nTables.swift Log.swift AppSettings.swift LoginItem.swift FavoriteFolders.swift Toast.swift WindowShadow.swift AppCatalog.swift SearchMemory.swift -o demo -sdk "$(xcrun --show-sdk-path --sdk macosx)"
 ./demo shot s1 dark all git >/dev/null; ./demo shot s2 light all >/dev/null; ./demo shot s3 dark actions swift >/dev/null
 ./demo shot s4 dark folders >/dev/null; ./demo shot s5 light bookmarks >/dev/null
 ./demo video dark >/dev/null

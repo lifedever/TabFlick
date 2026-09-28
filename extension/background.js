@@ -769,7 +769,7 @@ async function handleHelperMessage(raw) {
         await ensureOffscreen();
         chrome.runtime
           .sendMessage({ target: "offscreen", type: "favicon-query", items: msg.items })
-          .catch(() => {});
+          .catch((e) => send({ type: "log", message: `favicon-query → offscreen failed: ${e}` }));
       }
       break;
     case "historyQuery":
@@ -803,6 +803,27 @@ async function handleHelperMessage(raw) {
           await chrome.search.query({ text: msg.text, disposition: "NEW_TAB" });
         } catch (e) {
           send({ type: "log", message: `search failed: ${e}` });
+        }
+      }
+      break;
+    case "reload":
+      // ⌘E 面板「操作」里的重新加载（不切过去，后台标签也能刷）
+      if (typeof msg.tabId === "number") {
+        try {
+          await chrome.tabs.reload(msg.tabId);
+        } catch (e) {
+          send({ type: "log", message: `reload failed: ${e}` });
+        }
+      }
+      break;
+    case "deleteHistory":
+      // ⌘E 面板「操作」里的从历史记录中删除：删掉这个网址的全部访问记录
+      //（chrome.history.deleteUrl 的语义，和地址栏里 ⇧⌦ 删建议是一回事）
+      if (typeof msg.url === "string" && msg.url.startsWith("http") && chrome.history) {
+        try {
+          await chrome.history.deleteUrl({ url: msg.url });
+        } catch (e) {
+          send({ type: "log", message: `history.deleteUrl failed: ${e}` });
         }
       }
       break;
@@ -847,6 +868,20 @@ async function handleHelperMessage(raw) {
 // 跑到，就会把刚取消的置顶又加回列表（取消置顶死循环，实测）。
 let helperQueue = Promise.resolve();
 
+// 这个 Profile 的固定身份：第一次随机生成，存 storage.local（每个 Profile 一份）。
+// 每次 SW 启动都重写一次：helper 要在浏览器数据目录里按这串字认出它属于哪个 Profile
+// 目录（读 Profile 名字用），重写保证它总在 LevelDB 的日志文件里、不被压缩掉。
+let profileKeyPromise;
+function profileKey() {
+  profileKeyPromise ??= (async () => {
+    const { profileKey: stored } = await chrome.storage.local.get("profileKey");
+    const key = typeof stored === "string" && stored ? stored : crypto.randomUUID();
+    await chrome.storage.local.set({ profileKey: key, profileKeySeenAt: Date.now() });
+    return key;
+  })().catch(() => null);
+  return profileKeyPromise;
+}
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.target !== "sw") return;
 
@@ -856,7 +891,16 @@ chrome.runtime.onMessage.addListener((message) => {
         connected = true;
         console.log("[TabFlick] 已连接 helper");
         // 附带扩展版本：helper 核对 major.minor 配套，不一致会提示用户更新扩展
-        send({ type: "requestSettings", extVersion: chrome.runtime.getManifest().version });
+        // profileKey：这个 Profile 的固定身份（多 Profile 时每个 Profile 各一份扩展、
+        // 各一条连接，连接 id 每次重连都变）。helper 按它给「最近关闭」分账、认 Profile 名字。
+        profileKey().then((key) =>
+          send({
+            type: "requestSettings",
+            extVersion: chrome.runtime.getManifest().version,
+            profileKey: key,
+            extensionId: chrome.runtime.id,
+          }),
+        );
         pushMRU();
         pushBookmarks();
         chrome.tabs
@@ -895,6 +939,8 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 // 切换浏览器窗口时，那个窗口的当前标签页才是「最近使用」的
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  // 多 Profile 时每个 Profile 各一条连接，helper 要知道前台是哪个 Profile 的窗口
+  send({ type: "focused" });
   const [tab] = await chrome.tabs.query({ active: true, windowId });
   if (!tab) return;
   await touchTab(tab.id);

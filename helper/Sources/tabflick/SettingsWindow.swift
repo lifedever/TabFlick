@@ -335,8 +335,9 @@ private struct BrowserPane: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             } else if browser.needsUpdate {
-                Label(L10n.t("已连接 · 扩展 v\(browser.extVersion ?? "?") 需更新到 v\(MRUController.requiredExtensionVersion) 以上",
-                             "Connected · extension v\(browser.extVersion ?? "?"), needs v\(MRUController.requiredExtensionVersion)+"),
+                // 不写「需更新到 vX」：版本号够了却没点 ↻ 的也算要更新，那时写目标版本是在讲一件假事
+                Label(L10n.t("已连接 · 扩展 v\(browser.extVersion ?? "?") 需要更新",
+                             "Connected · extension v\(browser.extVersion ?? "?") needs updating"),
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
@@ -458,12 +459,15 @@ private struct TabManagementPane: View {
         .frame(width: kSettingsPaneWidth)
     }
 
-    private var hasMultipleBrowsers: Bool {
-        Set(settings.favorites.map(\.browser)).count > 1
+    /// 收藏分布在不止一个浏览器（或同一个浏览器的多个 Profile）时，每行标出归属
+    private var hasMultipleOwners: Bool {
+        Set(settings.favorites.map { $0.browser + "|" + ($0.profile ?? "") }).count > 1
     }
 
-    private func browserName(_ bundleID: String) -> String {
-        BrowserSupport.displayName(bundleID)
+    private func ownerName(_ fav: FavoriteTab) -> String {
+        let browser = BrowserSupport.displayName(fav.browser)
+        guard let key = fav.profile, let profile = ProfileNames.provider?(key) else { return browser }
+        return "\(browser) · \(profile)"
     }
 
     @ViewBuilder
@@ -475,7 +479,7 @@ private struct TabManagementPane: View {
                     .lineLimit(1)
                 // 显示「最后访问」而不是原始收藏地址 —— 恢复时开的就是它。
                 // 收藏跨多个浏览器时（按浏览器分账），前缀标注归属。
-                Text((hasMultipleBrowsers ? browserName(fav.browser) + " · " : "")
+                Text((hasMultipleOwners ? ownerName(fav) + " · " : "")
                      + (settings.favoriteCurrentUrls[fav.id] ?? fav.url))
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -492,6 +496,13 @@ private struct TabManagementPane: View {
             .help(L10n.t("移除并取消置顶", "Remove and unpin"))
         }
     }
+}
+
+/// 置顶列表标 Profile 名用：profileKey → 给用户看的名字（MRUController 提供，main.swift 接上）。
+/// 那个 Profile 没连着就认不出，返回 nil（只写浏览器名）。
+@MainActor
+enum ProfileNames {
+    static var provider: ((String) -> String?)?
 }
 
 /// 置顶列表行首的站点图标。
@@ -744,6 +755,7 @@ private struct OpenWithPane: View {
 /// 一屏放不下。
 private struct SearchPane: View {
     @ObservedObject var settings: AppSettings
+    @State private var memoryCount = 0
 
     var body: some View {
         Form {
@@ -754,8 +766,8 @@ private struct SearchPane: View {
                 .toggleStyle(.switch)
 
                 Text(L10n.t(
-                    "输标题、网址或拼音找标签；Tab 在全部、搜索、历史记录、书签、最近关闭之间切。按住 ⌘ 时用 1–\(kSearchQuickPickCount) 直接选，悬停行尾的 ✕ 关标签。",
-                    "Matches titles, URLs and pinyin; Tab cycles through All, Search, History, Bookmarks and Recently closed. Hold ⌘ and press 1–\(kSearchQuickPickCount) to pick, hover a row for the ✕ that closes it."
+                    "输标题、网址或拼音，找浏览器标签、书签、历史记录、文件夹和应用。Tab 换范围，⌘↩ 展开对这一项的操作，按住 ⌘ 时用 1–\(kSearchQuickPickCount) 直接选。",
+                    "Type a title, URL or pinyin to find tabs, bookmarks, history, folders and apps. Tab changes scope, ⌘↩ shows actions for the selected item, and ⌘1–\(kSearchQuickPickCount) picks a row."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -834,6 +846,24 @@ private struct SearchPane: View {
                 Text(L10n.t("站内搜索", "Site search"))
             }
             .disabled(!settings.tabSearch)
+
+            Section {
+                HStack {
+                    Text(L10n.t("同样的输入再搜时，上次选的那条排在前面。只存在这台 Mac 上。",
+                                "Search the same thing again and what you picked last time comes first. Stored only on this Mac."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(L10n.t("清除", "Clear")) {
+                        SearchMemory.shared.clear()
+                        memoryCount = 0
+                    }
+                    .disabled(memoryCount == 0)
+                }
+            } header: {
+                Text(L10n.t("搜索记忆", "Search memory"))
+            }
+            .onAppear { memoryCount = SearchMemory.shared.count }
 
         }
         .formStyle(.grouped)

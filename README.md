@@ -40,12 +40,14 @@ Chrome's ⌃⇥ walks the tab strip in order. TabFlick makes it walk the order y
 
 One box for open tabs, recently closed tabs, bookmarks, history, favorite folders and installed apps.
 
-- **Tab changes scope.** All, Tabs, Search, History, Bookmarks, Recently closed, Folders, Apps. Pick which ones are in the cycle and their order in Settings.
+- **Tab changes scope.** All, Browser tabs, Search, History, Browser bookmarks, Recently closed, Folders, Apps. Pick which ones are in the cycle and their order in Settings.
 - **Pinyin works.** Chinese titles match full pinyin and initials.
 - **Nothing found? Search the web** with the browser's own default engine, or with site search such as GitHub and YouTube (templates are editable).
 - **From any app.** ⌥Space opens the panel outside the browser and searches every connected browser's tabs.
-- **Folders.** Enter opens a favorite folder with the app you last used for it; ⌘↩ picks another (Finder, a terminal, an editor…).
-- ⌘1–⌘9 pick a row, hovering a tab shows a ✕ to close it, ⌘, opens Settings.
+- **⌘↩ for actions.** Copy the URL, title or a Markdown link, reload, close the tab, delete from history, open a folder with another app or copy its path. The footer shows what Enter will do.
+- **Learns as you go.** Search the same thing again and what you picked last time comes first; the closest match gets its own top row. Word initials (`pr` finds Pull Request) and one-letter typos still match.
+- **Duplicate tabs are marked**, with an action to close the others.
+- ⌘1–⌘9 pick a row, Esc clears the query before closing, ⌘, opens Settings.
 
 ## Also included
 
@@ -54,7 +56,7 @@ One box for open tabs, recently closed tabs, bookmarks, history, favorite folder
 - **Menu bar tab list** — every tab by window, plus recently closed ones.
 - **Favorite folders** — keep your usual folders in the menu bar and open them in any app.
 - **Global switcher** — ⌃⇥ outside the browser lists every browser's tabs, grouped. Off by default.
-- **Several browsers at once** — Chrome, Edge, Brave and other Chromium browsers, each with its own list.
+- **Several browsers and profiles at once** — Chrome, Edge, Brave and other Chromium browsers; each browser and each profile keeps its own list, recently closed tabs and pins.
 - **Eight languages** — 简体中文, 繁體中文, English, 日本語, 한국어, Español, Français, Deutsch.
 - **In-app updates** — checks GitHub Releases and replaces itself in place.
 - **Fails open** — if the extension isn't connected, ⌃⇥ falls back to Chrome's own switching instead of doing nothing.
@@ -104,7 +106,7 @@ All of them can be changed in Settings.
 | ⌥Space | Open from any app, across all browsers |
 | ⇥ / ⇧⇥ | Change scope |
 | ⌘1–⌘9 | Pick a row |
-| ⌘↩ | Open a folder with another app |
+| ⌘↩ | Actions: copy the URL, reload, close the tab, open a folder with another app… |
 | ⌘, | Open Settings |
 
 ## Settings

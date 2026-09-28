@@ -90,12 +90,70 @@ struct TabSearchCheck {
                 print("✗ url「\(c.query)」：期望 \(c.want ?? "nil")，实际 \(got ?? "nil")")
             }
         }
+        // 完整网址才算「带协议头」；裸域名、只有协议头、中间有空格的都不算
+        let schemeCases: [(String, Bool)] = [
+            ("http://www.baidu.com", true), ("HTTPS://github.com/x", true), ("  https://a.io  ", true),
+            ("github.com", false), ("http://", false), ("https://a b.com", false), ("张雪", false),
+        ]
+        for (query, want) in schemeCases where TabSearch.hasScheme(query) != want {
+            failures += 1
+            print("✗ hasScheme「\(query)」：期望 \(want)")
+        }
+        // Markdown 链接：方括号 / 反斜杠转义、括号和空格编码、空标题用网址
+        let mdCases: [(String, String, String)] = [
+            ("GitHub", "https://github.com", "[GitHub](https://github.com)"),
+            ("陈平 (汉朝) - 维基百科", "https://zh.wikipedia.org/wiki/陈平_(汉朝)",
+             "[陈平 (汉朝) - 维基百科](https://zh.wikipedia.org/wiki/陈平_%28汉朝%29)"),
+            ("[Swift] a\\b", "https://x.io/a b", "[\\[Swift\\] a\\\\b](https://x.io/a%20b)"),
+            ("", "https://x.io", "[https://x.io](https://x.io)"),
+        ]
+        for (title, url, want) in mdCases {
+            let got = TabSearch.markdownLink(title: title, url: url)
+            if got != want {
+                failures += 1
+                print("✗ markdownLink「\(title)」：期望 \(want)，实际 \(got)")
+            }
+        }
+        // Unicode 归一：标题是分解写法（e + U+0301，文件名常见），查询是合成写法，也要命中
+        let nfd = [SearchCandidate(title: "Cafe\u{301} Notes", url: "")]
+        if TabSearch.rank(nfd, query: "café") != [0] || TabSearch.rank(nfd, query: "CAFÉ n") != [0] {
+            failures += 1
+            print("✗ NFC 归一：分解写法的标题没被合成写法的查询命中")
+        }
+        // 英文词头 / 模糊 / 记忆加分（另一组候选，不动上面那组的下标）
+        let extra: [SearchCandidate] = [
+            cand("Pull Request #12 · org/repo", "https://github.com/org/repo/pull/12"),   // 0
+            cand("GitHub Desktop", "app:/Applications/GitHub Desktop.app"),              // 1
+            cand("Preview", "app:/System/Applications/Preview.app"),                    // 2
+        ]
+        let extraCases: [(String, String, [String: Int], [Int])] = [
+            // 「pr」：2 标题开头（8）> 0 英文词头（4）
+            ("英文词头 pr → Pull Request", "pr", [:], [2, 0]),
+            ("驼峰词头 gd → GitHub Desktop", "gd", [:], [1]),
+            ("漏打字母 gthb → github", "gthb", [:], [1]),
+            ("相邻对调 githbu → github", "githbu", [:], [1]),
+            ("相邻对调 gihtub → github", "gihtub", [:], [1]),
+            ("打错一个 deskfop → desktop", "deskfop", [:], [1]),
+            ("没有像的就是没有", "xyz", [:], []),
+            ("太短的不模糊", "gt", [:], []),
+            // 记忆加分：「p」本来 0、2 都是标题开头（8，同分按原顺序）；给 2 记 10 分 → 2 在前。
+            // 1 只有路径里的 app 含 p（网址档 2 分）垫底
+            ("记忆加分能改顺序", "p", ["app:/System/Applications/Preview.app": 10], [2, 0, 1]),
+            ("没记忆时原顺序", "p", [:], [0, 2, 1]),
+        ]
+        for (name, query, boosts, want) in extraCases {
+            let got = TabSearch.rank(extra, query: query, boosts: boosts)
+            if got != want {
+                failures += 1
+                print("✗ \(name)：期望 \(want)，实际 \(got)")
+            }
+        }
         let py = Pinyin.index("掘金 - Swift 并发")
         if py.full != "juejin-swiftbingfa" || py.initials != "jj-swiftbf" {
             failures += 1
             print("✗ 拼音索引：\(py)")
         }
-        let total = cases.count + urlCases.count + 1
+        let total = cases.count + urlCases.count + schemeCases.count + mdCases.count + 2 + extraCases.count
         print(failures == 0
               ? "全部通过（\(total) 组）"
               : "\(failures) 项失败（共 \(total) 组）")

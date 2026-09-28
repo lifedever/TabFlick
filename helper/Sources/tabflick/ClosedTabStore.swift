@@ -45,6 +45,10 @@ struct ClosedTab: Identifiable, Codable, Equatable {
     /// 归属浏览器的 bundle id。和收藏一样按浏览器分账 —— 状态栏里每个
     /// 浏览器的子菜单只列它自己关掉的那些。
     let browser: String
+    /// 归属 Profile（扩展 0.17.0 起上报的随机标识，见 background.js `profileKey`）。
+    /// 同一个浏览器开多个 Profile 时各记各的；nil = 老扩展 / 升级前的记录。
+    /// 老存档里没有这个键，解码成 nil，兼容。
+    var profile: String?
     let reason: CloseReason
     /// 关闭时刻（ms epoch，扩展侧 `Date.now()`）。口径和 `TabInfo.lastAccessed`
     /// 一致，相对时间的格式化因此可以共用同一份。
@@ -60,13 +64,14 @@ struct ClosedTab: Identifiable, Codable, Equatable {
     static let maxURLLength = 8192
 
     init(url: String, title: String, favIconUrl: String,
-         browser: String, reason: CloseReason, closedAt: Double) {
+         browser: String, profile: String? = nil, reason: CloseReason, closedAt: Double) {
         self.id = UUID().uuidString
         self.url = url
         self.title = title.count > Self.maxTitleLength
             ? String(title.prefix(Self.maxTitleLength)) : title
         self.favIconUrl = favIconUrl.count > Self.maxURLLength ? "" : favIconUrl
         self.browser = browser
+        self.profile = profile
         self.reason = reason
         self.closedAt = closedAt
     }
@@ -113,15 +118,30 @@ final class ClosedTabStore {
 
     // MARK: - 查询
 
-    /// 某个浏览器最近关闭的若干条。`entries` 已按时间降序，直接取前 N 个。
-    func recent(browser: String, limit: Int) -> [ClosedTab] {
-        Array(entries.lazy.filter { $0.browser == browser }.prefix(limit))
+    /// 某个 Profile 最近关闭的若干条。`entries` 已按时间降序，直接取前 N 个。
+    /// profile 为 nil（老扩展，不知道自己是哪个 Profile）就只看没标 Profile 的那些。
+    func recent(browser: String, profile: String?, limit: Int) -> [ClosedTab] {
+        Array(entries.lazy.filter { $0.browser == browser && $0.profile == profile }.prefix(limit))
     }
 
-    /// 某个浏览器的存档总数。菜单只列最近 20 条，而「清空」清的是全部 ——
+    /// 某个 Profile 的存档总数。菜单只列最近 20 条，而「清空」清的是全部 ——
     /// 不把总数说出来的话，用户看着 20 条却抹掉几百条。
-    func count(browser: String) -> Int {
-        entries.reduce(0) { $1.browser == browser ? $0 + 1 : $0 }
+    func count(browser: String, profile: String?) -> Int {
+        entries.reduce(0) { $1.browser == browser && $1.profile == profile ? $0 + 1 : $0 }
+    }
+
+    /// 升级前的记录（没标 Profile）归给这个 Profile。每个浏览器只做一次（调用方记账），
+    /// 做完这些记录就和新记录一样按 Profile 过滤，别处不用再背「老记录归谁」的逻辑。
+    /// 只有一个 Profile 的用户这一步就是原样接管，看不出变化。
+    func adoptLegacy(browser: String, profile: String) {
+        var changed = 0
+        for index in entries.indices where entries[index].browser == browser && entries[index].profile == nil {
+            entries[index].profile = profile
+            changed += 1
+        }
+        guard changed > 0 else { return }
+        persist()
+        log("🗂  \(changed) closed-tab record(s) of \(browser) → profile \(profile.prefix(8))")
     }
 
     // MARK: - 写入
@@ -156,9 +176,9 @@ final class ClosedTabStore {
         for tab in (existing + incoming).sorted(by: { $0.closedAt > $1.closedAt }) {
             // 已按时间降序，遇到第一个过期的说明后面只会更旧
             guard tab.closedAt >= cutoff else { break }
-            // 同一浏览器下同 URL 只留最新那条：反复开关同一个页面不该把列表
-            // 刷满 —— 用户要找回的是「那个页面」，不是它的每一次生命周期。
-            guard seen.insert("\(tab.browser)\n\(tab.url)").inserted else { continue }
+            // 同一浏览器（同一 Profile）下同 URL 只留最新那条：反复开关同一个页面不该把列表
+            // 刷满 —— 用户要找回的是「那个页面」，不是它的每一次生命周期。不同 Profile 各算各的。
+            guard seen.insert("\(tab.browser)\n\(tab.profile ?? "")\n\(tab.url)").inserted else { continue }
             merged.append(tab)
             if merged.count >= maxEntries { break }
         }
@@ -172,12 +192,12 @@ final class ClosedTabStore {
         persist()
     }
 
-    /// 清空某个浏览器的记录。这是一份浏览记录，用户必须有权一键抹掉。
-    func clear(browser: String) {
-        guard entries.contains(where: { $0.browser == browser }) else { return }
-        entries.removeAll { $0.browser == browser }
+    /// 清空某个 Profile 的记录。这是一份浏览记录，用户必须有权一键抹掉。
+    func clear(browser: String, profile: String?) {
+        guard entries.contains(where: { $0.browser == browser && $0.profile == profile }) else { return }
+        entries.removeAll { $0.browser == browser && $0.profile == profile }
         persist()
-        log("🗑  cleared closed-tab history [\(browser)]")
+        log("🗑  cleared closed-tab history [\(browser) \(profile?.prefix(8) ?? "-")]")
     }
 
     // MARK: - 落盘

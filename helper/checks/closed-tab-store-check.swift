@@ -57,6 +57,17 @@ do {
     check("一条不少", out.count == 3)
 }
 
+// ── 多 Profile ──────────────────────────────────────────────────────────
+print("同一浏览器的不同 Profile 各记各的")
+do {
+    var inA = tab("https://same/", daysAgo: 2); inA.profile = "A"
+    var inB = tab("https://same/", daysAgo: 1); inB.profile = "B"
+    var againA = tab("https://same/", daysAgo: 0.5); againA.profile = "A"
+    let out = merge([inA], [inB, againA])
+    check("两个 Profile 同一网址都留", out.count == 2, "得到 \(out.map { "\($0.profile ?? "-") \($0.url)" })")
+    check("同 Profile 同网址只留最新", out.first(where: { $0.profile == "A" })?.closedAt == againA.closedAt)
+}
+
 // ── 去重 ────────────────────────────────────────────────────────────────
 print("同一浏览器下同 URL 只留最新的一条")
 do {

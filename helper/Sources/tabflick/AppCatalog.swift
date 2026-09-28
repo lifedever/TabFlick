@@ -8,8 +8,12 @@ struct AppEntry: Identifiable, Equatable {
     let alternateName: String?
     let path: String
     let bundleID: String?
+    /// 上次打开的时间（Spotlight 记的 `kMDItemLastUsedDate`），排序用；Spotlight 关了就是 nil。
+    var lastUsed: Date? = nil
 
     var id: String { path }
+    /// 最近切到时间的记账 key：有 bundle id 用它，没有用路径。
+    var usageKey: String { bundleID ?? path }
     var url: URL { URL(fileURLWithPath: path, isDirectory: true) }
 
     /// 正在运行（按 bundle id 查，没有 bundle id 的按路径）。
@@ -31,6 +35,46 @@ final class AppCatalog {
     private(set) var entries: [AppEntry] = []
     private var scannedAt: Date?
     private var scanning = false
+    /// 本次运行里每个 App 最近一次被切到前台的时间（key 见 `AppEntry.usageKey`）。
+    /// Spotlight 的 lastUsed 只在启动 App 时更新，来回切换不算，这份补上「刚刚在用」。
+    private var activatedAt: [String: Date] = [:]
+    private var activationObserver: NSObjectProtocol?
+
+    init() {
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  let key = app.bundleIdentifier ?? app.bundleURL?.standardizedFileURL.path else { return }
+            MainActor.assumeIsolated { self?.activatedAt[key] = Date() }
+        }
+    }
+
+    /// 面板里的默认顺序（2026-09-27 用户定的）：运行中的在前，两组里都按最近用过排
+    ///（最近切到前台和 Spotlight 记的上次打开，取新的那个），都没有记录的按名字。
+    /// 有输入时 `TabSearch.rank` 先按匹配度、同分保持这里的顺序（它的排序是稳定的）。
+    /// TabFlick 自己不算运行中：它永远在跑，排第一没意义。
+    var ordered: [AppEntry] {
+        let running = NSWorkspace.shared.runningApplications
+        let runningIDs = Set(running.compactMap(\.bundleIdentifier))
+        let runningPaths = Set(running.compactMap { $0.bundleURL?.standardizedFileURL.path })
+        let own = Bundle.main.bundleIdentifier
+        let keyed = entries.map { entry -> (entry: AppEntry, running: Bool, used: Date?) in
+            let isRunning = entry.bundleID.map { $0 != own && runningIDs.contains($0) }
+                ?? runningPaths.contains(entry.path)
+            let used = [activatedAt[entry.usageKey], entry.lastUsed].compactMap { $0 }.max()
+            return (entry, isRunning, used)
+        }
+        return keyed.sorted { a, b in
+            if a.running != b.running { return a.running }
+            switch (a.used, b.used) {
+            case let (x?, y?) where x != y: return x > y
+            case (.some, nil): return true
+            case (nil, .some): return false
+            default: return a.entry.name.localizedStandardCompare(b.entry.name) == .orderedAscending
+            }
+        }.map(\.entry)
+    }
 
     private nonisolated static let directories: [URL] = {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -80,9 +124,16 @@ final class AppCatalog {
                 result.append(AppEntry(name: name,
                                        alternateName: raw == name ? nil : raw,
                                        path: path,
-                                       bundleID: bundle?.bundleIdentifier))
+                                       bundleID: bundle?.bundleIdentifier,
+                                       lastUsed: lastUsedDate(of: url)))
             }
         }
         return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// Spotlight 记的上次打开时间。一个 App 一次元数据读取，后台线程上跑，百来个 App 几十毫秒。
+    private nonisolated static func lastUsedDate(of url: URL) -> Date? {
+        guard let item = MDItemCreateWithURL(kCFAllocatorDefault, url as CFURL) else { return nil }
+        return MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date
     }
 }

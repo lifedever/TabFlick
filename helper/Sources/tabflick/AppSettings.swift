@@ -49,10 +49,10 @@ enum SearchMode: String, CaseIterable, Identifiable, Codable {
     var label: String {
         switch self {
         case .all:       return L10n.t("全部", "All")
-        case .tabs:      return L10n.t("标签", "Tabs")
+        case .tabs:      return L10n.t("浏览器标签", "Browser tabs")
         case .actions:   return L10n.t("搜索", "Search")
         case .history:   return L10n.t("历史记录", "History")
-        case .bookmarks: return L10n.t("书签", "Bookmarks")
+        case .bookmarks: return L10n.t("浏览器书签", "Browser bookmarks")
         case .closed:    return L10n.t("最近关闭", "Recently closed")
         case .folders:   return L10n.t("文件夹", "Folders")
         case .apps:      return L10n.t("应用", "Apps")
@@ -154,13 +154,18 @@ struct FavoriteTab: Codable, Identifiable, Equatable {
     /// 归属浏览器的 bundle id。浏览器是物理隔离的主体：置顶列表按浏览器
     /// 分账，恢复/取消只作用于自己的浏览器。
     let browser: String
+    /// 归属 Profile（扩展 0.17.0 起上报的 profileKey）。同一个浏览器开多个 Profile 时各管
+    /// 各的置顶 —— 不分的话一个 Profile 的置顶会被补开到另一个里（2026-09-27 用户要分）。
+    /// nil = 老扩展 / 升级前的收藏，归属规则见 MRUController「多 Profile 的身份」。
+    var profile: String?
 
-    init(url: String, title: String, favIconUrl: String? = nil, browser: String) {
+    init(url: String, title: String, favIconUrl: String? = nil, browser: String, profile: String? = nil) {
         self.id = UUID().uuidString
         self.url = url
         self.title = title
         self.favIconUrl = favIconUrl
         self.browser = browser
+        self.profile = profile
     }
 
     /// 旧版本存的数据没有 id 字段（当时以 url 为身份），用 url 补位，
@@ -173,7 +178,18 @@ struct FavoriteTab: Codable, Identifiable, Equatable {
         id = try c.decodeIfPresent(String.self, forKey: .id) ?? url
         favIconUrl = try c.decodeIfPresent(String.self, forKey: .favIconUrl)
         browser = try c.decodeIfPresent(String.self, forKey: .browser) ?? "com.google.Chrome"
+        profile = try c.decodeIfPresent(String.self, forKey: .profile)
     }
+}
+
+/// 一条连接的收藏账本范围：浏览器 + Profile。下发、认领、取消都只在范围内做。
+struct FavoriteScope: Equatable {
+    let browser: String
+    /// nil = 老扩展（不报 Profile），只管没标 Profile 的那些。
+    let profile: String?
+
+    func contains(_ fav: FavoriteTab) -> Bool { fav.browser == browser && fav.profile == profile }
+    func contains(_ pending: PendingUnpin) -> Bool { pending.browser == browser && pending.profile == profile }
 }
 
 /// 用户录制的快捷键。keyCode 供 event tap 匹配（物理键位），
@@ -234,6 +250,8 @@ struct HotkeyConfig: Codable, Equatable {
 struct PendingUnpin: Codable, Equatable {
     let browser: String
     let host: String
+    /// 同 FavoriteTab.profile：补做只发给这个 Profile，别把别的 Profile 同域名的置顶撤了。
+    var profile: String? = nil
 }
 
 /// 标签存活时间（Arc 式自动清理）：超过时限未使用的标签由扩展自动关闭。
@@ -747,16 +765,16 @@ final class AppSettings: ObservableObject {
     /// browser 传 nil（身份还没识别出来）时**不携带**收藏/待办字段：
     /// 扩展见不到 favorites 键就不会跑核对。按猜测的浏览器下发过一次，
     /// 结果是把 Chrome 的置顶恢复进了夸克（重载扩展后多出重复置顶）。
-    func payload(favoritesFor browser: String?) -> [String: Any] {
+    func payload(favoritesFor scope: FavoriteScope?) -> [String: Any] {
         var payload: [String: Any] = [
             "type": "settings",
             "scopeToWindow": scopeToWindow,
             "tabLifetimeHours": tabLifetime.hours,
         ]
-        if let browser {
+        if let scope {
             // 离线期间攒下的取消置顶，由扩展在核对前补做
-            payload["pendingUnpinHosts"] = pendingUnpins.filter { $0.browser == browser }.map(\.host)
-            payload["favorites"] = favorites.filter { $0.browser == browser }.map {
+            payload["pendingUnpinHosts"] = pendingUnpins.filter(scope.contains).map(\.host)
+            payload["favorites"] = favorites.filter(scope.contains).map {
                 ["id": $0.id,
                  "url": $0.url,
                  "title": $0.title,

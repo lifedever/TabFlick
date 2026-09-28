@@ -18,11 +18,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// 浏览器行的数据源（活动浏览器排最前）。
     var menuBrowsersProvider: (() -> [MRUController.MenuBrowser])?
-    /// 点了某浏览器子菜单里的标签。参数 (tab.id, 浏览器 bundle id)。
+    /// 点了某浏览器子菜单里的标签。参数 (tab.id, 那一行的连接 key)。按连接不按 bundle id：
+    /// 同一个浏览器开多个 Profile 时是多行、多条连接。
     var onPickTabInBrowser: ((Int, String) -> Void)?
-    /// 点了「最近关闭」里的一条。参数 (ClosedTab.id, 浏览器 bundle id)。
+    /// 点了「最近关闭」里的一条。参数 (ClosedTab.id, 那一行的连接 key)。
     var onReopenClosedTab: ((String, String) -> Void)?
-    /// 清空某浏览器的已关闭记录。参数是浏览器 bundle id。
+    /// 清空某一行（某个 Profile）的已关闭记录。参数是那一行的连接 key。
     var onClearClosedTabs: ((String) -> Void)?
 
     /// 「收藏当前标签」菜单项。标题/图标随当前标签的收藏状态切换。
@@ -439,7 +440,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 let item = NSMenuItem(title: title, action: #selector(pickTab(_:)), keyEquivalent: "")
                 item.target = self
                 // 标签 id 在不同浏览器间会撞号，必须连浏览器身份一起带上
-                item.representedObject = ["tabId": entry.tab.id, "browser": browser.bundleID] as [String: Any]
+                item.representedObject = ["tabId": entry.tab.id, "client": browser.key] as [String: Any]
                 item.icon = Self.faviconIcon(entry.icon)
                 if entry.tab.id == entries.first?.tab.id {
                     item.state = .on   // MRU 首位就是当前标签
@@ -479,7 +480,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             let item = NSMenuItem(title: title, action: #selector(reopenClosed(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = ["closedId": entry.tab.id,
-                                      "browser": browser.bundleID] as [String: Any]
+                                      "client": browser.key] as [String: Any]
             item.icon = Self.faviconIcon(entry.icon)
             // 徽标里带上关闭原因：「程序替我关的」和「我自己关的」是完全不同
             // 的两件事，不标出来用户无从判断该不该找回它。
@@ -496,7 +497,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                                              "Clear All \(total) Records"),
                                action: #selector(clearClosed(_:)), keyEquivalent: "")
         clear.target = self
-        clear.representedObject = browser.bundleID
+        clear.representedObject = browser.key
         clear.icon = Self.symbol("trash")
         menu.addItem(clear)
     }
@@ -675,20 +676,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func pickTab(_ sender: NSMenuItem) {
         guard let info = sender.representedObject as? [String: Any],
               let tabId = info["tabId"] as? Int,
-              let browser = info["browser"] as? String else { return }
-        onPickTabInBrowser?(tabId, browser)
+              let client = info["client"] as? String else { return }
+        onPickTabInBrowser?(tabId, client)
     }
 
     @objc private func reopenClosed(_ sender: NSMenuItem) {
         guard let info = sender.representedObject as? [String: Any],
               let id = info["closedId"] as? String,
-              let browser = info["browser"] as? String else { return }
-        onReopenClosedTab?(id, browser)
+              let client = info["client"] as? String else { return }
+        onReopenClosedTab?(id, client)
     }
 
     @objc private func clearClosed(_ sender: NSMenuItem) {
-        guard let browser = sender.representedObject as? String else { return }
-        onClearClosedTabs?(browser)
+        guard let client = sender.representedObject as? String else { return }
+        onClearClosedTabs?(client)
     }
 
     // MARK: - 图标

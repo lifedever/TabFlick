@@ -5,6 +5,63 @@ import SwiftUI
 // MARK: - 行与选中结果
 
 /// 面板列表里的一行。三种来源混排在同一张列表里，游标和 ⌘ 数字按屏上顺序连续编号。
+/// 列表的一段：「全部」里每种内容一段、带分组头（吸顶）；其他模式整张表一段、不带头。
+struct SearchSection {
+    let id: String
+    let title: String?
+    let range: Range<Int>
+    /// 截断后没显示的条数（分组头右边写「还有 N 条」）。
+    var hidden = 0
+    /// 只知道还有、不知道几条（历史记录：扩展只回前 20 条），头上写「更多」。
+    var moreUnknown = false
+    /// 截断了且对应模式开着：Tab 跳过去看全部（头上画 ⇥）。
+    var jump: SearchMode?
+}
+
+/// 「全部」里一段装的是什么：决定分组头的名字，以及截断后 Tab 跳去哪个模式。
+enum SearchSectionKind: String {
+    case top, ops, apps, folders, tabs, closed, bookmarks, history
+
+    var title: String {
+        switch self {
+        case .top:       return L10n.t("最佳匹配", "Top Hit")
+        case .ops:       return L10n.t("操作", "Actions")
+        case .apps:      return L10n.t("应用", "Apps")
+        case .folders:   return L10n.t("文件夹", "Folders")
+        case .tabs:      return L10n.t("浏览器标签", "Browser tabs")
+        case .closed:    return L10n.t("最近关闭", "Recently closed")
+        case .bookmarks: return L10n.t("浏览器书签", "Browser bookmarks")
+        case .history:   return L10n.t("历史记录", "History")
+        }
+    }
+
+    var mode: SearchMode? {
+        switch self {
+        case .top:       return nil
+        case .ops:       return .actions
+        case .apps:      return .apps
+        case .folders:   return .folders
+        case .tabs:      return .tabs
+        case .closed:    return .closed
+        case .bookmarks: return .bookmarks
+        case .history:   return .history
+        }
+    }
+
+    /// 「全部」没输入时按设置列的那种内容。
+    init?(content: SearchMode) {
+        switch content {
+        case .tabs:      self = .tabs
+        case .history:   self = .history
+        case .bookmarks: self = .bookmarks
+        case .closed:    self = .closed
+        case .folders:   self = .folders
+        case .apps:      self = .apps
+        case .all, .actions: return nil
+        }
+    }
+}
+
 enum SearchRow: Identifiable {
     /// 活着的标签（切换）
     case tab(SwitcherItem)
@@ -24,6 +81,8 @@ enum SearchRow: Identifiable {
     case opener(OpenerApp, FavoriteFolder)
     /// 已安装的 App（回车启动）
     case app(AppEntry)
+    /// ⌘↩ 展开的「操作」里的一项：对 target 那一行做什么
+    indirect case command(RowCommand, SearchRow)
 
     var id: String {
         switch self {
@@ -36,6 +95,9 @@ enum SearchRow: Identifiable {
         case .folder(let f):     return "folder#\(f.path)"
         case .opener(let o, let f): return "opener#\(o.id)#\(f.path)"
         case .app(let a):        return "app#\(a.path)"
+        // 用 rawValue 拼：第一版给 RowCommand 写了 description = String(reflecting: self)，
+        // 而 String(reflecting:) 会回头调 description —— 无限递归，打开面板画第一行操作就栈溢出崩溃
+        case .command(let c, let target): return "cmd#\(c.rawValue)#\(target.id)"
         }
     }
 
@@ -51,7 +113,8 @@ enum SearchRow: Identifiable {
         case .folder(let f):     return "file:" + f.path
         case .opener(let o, _):  return "file:" + o.path
         case .app(let a):        return "file:" + a.path
-        case .url, .action:      return ""
+        case .command(.primary, let target): return target.favIconUrl
+        case .url, .action, .command: return ""
         }
     }
 
@@ -61,6 +124,7 @@ enum SearchRow: Identifiable {
         case .bookmark(let bm): return bm.url
         case .history(let h):   return h.url
         case .action(.siteSearch(let site, _)): return "https://" + site.host + "/"
+        case .command(.primary, let target): return target.faviconPageURL
         default:                return nil
         }
     }
@@ -68,6 +132,96 @@ enum SearchRow: Identifiable {
     static func siteKey(_ url: String) -> String {
         guard let host = URL(string: url)?.host, !host.isEmpty else { return "" }
         return "site:" + host
+    }
+
+    /// 行上显示的标题。书签 / 历史的标题偶尔带没解码的 HTML 实体，这里一并解掉。
+    var displayTitle: String {
+        switch self {
+        case .tab(let item):     return item.tab.title.isEmpty ? item.tab.url : Self.decodeEntities(item.tab.title)
+        case .closed(let entry): return entry.title.isEmpty ? entry.url : Self.decodeEntities(entry.title)
+        case .url:               return L10n.t("在新标签打开", "Open in new tab")
+        case .bookmark(let bm):  return bm.title.isEmpty ? bm.url : Self.decodeEntities(bm.title)
+        case .history(let h):    return h.title.isEmpty ? h.url : Self.decodeEntities(h.title)
+        case .action(let a):     return a.title
+        case .folder(let f):     return f.name
+        case .opener(let o, _):  return o.name
+        case .app(let a):        return a.name
+        case .command(let c, let target): return c.title(for: target)
+        }
+    }
+
+    /// 只解常见那几个实体，不走 NSAttributedString 的 HTML 解析（那个要起 WebKit，太重）。
+    static func decodeEntities(_ text: String) -> String {
+        guard text.contains("&") else { return text }
+        var out = text
+        for (entity, char) in [("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""),
+                               ("&#39;", "'"), ("&#x27;", "'"), ("&apos;", "'"), ("&nbsp;", " ")] {
+            out = out.replacingOccurrences(of: entity, with: char)
+        }
+        return out
+    }
+
+    /// 回车会做的事（底部操作栏右边那句）。文件夹要知道默认打开方式。
+    func enterTitle(defaultOpener: OpenerApp?) -> String {
+        switch self {
+        case .tab:               return L10n.t("切换到标签", "Switch to tab")
+        case .closed:            return L10n.t("重新打开", "Reopen")
+        case .url, .bookmark, .history: return L10n.t("在新标签打开", "Open in new tab")
+        case .action(let a):     return a.title   // 「搜索“xx”」；不借模式名那个「搜索」的键，西法德译的是名词
+        case .folder:            return defaultOpener.map { L10n.t("用 \($0.name) 打开", "Open with \($0.name)") }
+                                     ?? L10n.t("打开", "Open")
+        case .opener(let o, _):  return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
+        case .app:               return L10n.t("打开应用", "Open application")
+        case .command(let c, let target): return c.title(for: target)
+        }
+    }
+
+    /// 记忆里按什么认这一行（和 `SearchCandidate.identity` 同一个口径）：网页是网址，
+    /// 文件夹 / App 是路径。搜索、站内搜索这类一次性操作不记。
+    var memoryIdentity: String? {
+        switch self {
+        case .tab(let item):     return item.tab.url
+        case .closed(let entry): return entry.url
+        case .bookmark(let bm):  return bm.url
+        case .history(let h):    return h.url
+        case .url(let url):      return url
+        case .folder(let f):     return f.path
+        case .opener(_, let f):  return f.path
+        case .app(let a):        return a.path
+        case .command(.primary, let target): return target.memoryIdentity
+        case .action, .command:  return nil
+        }
+    }
+
+    /// 网页类行的地址 / 标题（拷贝用）；本机类行的路径。
+    var pageURL: String? {
+        switch self {
+        case .tab(let item):     return item.tab.url
+        case .closed(let entry): return entry.url
+        case .bookmark(let bm):  return bm.url
+        case .history(let h):    return h.url
+        case .url(let url):      return url
+        default:                 return nil
+        }
+    }
+
+    var filePath: String? {
+        switch self {
+        case .folder(let f): return f.path
+        case .app(let a):    return a.path
+        default:             return nil
+        }
+    }
+
+    /// 某个拷贝操作要拷的文字。
+    func copyText(for command: RowCommand) -> String? {
+        switch command {
+        case .copyURL:      return pageURL
+        case .copyTitle:    return pageURL == nil ? nil : displayTitle
+        case .copyMarkdown: return pageURL.map { TabSearch.markdownLink(title: displayTitle, url: $0) }
+        case .copyPath:     return filePath
+        default:            return nil
+        }
     }
 
     /// 归属浏览器的 bundle id（跨浏览器模式行尾画图标用）。
@@ -97,7 +251,8 @@ enum SearchAction {
 
     var title: String {
         switch self {
-        case .webSearch(let text):        return L10n.t("搜索“\(text)”", "Search “\(text)”")
+        // 「在浏览器搜索」：和下面几行「在 GitHub 搜索」同一个句式（用户 2026-09-27 改的）
+        case .webSearch(let text):        return L10n.t("在浏览器搜索“\(text)”", "Search “\(text)” in the browser")
         case .siteSearch(let site, let text): return L10n.t("在 \(site.name) 搜索“\(text)”", "Search \(site.name) for “\(text)”")
         }
     }
@@ -113,6 +268,78 @@ enum SearchAction {
         switch self {
         case .webSearch:  return "magnifyingglass"
         case .siteSearch: return "magnifyingglass.circle"
+        }
+    }
+}
+
+/// ⌘↩ 展开的「操作」里的一项（2026-09-27 照 Raycast 加的，快捷键用户定为 ⌘↩）。
+/// 搜索 / 网址直达那几行本身就是一次性操作，没有二级（用户定的）。
+/// 列表顺序：默认动作 → 拷贝类 → 删除类（标红、垫底，误按 ⌘1 也删不掉东西）。
+enum RowCommand: String {
+    /// 回车那个默认动作（切换 / 打开 / 重新打开）
+    case primary
+    case reloadTab
+    case copyURL, copyTitle, copyMarkdown, copyPath
+    case revealInFinder
+    case closeTab
+    /// 关掉和它同网址的其余标签（同一个浏览器 / Profile），留下它自己
+    case closeDuplicates
+    case removeClosed
+    case deleteHistory
+    case unfavorite
+    case quitApp
+
+    /// 关闭 / 删除类：标红。
+    var isDestructive: Bool {
+        switch self {
+        case .closeTab, .closeDuplicates, .removeClosed, .deleteHistory, .unfavorite, .quitApp: return true
+        default: return false
+        }
+    }
+
+    /// 执行完不关面板、退回主列表，列表原地收缩（同悬停 ✕ 关标签）——
+    /// 清理几条历史 / 关几个标签不用反复开面板。退出 App 例外：关面板，退没退看 Dock。
+    var staysInPanel: Bool { isDestructive && self != .quitApp }
+
+    func title(for target: SearchRow) -> String {
+        switch self {
+        case .primary:        return target.enterTitle(defaultOpener: nil)
+        case .reloadTab:      return L10n.t("重新加载", "Reload")
+        case .copyURL:        return L10n.t("拷贝网址", "Copy URL")
+        case .copyTitle:      return L10n.t("拷贝标题", "Copy title")
+        case .copyMarkdown:   return L10n.t("拷贝 Markdown 链接", "Copy Markdown link")
+        case .copyPath:       return L10n.t("拷贝路径", "Copy path")
+        case .revealInFinder: return L10n.t("在访达中显示", "Show in Finder")
+        case .closeTab:       return L10n.t("关闭标签", "Close tab")
+        case .closeDuplicates: return L10n.t("关闭其余重复的标签", "Close other duplicate tabs")
+        case .removeClosed:   return L10n.t("从最近关闭中移除", "Remove from recently closed")
+        case .deleteHistory:  return L10n.t("从历史记录中删除", "Delete from history")
+        case .unfavorite:     return L10n.t("取消收藏", "Remove from Favorites")
+        case .quitApp:
+            if case .app(let a) = target { return L10n.t("退出 \(a.name)", "Quit \(a.name)") }
+            return L10n.t("退出", "Quit")
+        }
+    }
+
+    func symbol(for target: SearchRow) -> String {
+        switch self {
+        case .primary:
+            switch target {
+            case .tab:    return "arrow.right.square"
+            case .closed: return "arrow.uturn.backward"
+            case .app:    return "arrow.up.forward.app"
+            default:      return "plus.square.on.square"
+            }
+        case .reloadTab:      return "arrow.clockwise"
+        // 拷贝类共用一个图标、靠字区分（Raycast / Alfred 都这样）：四个各画各的图，
+        // 列表里就是四种形状抢眼，反而看不出它们是一类
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath: return "doc.on.doc"
+        case .revealInFinder: return "folder"
+        case .closeTab:       return "xmark"
+        case .closeDuplicates: return "square.on.square.dashed"
+        case .removeClosed, .deleteHistory: return "trash"
+        case .unfavorite:     return "star.slash"
+        case .quitApp:        return "power"
         }
     }
 }
@@ -145,13 +372,25 @@ final class TabSearchModel: ObservableObject {
     @Published private(set) var folders: [FavoriteFolder] = []
     @Published private(set) var openers: [OpenerApp] = []
     @Published private(set) var apps: [AppEntry] = []
-    /// ⌘↩ 展开了某个文件夹的打开方式列表（子状态，Esc 退回）。
-    @Published private(set) var openerPicker: FavoriteFolder?
+    /// ⌘↩ 展开了某一行的「操作」（子状态，Esc 退回原列表）。列表换成对它能做的事，
+    /// 输入框用来过滤操作；文件夹的「打开方式」也在这里（原来单独一个子状态）。
+    @Published private(set) var actionTarget: SearchRow?
+    /// 展开操作前的输入和游标所在行：退回时原样恢复。
+    private var savedQuery = ""
+    private var savedCursorID: String?
+    private var savedCursorIndex = 0
+    /// 程序自己改输入（进出操作列表）：不重算、不去问历史，调用方自己 refilter。
+    private var settingQueryQuietly = false
     /// 「全部」模式没输入时列什么（设置项）。nil = 空着。
     var allEmptyContent: SearchMode? = .tabs
-    /// 「全部」模式没输入且设置成文件夹时，文件夹段的行数（画「文件夹」头用）。
-    private(set) var folderCount = 0
-    var hasFolderSection: Bool { mode == .all && folderCount > 0 }
+    /// 「全部」模式下列表由哪几段拼成（按顺序），`sections` 据此切段。其他模式为空。
+    private struct SectionSpec {
+        let kind: SearchSectionKind
+        let count: Int
+        var hidden = 0
+        var moreUnknown = false
+    }
+    private var layout: [SectionSpec] = []
     /// 站内搜索模板（设置里维护），Tab 操作列表里「搜索」后面的那几条。
     var siteSearches: [SiteSearch] = []
     /// 「搜索」那一行会发给哪个浏览器（bundle id），行首画它的图标。
@@ -164,8 +403,10 @@ final class TabSearchModel: ObservableObject {
     var onQueryChange: ((String) -> Void)?
     @Published var query = "" {
         didSet {
-            guard oldValue != query else { return }
+            guard oldValue != query, !settingQueryQuietly else { return }
             refilter(keepCursorOn: nil)
+            // 操作列表里的输入只是在过滤操作，不去问历史记录
+            guard actionTarget == nil else { return }
             onQueryChange?(query.trimmingCharacters(in: .whitespaces))
         }
     }
@@ -187,27 +428,24 @@ final class TabSearchModel: ObservableObject {
             reloadIcons()
         }
     }
-    /// 「全部」模式里排在最前的应用行数（用户定的：App 排第一）。活标签从 `liveStart` 开始。
-    @Published private(set) var appCount = 0
-    var liveStart: Int { appCount }
-    var hasAppSection: Bool { mode == .all && appCount > 0 }
-    /// 应用段在前时，活标签也要一个「标签」头，否则两段连成一片。
-    var hasTabHeader: Bool { hasAppSection && liveCount > 0 }
-    /// 活标签行的数量。已关闭那一段从 `liveStart + liveCount` 开始（如果有）。
-    @Published private(set) var liveCount = 0
-    /// 已关闭行的数量。书签那一段从 `liveCount + closedCount` 开始（如果有）。
-    @Published private(set) var closedCount = 0
-    /// 历史那一段从这里开始（书签之后）。
-    private(set) var historyStart = 0
-    private(set) var historyRows = 0
-    var hasHistorySection: Bool { mode == .all && historyRows > 0 }
     @Published private(set) var cursor = 0
     /// favicon，按 favIconUrl 索引（活标签和已关闭共用一份）。
     @Published var icons: [String: IconInfo] = [:]
     /// ⌘ 正被按着：行尾显示 ⌘1–⌘9 的角标。
     @Published var commandHeld = false
-    /// 跨浏览器且不止一个浏览器：行尾用浏览器图标代替「x 分钟前」认归属。
+    /// 跨浏览器且不止一条连接（多个浏览器，或同一个浏览器多个 Profile）：行尾用浏览器图标
+    /// （和 Profile 名）代替「x 分钟前」认归属。
     @Published var showBrowserBadges = false
+    /// 行尾归属标记只有一条规则（用户 2026-09-27：图标、名字时有时无看不懂）：浏览器图标
+    /// 只在真有多个浏览器时画，回答「在哪个浏览器」；Profile 名只在同一个浏览器开了多个
+    /// Profile 时写，回答「在哪个 Profile」。每种行（标签、最近关闭、书签、历史）都一样。
+    var showBrowserIcons = false
+    /// 要用到的扩展该更新了（MRUController 打开面板时算好）：底栏左边给一个提示胶囊。
+    @Published var extensionOutdated = false
+    /// 点了那个提示胶囊。
+    var onExtensionUpdateTap: (() -> Void)?
+    /// 某一行属于哪个浏览器、哪个 Profile（Profile 名只在需要区分时有值），MRUController 提供。
+    var badgeProvider: ((SearchRow) -> (browser: String?, profile: String?))?
 
     private var lastContentHeight: CGFloat = -1
     var onContentHeightChange: ((CGFloat) -> Void)?
@@ -237,12 +475,42 @@ final class TabSearchModel: ObservableObject {
     /// 当前标签的 id（`all` 的首项）。行尾用「当前」代替时间。
     var currentID: String? { all.first?.id }
 
-    /// 已关闭那一段有没有画出来（有匹配的关闭记录时才有）。
-    var hasClosedSection: Bool { mode == .all && closedCount > 0 }
-    /// 书签那一段有没有画出来。
-    var hasBookmarkSection: Bool { mode == .all && bookmarkRows > 0 }
-    private var bookmarkRows = 0
-    var bookmarkStart: Int { appCount + liveCount + closedCount }
+
+    /// 列表按段切开。「全部」里每种内容一段、带头：分组头的有无**不能**看「前面有没有别的段」——
+    /// 2026-09-27 用户截图：活标签排在最前时没有头，下面的「历史记录」有，读起来标签是无名的一段。
+    /// 段序和 `allRows` 拼行的顺序一致：（操作）→ 应用 → 文件夹 → 活标签 → 已关闭 → 书签 → 历史 →（操作）。
+    /// 操作段在前还是垫底见 `allRows` 末尾。操作子状态下整张表一段、不带头。视图按它画 Section，版面（`layoutWalk`）按它排。
+    var sections: [SearchSection] {
+        guard !rows.isEmpty else { return [] }
+        guard mode == .all, actionTarget == nil, !layout.isEmpty else {
+            return [SearchSection(id: "rows", title: nil, range: rows.indices)]
+        }
+        var out: [SearchSection] = []
+        var start = 0
+        for spec in layout {
+            let end = min(start + spec.count, rows.count)
+            guard end > start else { continue }
+            let truncated = spec.hidden > 0 || spec.moreUnknown
+            let jump = truncated ? spec.kind.mode.flatMap { modes.contains($0) ? $0 : nil } : nil
+            out.append(SearchSection(id: spec.kind.rawValue, title: spec.kind.title, range: start..<end,
+                                     hidden: spec.hidden, moreUnknown: spec.moreUnknown, jump: jump))
+            start = end
+        }
+        if start < rows.count { out.append(SearchSection(id: "rest", title: nil, range: start..<rows.count)) }
+        return out
+    }
+
+    /// 重复标签：同一条连接（浏览器 / Profile）里网址**完全相同**的有几个。数据换了算一次，
+    /// 画行时只查表。不去掉 # 再比：Gmail、单页应用靠 # 区分页面（`#inbox` 和
+    /// `#inbox/某封邮件`），去掉就会把两封不同的邮件当成重复、一键关掉 —— 关标签是破坏性
+    /// 动作，宁可少认几个也不能误关。
+    private var duplicateCounts: [String: Int] = [:]
+
+    nonisolated static func duplicateKey(_ item: SwitcherItem) -> String {
+        item.clientID.uuidString + "|" + item.tab.url
+    }
+
+    func duplicateCount(of item: SwitcherItem) -> Int { duplicateCounts[Self.duplicateKey(item)] ?? 1 }
 
     /// 能不能在面板里关标签：只剩一个标签时不关 —— 关掉浏览器窗口就跟着没了。
     var canCloseTabs: Bool { all.count > 1 }
@@ -253,6 +521,9 @@ final class TabSearchModel: ObservableObject {
 
     /// 标题 → 拼音索引的缓存。逐字转拼音不算便宜，标题在两次刷新之间基本不变。
     private var pinyinCache: [String: (full: String, initials: String)] = [:]
+    /// 「标题 + 网址」→ 候选项。候选项建的时候就把匹配用的小写字节算好（见 SearchCandidate），
+    /// 每次按键只查字典、不再重算。标题会变（标签加载中），攒太多就整个清掉重来。
+    private var candidateCache: [String: SearchCandidate] = [:]
 
     func setCursor(_ index: Int, source: CursorSource) {
         cursorSource = source
@@ -261,16 +532,28 @@ final class TabSearchModel: ObservableObject {
 
     /// Tab / ⇧Tab：按设置里的顺序循环模式。
     func cycleMode(_ delta: Int) {
-        guard let index = modes.firstIndex(of: mode), modes.count > 1 else { return }
+        // 操作列表里 Tab 不切模式（先 Esc 退回去）
+        guard actionTarget == nil, let index = modes.firstIndex(of: mode), modes.count > 1 else { return }
         select(modes[(index + delta + modes.count) % modes.count])
     }
 
-    func select(_ next: SearchMode) {
+    func select(_ next: SearchMode, keepCursorOn keep: String? = nil) {
         guard next != mode else { return }
         mode = next
-        openerPicker = nil
-        refilter(keepCursorOn: nil)
+        refilter(keepCursorOn: keep)
         onModeChange?(next)
+    }
+
+    /// 输入框里按了 Tab / ⇧Tab。「全部」里游标所在那段被截断了（分组头写着「还有 N 条 ⇥」）
+    /// 时 Tab 直接进那一类看全部，游标留在同一条上；其余照常按顺序切模式。
+    /// 点模式标签不走这里（那是明确的「切下一个」）。
+    func tabPressed(_ delta: Int) {
+        if delta > 0, actionTarget == nil, mode == .all,
+           let jump = sections.first(where: { $0.range.contains(cursor) })?.jump {
+            select(jump, keepCursorOn: selectedRow?.id)
+            return
+        }
+        cycleMode(delta)
     }
 
     /// 回到顺序里的第一个模式（打开面板时、Esc 时）。返回 true 表示确实切回去了。
@@ -281,11 +564,16 @@ final class TabSearchModel: ObservableObject {
         return true
     }
 
-    /// Esc：打开方式列表展开着就先收起；不在第一个模式就先回去；都不是才关面板（返回 false）。
+    /// Esc 一层层往回退（照 Raycast；用户 2026-09-27：带着输入按 Esc 整个面板没了太突然）：
+    /// 操作列表展开着就先退回 → 有输入就清空、回到这个模式的首页 → 不在第一个模式就回去 →
+    /// 都不是才关面板（返回 false）。组字中的 Esc 归输入法，走不到这里。
     func escape() -> Bool {
-        if openerPicker != nil {
-            openerPicker = nil
-            refilter(keepCursorOn: nil)
+        if actionTarget != nil {
+            leaveActions()
+            return true
+        }
+        if !query.isEmpty {
+            query = ""
             return true
         }
         return resetMode()
@@ -300,6 +588,9 @@ final class TabSearchModel: ObservableObject {
         let keep = keepCursor && rows.indices.contains(cursor) ? rows[cursor].id : nil
         let previousIndex = cursor
         all = items
+        var counts: [String: Int] = [:]
+        for item in items where item.tab.url.hasPrefix("http") { counts[Self.duplicateKey(item), default: 0] += 1 }
+        duplicateCounts = counts
         self.closed = closed
         self.bookmarks = bookmarks
         self.folders = folders
@@ -326,13 +617,88 @@ final class TabSearchModel: ObservableObject {
         }
     }
 
-    /// ⌘↩：展开游标那个文件夹的打开方式。
-    func showOpeners(for folder: FavoriteFolder) {
-        openerPicker = folder
+    /// 游标所在的那一行（没有行时 nil）。
+    var selectedRow: SearchRow? { rows.indices.contains(cursor) ? rows[cursor] : nil }
+
+    /// 主列表层面的输入和选中项：在操作列表里就取展开前的那份（恢复现场用）。
+    var baseQuery: String { actionTarget != nil ? savedQuery : query }
+    var baseCursorID: String? { actionTarget != nil ? savedCursorID : selectedRow?.id }
+
+    /// ⌘↩：展开游标那一行的操作。这一行没有二级（搜索、网址直达、操作本身）就什么都不做。
+    @discardableResult
+    func showActions() -> Bool {
+        guard actionTarget == nil, let target = selectedRow, hasActions(target) else { return false }
+        savedQuery = query
+        savedCursorID = target.id
+        savedCursorIndex = cursor
+        actionTarget = target
+        setQueryQuietly("")
         refilter(keepCursorOn: nil)
+        return true
     }
 
-    private func candidate(title: String, url: String) -> SearchCandidate {
+    /// 退回原列表：输入和游标都恢复。执行完「关闭 / 移除」这类操作也走这里 ——
+    /// 先退回（游标回到那一行），数据随后刷新时那一行没了，游标落在同一位置的下一行。
+    func leaveActions() {
+        guard actionTarget != nil else { return }
+        actionTarget = nil
+        setQueryQuietly(savedQuery)
+        refilter(keepCursorOn: savedCursorID)
+        if let savedCursorID, rows.firstIndex(where: { $0.id == savedCursorID }) == nil, !rows.isEmpty {
+            setCursor(min(savedCursorIndex, rows.count - 1), source: .keyboard)
+        }
+    }
+
+    /// 面板收起 / 重新打开：丢掉操作子状态，不恢复什么。
+    func clearActions() {
+        actionTarget = nil
+    }
+
+    private func setQueryQuietly(_ text: String) {
+        settingQueryQuietly = true
+        query = text
+        settingQueryQuietly = false
+    }
+
+    func hasActions(_ row: SearchRow) -> Bool { !commandRows(for: row).isEmpty }
+
+    /// 某一行的操作列表。第一项是回车的默认动作（文件夹是默认打开方式，后面跟其他打开方式）。
+    func commandRows(for target: SearchRow) -> [SearchRow] {
+        let copies: [RowCommand] = [.copyURL, .copyTitle, .copyMarkdown]
+        let commands: [RowCommand]
+        switch target {
+        case .tab:
+            // 只剩一个标签不给关：浏览器窗口会跟着没（同悬停 ✕）
+            let dupes: [RowCommand] = { if case .tab(let item) = target, duplicateCount(of: item) > 1 { return [.closeDuplicates] } else { return [] } }()
+            commands = [.primary, .reloadTab] + copies + dupes + (canCloseTabs ? [.closeTab] : [])
+        case .closed:
+            commands = [.primary] + copies + [.removeClosed]
+        case .bookmark:
+            // 不给删书签：删了找不回来，一个按键就执行的面板里误触代价太大（用户定的）
+            commands = [.primary] + copies
+        case .history:
+            commands = [.primary] + copies + [.deleteHistory]
+        case .folder(let folder):
+            return openers.map { .opener($0, folder) }
+                + [RowCommand.copyPath, .revealInFinder, .unfavorite].map { .command($0, target) }
+        case .app(let app):
+            commands = [.primary, .revealInFinder, .copyPath] + (app.isRunning ? [.quitApp] : [])
+        case .url, .action, .opener, .command:
+            return []
+        }
+        return commands.map { .command($0, target) }
+    }
+
+    /// 面板里删了一条历史：本地先摘掉（扩展删完不会推送），游标留在原位。
+    func removeHistory(url: String) {
+        history.removeAll { $0.url == url }
+        let keep = selectedRow?.id
+        refreshInPlace(keep: keep, previousIndex: cursor)
+    }
+
+    private func candidate(title: String, url: String, identity: String? = nil) -> SearchCandidate {
+        let cacheKey = title + "\u{1F}" + url + "\u{1F}" + (identity ?? "")
+        if let hit = candidateCache[cacheKey] { return hit }
         let py: (full: String, initials: String)
         if let cached = pinyinCache[title] {
             py = cached
@@ -340,11 +706,17 @@ final class TabSearchModel: ObservableObject {
             py = Pinyin.index(title)
             pinyinCache[title] = py
         }
-        return SearchCandidate(title: title, url: url, pinyin: py.full, initials: py.initials)
+        let made = SearchCandidate(title: title, url: url, pinyin: py.full, initials: py.initials, identity: identity)
+        // 上限按「标签 + 最近关闭 + 书签 + 应用 + 历史」的量级留余量；到了整个清掉重来，
+        // 别让标题不断变化的标签把它越攒越大（一条带字节键约 0.5KB）
+        if candidateCache.count > 10_000 { candidateCache.removeAll(keepingCapacity: true) }
+        candidateCache[cacheKey] = made
+        return made
     }
 
-    /// 「全部」模式里应用 / 已关闭 / 书签 / 历史各自最多列这么多条；单独模式放宽到 `soloLimit`。
+    /// 「全部」模式里各段最多列这么多条（截掉的写在分组头上）；单独模式放宽到 `soloLimit`。
     static let appLimit = 4
+    static let tabLimit = 8
     static let closedLimit = 5
     static let bookmarkLimit = 5
     static let historyLimit = 8
@@ -360,11 +732,33 @@ final class TabSearchModel: ObservableObject {
         refreshInPlace(keep: keep, previousIndex: cursor)
     }
 
+    /// 「搜什么选了什么」的记忆（面板注入 `SearchMemory.shared`）。
+    var memory: SearchMemory?
+    /// 这一轮输入的记忆加分（身份 → 分），`refilter` 开头取一次，各段排序共用。
+    private var boosts: [String: Int] = [:]
+
+    /// 有记忆加分的往前浮、其余保持原顺序（最近关闭 / 历史本来按时间排，不按匹配分）。
+    private func floatBoosted<T>(_ items: [T], identity: (T) -> String) -> [T] {
+        guard !boosts.isEmpty else { return items }
+        return items.enumerated().sorted { a, b in
+            let x = boosts[identity(a.element)] ?? 0, y = boosts[identity(b.element)] ?? 0
+            return x != y ? x > y : a.offset < b.offset
+        }.map(\.element)
+    }
+
     private func refilter(keepCursorOn keep: String?) {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        appCount = 0; liveCount = 0; closedCount = 0; bookmarkRows = 0; historyRows = 0; historyStart = 0
-        folderCount = 0
-        let next = mode == .all ? allRows(trimmed) : modeRows(mode, trimmed)
+        boosts = trimmed.isEmpty || actionTarget != nil ? [:] : (memory?.boosts(for: trimmed) ?? [:])
+        layout = []
+        let next: [SearchRow]
+        if let target = actionTarget {
+            // 操作列表：输入过滤操作名（同样认拼音）
+            let all = commandRows(for: target)
+            let candidates = all.map { candidate(title: $0.displayTitle, url: "") }
+            next = TabSearch.rank(candidates, query: trimmed).map { all[$0] }
+        } else {
+            next = mode == .all ? allRows(trimmed) : modeRows(mode, trimmed)
+        }
         rows = next
 
         if let keep, let index = rows.firstIndex(where: { $0.id == keep }) {
@@ -387,8 +781,7 @@ final class TabSearchModel: ObservableObject {
             break
         case .tabs:
             let liveCandidates = all.map { candidate(title: $0.tab.title, url: $0.tab.url) }
-            next = TabSearch.rank(liveCandidates, query: query).map { .tab(all[$0]) }
-            liveCount = next.count
+            next = TabSearch.rank(liveCandidates, query: query, boosts: boosts).map { .tab(all[$0]) }
         case .actions:
             // 对当前输入的操作。没输入就没有可操作的，列表留空、视图给提示。
             if !trimmed.isEmpty { next = actionRows(trimmed) }
@@ -396,46 +789,36 @@ final class TabSearchModel: ObservableObject {
             // 历史记录由扩展按输入实时查（空串 = 最近访问的），helper 不再做二次匹配
             if historyQuery == trimmed {
                 var seen = Set<String>()
-                for h in history where !seen.contains(Self.historyDedupeKey(h)) {
+                for h in floatBoosted(history, identity: \.url) where !seen.contains(Self.historyDedupeKey(h)) {
                     seen.insert(Self.historyDedupeKey(h))
                     next.append(.history(h))
                     if next.count == Self.soloLimit { break }
                 }
             }
-            historyRows = next.count
         case .bookmarks:
             let candidates = bookmarks.map { candidate(title: $0.title, url: $0.url) }
             var seen = Set<String>()
-            for index in TabSearch.rank(candidates, query: trimmed) {
+            for index in TabSearch.rank(candidates, query: trimmed, boosts: boosts) {
                 let bm = bookmarks[index]
                 guard !seen.contains(bm.url) else { continue }
                 seen.insert(bm.url)
                 next.append(.bookmark(bm))
                 if next.count == Self.soloLimit { break }
             }
-            bookmarkRows = next.count
         case .closed:
             let candidates = closed.map { candidate(title: $0.title, url: $0.url) }
-            next = TabSearch.rank(candidates, query: trimmed)
+            next = floatBoosted(TabSearch.rank(candidates, query: trimmed)
                 .map { closed[$0] }
-                .sorted { $0.closedAt > $1.closedAt }
+                .sorted { $0.closedAt > $1.closedAt }, identity: \.url)
                 .prefix(Self.soloLimit)
                 .map { .closed($0) }
-            closedCount = next.count
         case .folders:
-            if let picking = openerPicker {
-                // ⌘↩ 展开的打开方式列表：同状态栏子菜单那份，按最近用过排
-                next = openers.map { .opener($0, picking) }
-            } else {
-                let candidates = folders.map { candidate(title: $0.name, url: $0.path) }
-                next = TabSearch.rank(candidates, query: trimmed).prefix(Self.soloLimit).map { .folder(folders[$0]) }
-                folderCount = next.count
-            }
+            let candidates = folders.map { candidate(title: $0.name, url: $0.path) }
+            next = TabSearch.rank(candidates, query: trimmed, boosts: boosts).prefix(Self.soloLimit).map { .folder(folders[$0]) }
         case .apps:
             // 英文原名和 bundle id 放进「网址」栏参与匹配（得分低于标题命中）
-            let candidates = apps.map { candidate(title: $0.name, url: [$0.alternateName, $0.bundleID].compactMap { $0 }.joined(separator: " ")) }
-            next = TabSearch.rank(candidates, query: trimmed).prefix(Self.soloLimit).map { .app(apps[$0]) }
-            appCount = next.count
+            let candidates = apps.map { appCandidate($0) }
+            next = TabSearch.rank(candidates, query: trimmed, boosts: boosts).prefix(Self.soloLimit).map { .app(apps[$0]) }
         }
         return next
     }
@@ -453,78 +836,139 @@ final class TabSearchModel: ObservableObject {
         [.action(.webSearch(text))] + siteSearches.map { .action(.siteSearch($0, text)) }
     }
 
-    /// 「全部」模式：活标签在前，有输入时后面挂最近关闭 / 书签 / 历史各几条，末尾网址直达。
-    /// **一条都没命中时直接换成「搜索」那几行**（用户 2026-09-26 定的）：与其给一句
-    /// 「没有匹配」，不如让回车就能去搜；像网址的话「在新标签打开」排最前。
+    /// 「全部」模式：最佳匹配、应用、活标签、最近关闭、书签、历史各几条，再加「操作」段。
     private func allRows(_ trimmed: String) -> [SearchRow] {
         // 没输入：按设置列一种内容（默认标签的 MRU），列表空着也行
         if trimmed.isEmpty {
             guard let content = allEmptyContent else { return [] }
-            return modeRows(content, "")
+            let rows = modeRows(content, "")
+            if let kind = SearchSectionKind(content: content), !rows.isEmpty {
+                layout = [SectionSpec(kind: kind, count: rows.count)]
+            }
+            return rows
         }
-        var next: [SearchRow] = []
-        // 应用排第一（用户定的）：有输入时先列命中的 App，最多几条
-        if !trimmed.isEmpty {
-            let appCandidates = apps.map { candidate(title: $0.name, url: [$0.alternateName, $0.bundleID].compactMap { $0 }.joined(separator: " ")) }
-            next = TabSearch.rank(appCandidates, query: trimmed).prefix(Self.appLimit).map { .app(apps[$0]) }
-            appCount = next.count
-        }
-        let liveCandidates = all.map { candidate(title: $0.tab.title, url: $0.tab.url) }
-        let liveRows: [SearchRow] = TabSearch.rank(liveCandidates, query: query).map { .tab(all[$0]) }
-        liveCount = liveRows.count
-        next += liveRows
 
-        // 已关闭：按关闭时间倒序取前几条；和活标签同网址的不列（它已经开着，切过去就是）。
+        // 各段先拿全量命中（段内排好序），最后统一截断：截掉几条要写在分组头上，
+        // 「最佳匹配」也得在截断前挑。
+        let appCandidates = apps.map { appCandidate($0) }
+        var appHits = TabSearch.rank(appCandidates, query: trimmed, boosts: boosts).map { SearchRow.app(apps[$0]) }
+        let liveCandidates = all.map { candidate(title: $0.tab.title, url: $0.tab.url) }
+        var liveHits = TabSearch.rank(liveCandidates, query: trimmed, boosts: boosts).map { SearchRow.tab(all[$0]) }
+
+        // 已关闭：按关闭时间倒序；和活标签同网址的不列（它已经开着，切过去就是）
         let liveURLs = Set(all.map(\.tab.url))
         let closedCandidates = closed.map { candidate(title: $0.title, url: $0.url) }
-        let matched = TabSearch.rank(closedCandidates, query: query)
+        let closedMatched = floatBoosted(TabSearch.rank(closedCandidates, query: trimmed)
             .map { closed[$0] }
             .filter { !liveURLs.contains($0.url) }
-            .sorted { $0.closedAt > $1.closedAt }
-            .prefix(Self.closedLimit)
-        next += matched.map { .closed($0) }
-        closedCount = matched.count
+            .sorted { $0.closedAt > $1.closedAt }, identity: \.url)
+        var closedHits = closedMatched.map { SearchRow.closed($0) }
 
-        // 书签：按匹配得分排，开着的和已关闭段里有的不重复列；同网址收在多个
-        // 文件夹里只列第一个。
-        var taken = liveURLs.union(matched.map(\.url))
+        // 书签：按得分排，开着的和已关闭里有的不重复列；同网址收在多个文件夹里只列第一个
+        var taken = liveURLs.union(closedMatched.map(\.url))
         let bookmarkCandidates = bookmarks.map { candidate(title: $0.title, url: $0.url) }
-        var picked: [BookmarkInfo] = []
-        for index in TabSearch.rank(bookmarkCandidates, query: query) {
+        var bookmarkHits: [SearchRow] = []
+        for index in TabSearch.rank(bookmarkCandidates, query: trimmed, boosts: boosts) {
             let bm = bookmarks[index]
             guard !taken.contains(bm.url) else { continue }
             taken.insert(bm.url)
-            picked.append(bm)
-            if picked.count == Self.bookmarkLimit { break }
+            bookmarkHits.append(.bookmark(bm))
         }
-        next += picked.map { .bookmark($0) }
-        bookmarkRows = picked.count
 
         // 历史：Chrome 自己匹配、按最近访问排；和上面几段同网址的不重复列
-        historyStart = next.count
-        var historyPicked: [HistoryInfo] = []
+        var historyHits: [SearchRow] = []
         if historyQuery == trimmed {
-            taken.formUnion(picked.map(\.url))
             var seenTitles = Set<String>()
-            for h in history {
+            for h in floatBoosted(history, identity: \.url) {
                 let dedupe = Self.historyDedupeKey(h)
                 guard !taken.contains(h.url), !seenTitles.contains(dedupe) else { continue }
                 taken.insert(h.url)
                 seenTitles.insert(dedupe)
-                historyPicked.append(h)
-                if historyPicked.count == Self.historyLimit { break }
+                historyHits.append(.history(h))
             }
         }
-        next += historyPicked.map { .history($0) }
-        historyRows = historyPicked.count
 
-        let urlRow = TabSearch.urlCandidate(query).map { SearchRow.url($0) }
-        if next.isEmpty {
-            return (urlRow.map { [$0] } ?? []) + actionRows(trimmed)
+        // 「最佳匹配」（2026-09-27 用户要的，Spotlight 的 Top Hit）：段的顺序是固定的，
+        // 标题完全命中的书签会排在一串只有网址沾边的标签后面。各段段首（段内已排好）
+        // 比一次分，最高的那条比现在排最前的那条分高，就单独提到最前；同分不动。
+        // 只比段首：历史段按最近访问排，拿它段里第 5 条出来会让人看不懂为什么是它。
+        // 输入完整网址时不挑（「操作」段在最前，回车就是打开它）。
+        var topHit: SearchRow?
+        if !TabSearch.hasScheme(trimmed) {
+            let leaders = [appHits, liveHits, closedHits, bookmarkHits, historyHits].enumerated()
+                .compactMap { group, rows -> (group: Int, row: SearchRow, score: Int)? in
+                    guard let row = rows.first, let score = score(of: row, query: trimmed) else { return nil }
+                    return (group, row, score)
+                }
+            if let first = leaders.first {
+                var best = first
+                for leader in leaders where leader.score > best.score { best = leader }
+                if best.score > first.score {
+                    topHit = best.row
+                    switch best.group {
+                    case 0: appHits.removeFirst()
+                    case 1: liveHits.removeFirst()
+                    case 2: closedHits.removeFirst()
+                    case 3: bookmarkHits.removeFirst()
+                    default: historyHits.removeFirst()
+                    }
+                }
+            }
         }
-        // 像网址就在末尾挂一行「在新标签打开」，有匹配时也挂 —— 用户可能就是想开它
-        if let urlRow { next.append(urlRow) }
-        return next
+
+        // 截断（用户 2026-09-27 要的）：标签命中二十个时后面的书签、历史、操作全被挤到底。
+        // 每段有上限，截掉的写在分组头上「还有 N 条 ⇥」，Tab 进那一类看全部。
+        var specs: [SectionSpec] = []
+        var body: [SearchRow] = []
+        func cut(_ kind: SearchSectionKind, _ hits: [SearchRow], _ limit: Int, countKnown: Bool = true) {
+            let shown = hits.prefix(limit)
+            guard !shown.isEmpty else { return }
+            let hidden = hits.count - shown.count
+            specs.append(SectionSpec(kind: kind, count: shown.count,
+                                     hidden: countKnown ? hidden : 0, moreUnknown: !countKnown && hidden > 0))
+            body += shown
+        }
+        if let topHit { cut(.top, [topHit], 1) }
+        cut(.apps, appHits, Self.appLimit)
+        cut(.tabs, liveHits, Self.tabLimit)
+        cut(.closed, closedHits, Self.closedLimit)
+        cut(.bookmarks, bookmarkHits, Self.bookmarkLimit)
+        // 历史只拿到扩展回的前 20 条，截掉的「还有几条」不是真数，只说「更多」
+        cut(.history, historyHits, Self.historyLimit, countKnown: false)
+
+        // 「操作」段：像网址就先给「在新标签打开」，再是搜索引擎、站内搜索。有输入就一直在
+        //（2026-09-27 用户截图：搜「张雪」只命中一条历史，想上网搜却没有入口）。
+        // 位置：输入带协议头的完整网址时整段挪到最前（来意就是打开它，回车直接开）；
+        // 其余垫底，回车给命中的第一条，想去网上搜往下走。一条都没命中时只有这一段。
+        let urlRow = TabSearch.urlCandidate(trimmed).map { SearchRow.url($0) }
+        let ops = (urlRow.map { [$0] } ?? []) + actionRows(trimmed)
+        let opsSpec = SectionSpec(kind: .ops, count: ops.count)
+        if body.isEmpty || TabSearch.hasScheme(trimmed) {
+            layout = [opsSpec] + specs
+            return ops + body
+        }
+        layout = specs + [opsSpec]
+        return body + ops
+    }
+
+    private func appCandidate(_ app: AppEntry) -> SearchCandidate {
+        // 英文原名和 bundle id 放进「网址」栏参与匹配（得分低于标题命中）
+        candidate(title: app.name, url: [app.alternateName, app.bundleID].compactMap { $0 }.joined(separator: " "),
+                  identity: app.path)
+    }
+
+    /// 某一行对当前输入的得分（「最佳匹配」跨段比分用）。
+    private func score(of row: SearchRow, query: String) -> Int? {
+        let c: SearchCandidate
+        switch row {
+        case .app(let a):        c = appCandidate(a)
+        case .tab(let item):     c = candidate(title: item.tab.title, url: item.tab.url)
+        case .closed(let entry): c = candidate(title: entry.title, url: entry.url)
+        case .bookmark(let bm):  c = candidate(title: bm.title, url: bm.url)
+        case .history(let h):    c = candidate(title: h.title, url: h.url)
+        default:                 return nil
+        }
+        return TabSearch.score(c, query: query, boosts: boosts)
     }
 
     /// ↑↓ 移动游标，到头回绕（用户 2026-09-26 点名：到底就按不动太别扭）。
@@ -536,18 +980,43 @@ final class TabSearchModel: ObservableObject {
         setCursor(next, source: .keyboard)
     }
 
-    /// 列表区需要的内容高度（不含输入框），面板据此定高、超过上限就滚动。
-    /// 视图里分组头和行的尺寸必须和这里用同一组常量，否则面板底部裁掉半行。
+    /// 当前的行高：操作列表是紧凑单行，其余是两行。
+    var rowHeight: CGFloat { actionTarget != nil ? kSearchCompactRowHeight : kSearchRowHeight }
+
+    /// 列表区需要的内容高度（不含输入框和底栏），面板据此定高、超过上限就滚动。
     var contentHeight: CGFloat {
         guard !rows.isEmpty else { return kSearchRowHeight + kSearchListInset * 2 }
-        let rowsHeight = CGFloat(rows.count) * kSearchRowHeight
-            + CGFloat(rows.count - 1) * kSearchRowSpacing
-        let headerHeight = kSearchSectionTopSpace + kSearchSectionHeaderHeight + kSearchSectionRuleSpace
-        let flags = [hasAppSection, hasTabHeader, hasFolderSection, hasClosedSection, hasBookmarkSection, hasHistorySection]
-        let headers = CGFloat(flags.filter { $0 }.count)
-        // 第一个分组头顶在列表最上面时不留上空档
-        let firstHeaderAtTop: CGFloat = ((hasAppSection || liveCount == 0) && headers > 0) ? kSearchSectionTopSpace : 0
-        return rowsHeight + headers * headerHeight - firstHeaderAtTop + kSearchListInset * 2
+        return layoutWalk { _, _, _, _ in }
+    }
+
+    /// 某一行在列表内容里的位置：行顶的 y（含列表内边距），以及它是不是段里第一行、
+    /// 所在段有没有吸顶的分组头。键盘滚动定位用。
+    func placement(of index: Int) -> (top: CGFloat, first: Bool, titled: Bool)? {
+        var found: (top: CGFloat, first: Bool, titled: Bool)?
+        _ = layoutWalk { i, top, first, titled in
+            if i == index { found = (top, first, titled) }
+        }
+        return found
+    }
+
+    /// 列表的版面：每段依次是分组头、行（行间 `kSearchRowSpacing`）、到下一段的空档。
+    /// 返回总高度。视图（`TabSearchView` 的 Section 结构）按同一组常量画，
+    /// `contentHeight` 和键盘滚动定位都从这里取 —— 三处不一致，面板底部就裁掉半行、
+    /// 滚动就停错位置。
+    private func layoutWalk(_ visit: (_ index: Int, _ top: CGFloat, _ first: Bool, _ titled: Bool) -> Void) -> CGFloat {
+        let sections = self.sections
+        var y = kSearchListInset
+        for (position, section) in sections.enumerated() {
+            if section.title != nil { y += kSearchStickyHeaderHeight }
+            for index in section.range {
+                let first = index == section.range.lowerBound
+                if !first { y += kSearchRowSpacing }
+                visit(index, y, first, section.title != nil)
+                y += rowHeight
+            }
+            if position + 1 < sections.count { y += searchSectionGap(before: sections[position + 1]) }
+        }
+        return y + kSearchListInset
     }
 }
 
@@ -555,7 +1024,14 @@ final class TabSearchModel: ObservableObject {
 
 private let kSearchPanelWidth: CGFloat = 680
 private let kSearchFieldHeight: CGFloat = 54
+/// 主列表的行：标题 + 域名两行。不压（2026-09-27 评估过）：网页标题长、同站标签标题相近，
+/// 认标签靠第二行的域名；中文字形也比英文更吃行距，压到 40 就挤。
 private let kSearchRowHeight: CGFloat = 44
+/// ⌘↩ 操作列表的行：只有动作名，本质是菜单，单行紧凑。
+private let kSearchCompactRowHeight: CGFloat = 34
+/// 选中底的圆角 = 面板圆角 14 − 列表内边距 6：同心圆角（Liquid Glass 的基本规则），
+/// 不同心时选中底的四角和面板的四角看着是两套东西。
+private let kSearchHighlightRadius: CGFloat = 8
 private let kSearchRowSpacing: CGFloat = 1
 private let kSearchListInset: CGFloat = 6
 /// 一屏最多显示的行数，超出滚动。
@@ -568,12 +1044,22 @@ private let kSearchRowIconSize: CGFloat = 22
 private let kSearchIconGap: CGFloat = 10
 private let kSearchRowInset: CGFloat = 10
 /// 分组头：照 Raycast，就是一行小字，没有分隔线（用户 2026-09-26 拿 Raycast 对比后定的）。
-/// 高度 = 上空档 + 字行 + 下空档；模型算面板高度时用同一组值。
+/// 高度 = 字行 + 下空档；吸顶时它就是视口最上面那条带子的高度（`PinnedHeaderClip` 按它裁行）。
 private let kSearchSectionHeaderHeight: CGFloat = 20
 private let kSearchSectionRuleSpace: CGFloat = 4
-/// 分组头和上面最后一行之间的空档，不留的话两段挤成一坨（用户反馈）。
-/// 分组头是列表第一行时（「全部」模式下活标签一条没命中）不留这段。
+private let kSearchStickyHeaderHeight = kSearchSectionHeaderHeight + kSearchSectionRuleSpace
+/// 分组头和上一段最后一行之间的空档，不留的话两段挤成一坨（用户反馈）。
+/// 放在上一段的末尾而不是分组头的上边距里：头吸顶时整个头（含边距）都钉在顶上，
+/// 上边距会变成顶上一条空白。第一段前面没有上一段，自然不留。
 private let kSearchSectionTopSpace: CGFloat = 12
+
+/// 两段之间的空档：下一段有分组头就留 `kSearchSectionTopSpace`，没有（网址直达那一行）就是普通行距。
+private func searchSectionGap(before next: SearchSection) -> CGFloat {
+    next.title != nil ? kSearchSectionTopSpace : kSearchRowSpacing
+}
+
+/// 列表滚动区的坐标空间名：吸顶裁剪和滚动偏移都在这里量。
+private let kSearchScrollSpace = "tabSearchScroll"
 
 /// 列表区高度上限：满 10 行。
 private let kSearchListMaxHeight: CGFloat =
@@ -585,8 +1071,14 @@ private func listHeight(content: CGFloat) -> CGFloat {
     min(content, kSearchListMaxHeight)
 }
 
+/// 底栏那条带子的高度：胶囊浮在列表底部上面（照 Raycast，用户 2026-09-27 要的：
+/// Liquid Glass 胶囊 + 列表渐隐，不要横线、不要整条实底）。列表内容底部垫同样高，
+/// 滚到底时最后一行停在胶囊上方。
+private let kSearchFooterZone: CGFloat = 48
+private let kSearchCapsuleHeight: CGFloat = 30
+
 private func panelHeight(content: CGFloat) -> CGFloat {
-    kSearchFieldHeight + 1 + listHeight(content: content)
+    kSearchFieldHeight + 1 + listHeight(content: content) + kSearchFooterZone
 }
 
 // MARK: - 输入框
@@ -700,6 +1192,8 @@ private struct TabSearchView: View {
     let onCancel: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    /// 找到列表底下那个 NSScrollView 的探针（键盘滚动定位用）。
+    @State private var scroll = SearchScrollState()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -717,7 +1211,7 @@ private struct TabSearchView: View {
                                 model.onPick?(model.rows[model.cursor])
                             },
                             onCancel: { if !model.escape() { onCancel() } },
-                            onTab: { model.cycleMode($0) })
+                            onTab: { model.tabPressed($0) })
                     .frame(maxWidth: .infinity)
 
                 modeIndicator
@@ -727,64 +1221,25 @@ private struct TabSearchView: View {
 
             Divider().opacity(0.6)
 
-            if model.rows.isEmpty {
-                Text(emptyText)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: listHeight(content: model.contentHeight))
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical, showsIndicators: false) {
-                        LazyVStack(spacing: kSearchRowSpacing) {
-                            ForEach(Array(model.rows.enumerated()), id: \.element.id) { index, row in
-                                VStack(spacing: 0) {
-                                    if index == 0, model.hasAppSection {
-                                        sectionHeader(L10n.t("应用", "Apps"), first: true)
-                                    }
-                                    if index == 0, model.hasFolderSection {
-                                        sectionHeader(L10n.t("文件夹", "Folders"), first: true)
-                                    }
-                                    if index == model.liveStart, model.hasTabHeader {
-                                        sectionHeader(L10n.t("标签", "Tabs"), first: false)
-                                    }
-                                    if index == model.liveStart + model.liveCount, model.hasClosedSection {
-                                        sectionHeader(L10n.t("最近关闭", "Recently closed"), first: index == 0)
-                                    }
-                                    if index == model.bookmarkStart, model.hasBookmarkSection {
-                                        sectionHeader(L10n.t("书签", "Bookmarks"), first: index == 0)
-                                    }
-                                    if index == model.historyStart, model.hasHistorySection {
-                                        sectionHeader(L10n.t("历史记录", "History"), first: index == 0)
-                                    }
-                                    SearchRowView(
-                                        row: row,
-                                        icon: model.icons[row.favIconUrl],
-                                        selected: index == model.cursor,
-                                        isCurrent: row.id == model.currentID,
-                                        quickKey: model.commandHeld && index < kSearchQuickPickCount
-                                                  ? index + 1 : nil,
-                                        closable: model.canCloseTabs,
-                                        browserBadge: model.showBrowserBadges ? row.browser : nil,
-                                        searchBrowser: model.searchBrowser,
-                                        defaultOpener: model.openers.first,
-                                        defaultOpenerIcon: model.openers.first.flatMap { model.icons["file:" + $0.path] },
-                                        onHover: { model.setCursor(index, source: .mouse) },
-                                        onPick: { model.onPick?(row) },
-                                        onClose: { model.onCloseTab?(row.id) })
-                                }
-                                .id(row.id)
-                            }
-                        }
-                        .padding(kSearchListInset)
-                    }
-                    .frame(height: listHeight(content: model.contentHeight))
-                    .onChange(of: model.cursor) { _, cursor in
-                        guard model.cursorSource == .keyboard,
-                              model.rows.indices.contains(cursor) else { return }
-                        proxy.scrollTo(model.rows[cursor].id, anchor: nil)
+            // 列表一直铺到面板底，底栏胶囊浮在它上面；列表在底部那条带子里渐隐
+            //（照 Raycast：不画横线、不铺整条实底）
+            ZStack(alignment: .bottom) {
+                Group {
+                    if model.rows.isEmpty {
+                        Text(emptyText)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: listHeight(content: model.contentHeight))
+                            .frame(maxHeight: .infinity, alignment: .top)
+                    } else {
+                        list
                     }
                 }
+                .frame(height: listHeight(content: model.contentHeight) + kSearchFooterZone)
+                .mask(footerFade)
+
+                footer
             }
         }
         .frame(width: kSearchPanelWidth)
@@ -798,23 +1253,124 @@ private struct TabSearchView: View {
         .ignoresSafeArea()
     }
 
+    private func rowView(_ row: SearchRow, index: Int) -> some View {
+        SearchRowView(
+            row: row,
+            icon: model.icons[row.favIconUrl],
+            selected: index == model.cursor,
+            isCurrent: row.id == model.currentID,
+            quickKey: model.commandHeld && index < kSearchQuickPickCount ? index + 1 : nil,
+            closable: model.canCloseTabs,
+            browserBadge: model.showBrowserIcons ? model.badgeProvider?(row).browser : nil,
+            profileBadge: model.showBrowserBadges ? model.badgeProvider?(row).profile : nil,
+            searchBrowser: model.searchBrowser,
+            defaultOpener: model.openers.first,
+            defaultOpenerIcon: model.openers.first.flatMap { model.icons["file:" + $0.path] },
+            compact: model.actionTarget != nil,
+            duplicates: { if case .tab(let item) = row { return model.duplicateCount(of: item) } else { return 1 } }(),
+            onHover: { model.setCursor(index, source: .mouse) },
+            onPick: { model.onPick?(row) },
+            onClose: { model.onCloseTab?(row.id) })
+    }
+
+    private var list: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            let sections = model.sections
+            // 「全部」里分组头吸顶（用户 2026-09-27 要的）。其他模式只有一段、没有头。
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                ForEach(Array(sections.enumerated()), id: \.element.id) { position, section in
+                    Section {
+                        ForEach(Array(model.rows[section.range].enumerated()), id: \.element.id) { offset, row in
+                            rowView(row, index: section.range.lowerBound + offset)
+                                .modifier(PinnedHeaderClip(active: section.title != nil))
+                                .padding(.top, offset == 0 ? 0 : kSearchRowSpacing)
+                                .id(row.id)
+                        }
+                        if position + 1 < sections.count {
+                            Color.clear.frame(height: searchSectionGap(before: sections[position + 1]))
+                        }
+                    } header: {
+                        if section.title != nil { sectionHeader(section) }
+                    }
+                }
+            }
+            .padding(kSearchListInset)
+            // 底栏胶囊那条带子：内容垫同样高，滚到底时最后一行停在胶囊上方
+            .padding(.bottom, kSearchFooterZone)
+            .background(ScrollViewProbe(state: scroll))
+        }
+        .coordinateSpace(name: kSearchScrollSpace)
+        // 输入变了（包括 Esc 清空）列表回到顶：最相关的在最上面，鼠标滚下去之后接着打字
+        // 的话游标落在第一行、视野却停在下面
+        .onChange(of: model.query) { _, _ in
+            guard let scrollView = scroll.probe?.enclosingScrollView else { return }
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+        .onChange(of: model.cursor) { _, cursor in
+            guard model.cursorSource == .keyboard,
+                  model.rows.indices.contains(cursor) else { return }
+            reveal(cursor)
+        }
+    }
+
+    /// 列表在底栏那条带子里渐隐：上沿全显、到面板底边全透明。滚过去的行淡进玻璃里，
+    /// 胶囊浮在上面不压一条实底。
+    private var footerFade: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+            LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                .frame(height: kSearchFooterZone)
+        }
+    }
+
+    /// 键盘移动游标后把那一行滚进视野。吸顶的分组头盖着视口最上面一条，往上滚时行要停在
+    /// 分组头下面：`scrollTo(anchor: nil)` 会把行贴着视口顶放，正好被头压住。
+    ///
+    /// 偏移直接读、直接设底层的 NSScrollView，目标位置按版面（`placement`）算。**别换回
+    /// GeometryReader + preference 读偏移**：macOS 上 ScrollView 滚动时，内容整块的 frame
+    /// 在滚动坐标系里不更新（2026-09-27 独立 demo 实测：真实偏移 155 / 300，读到的一直是 0），
+    /// 于是「往上走到视口外」永远判成「看得见」、不滚 —— 用户报的「方向键走着走着选中项看不见了」。
+    /// 行、分组头各自的 frame 是会更新的，`PinnedHeaderClip` 不受影响。
+    private func reveal(_ index: Int) {
+        guard let place = model.placement(of: index),
+              let scrollView = scroll.probe?.enclosingScrollView,
+              let document = scrollView.documentView else { return }
+        let clip = scrollView.contentView
+        let offset = clip.bounds.minY          // 文档视图是翻转的：y 就是离顶的距离
+        // 底栏那条带子里的行是渐隐、被胶囊压着的，不算看得见
+        let viewport = clip.bounds.height - kSearchFooterZone
+        let rowHeight = model.rowHeight
+        let cover = place.titled ? kSearchStickyHeaderHeight : 0
+        // 最后一行连底部内边距一起露出来
+        let bottom = place.top + rowHeight + (index == model.rows.count - 1 ? kSearchListInset : 0)
+        let target: CGFloat
+        if place.top < offset + cover {
+            // 段里第一行：减掉头的高度正好是头顶，头和行一起露出来；
+            // 离顶只剩列表内边距那点距离时直接回到顶，别把内边距藏掉
+            target = place.top - cover <= kSearchListInset ? 0 : place.top - cover
+        } else if bottom > offset + viewport {
+            target = bottom - viewport
+        } else {
+            return
+        }
+        let clamped = min(max(0, target), max(0, document.frame.height - clip.bounds.height))
+        guard clamped != offset else { return }
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: clamped))
+        scrollView.reflectScrolledClipView(clip)
+    }
+
     /// 输入框右侧的当前模式：模式名 + ⇥ 提示，点一下切到下一个（用户不要单独一行胶囊）。
     private var modeIndicator: some View {
         HStack(spacing: 6) {
+            // 胶囊，和底栏同一种形状语言
             Text(model.mode.label)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.primary.opacity(0.7))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(scheme == .dark ? 0.16 : 0.09)))
-            Text("⇥")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.primary.opacity(0.40))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.primary.opacity(0.10)))
+                .foregroundStyle(Color.primary.opacity(0.75))
+                .padding(.horizontal, 10)
+                .frame(height: 22)
+                .background(Capsule().fill(Color.primary.opacity(scheme == .dark ? 0.14 : 0.08)))
+            Keycap(label: "⇥")
         }
         .fixedSize()
         .contentShape(Rectangle())
@@ -825,15 +1381,19 @@ private struct TabSearchView: View {
 
     /// 输入框占位跟着模式走（用户点名：写死「搜索标签」和列表对不上）。
     private var placeholder: String {
+        if let target = model.actionTarget {
+            let name = target.displayTitle
+            let short = name.count > 30 ? String(name.prefix(29)) + "…" : name
+            return L10n.t("「\(short)」的操作", "Actions for “\(short)”")
+        }
         switch model.mode {
         case .all:       return L10n.t("搜索全部", "Search everything")
-        case .tabs:      return L10n.t("搜索标签", "Search tabs")
+        case .tabs:      return L10n.t("搜索浏览器标签", "Search browser tabs")
         case .actions:   return L10n.t("搜索互联网内容", "Search the web")
         case .history:   return L10n.t("搜索历史记录", "Search history")
-        case .bookmarks: return L10n.t("搜索书签", "Search bookmarks")
+        case .bookmarks: return L10n.t("搜索浏览器书签", "Search browser bookmarks")
         case .closed:    return L10n.t("搜索最近关闭的标签", "Search recently closed tabs")
-        case .folders:   return model.openerPicker.map { L10n.t("用哪个打开「\($0.name)」", "Open “\($0.name)” with…") }
-                             ?? L10n.t("搜索收藏的文件夹", "Search favorite folders")
+        case .folders:   return L10n.t("搜索收藏的文件夹", "Search favorite folders")
         case .apps:      return L10n.t("搜索应用", "Search apps")
         }
     }
@@ -841,31 +1401,306 @@ private struct TabSearchView: View {
     /// 列表空着时那句话，按模式说清「为什么空」。
     private var emptyText: String {
         let noQuery = model.query.trimmingCharacters(in: .whitespaces).isEmpty
+        if model.actionTarget != nil { return L10n.t("没有匹配的操作", "No matching actions") }
         switch model.mode {
-        case .all, .tabs: return model.all.isEmpty ? L10n.t("还没有标签", "No tabs yet") : L10n.t("没有匹配的标签", "No matching tabs")
+        case .all, .tabs: return model.all.isEmpty ? L10n.t("还没有浏览器标签", "No browser tabs yet") : L10n.t("没有匹配的浏览器标签", "No matching browser tabs")
         case .actions:   return L10n.t("输入要搜的内容", "Type something to search for")
         case .history:   return noQuery ? L10n.t("还没有历史记录", "No history yet") : L10n.t("没有匹配的历史记录", "No matching history")
-        case .bookmarks: return noQuery ? L10n.t("还没有书签", "No bookmarks yet") : L10n.t("没有匹配的书签", "No matching bookmarks")
+        case .bookmarks: return noQuery ? L10n.t("还没有浏览器书签", "No browser bookmarks yet") : L10n.t("没有匹配的浏览器书签", "No matching browser bookmarks")
         case .closed:    return noQuery ? L10n.t("还没有关闭过标签", "Nothing closed yet") : L10n.t("没有匹配的已关闭标签", "No matching closed tabs")
         case .folders:   return model.folders.isEmpty ? L10n.t("还没有收藏文件夹。状态栏菜单里可以添加。", "No favorite folders yet. Add one from the menu bar.") : L10n.t("没有匹配的文件夹", "No matching folders")
         case .apps:      return model.apps.isEmpty ? L10n.t("正在读取应用列表", "Loading apps") : L10n.t("没有匹配的应用", "No matching apps")
         }
     }
 
-    /// 分组头：一行小字，和下面行的标题左对齐，没有分隔线（Raycast 的样子）。
-    /// `first` = 它是列表第一行，上面不留空档。
-    private func sectionHeader(_ title: String, first: Bool) -> some View {
-        HStack(spacing: 0) {
+    /// 底栏（照 Raycast 的 Liquid Glass 胶囊，浮在列表渐隐的底部上）：右边胶囊写
+    /// 「回车做什么 ↵ ｜ 操作 ⌘↩」；展开操作后左边多一个胶囊写在对谁操作（带它自己的图标：
+    /// App 是 App 图标、网页是站点图标，用户点名），右边变成「执行 ↵ ｜ 返回 esc」。每一项都能点。
+    /// 胶囊的左右边和选中底的左右边对齐（都缩进 `kSearchListInset`）。
+    private var footer: some View {
+        HStack(spacing: 8) {
+            if model.actionTarget == nil, model.extensionOutdated {
+                // 扩展要更新：不打断，只在底栏左边挂一个（用户 2026-09-27 要的），点了看升级说明
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(nsColor: .systemOrange))
+                    Text(L10n.t("扩展需要更新", "Extension update required"))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.9))
+                }
+                .modifier(GlassCapsule())
+                .fixedSize()
+                .contentShape(Capsule())
+                .onTapGesture { model.onExtensionUpdateTap?() }
+                .help(L10n.t("下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
+                             "Download the latest extension zip, replace the folder, then reload it in chrome://extensions."))
+            }
+            if let target = model.actionTarget {
+                HStack(spacing: 7) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.primary.opacity(0.45))
+                    SearchRowIcon(row: target, icon: model.icons[target.favIconUrl],
+                                  searchBrowser: model.searchBrowser, box: 16, compact: true)
+                    Text(target.displayTitle)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.primary.opacity(0.75))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .modifier(GlassCapsule())
+                .contentShape(Capsule())
+                .onTapGesture { _ = model.escape() }
+                .layoutPriority(-1)
+            }
+            Spacer(minLength: 8)
+            if model.selectedRow != nil || model.actionTarget != nil {
+                HStack(spacing: 10) {
+                    if let row = model.selectedRow {
+                        footerAction(row.enterTitle(defaultOpener: model.openers.first), keys: ["↩"], primary: true) {
+                            model.onPick?(row)
+                        }
+                    }
+                    if model.actionTarget != nil {
+                        if model.selectedRow != nil { footerSeparator }
+                        footerAction(L10n.t("返回", "Back"), keys: ["esc"]) { _ = model.escape() }
+                    } else if let row = model.selectedRow, model.hasActions(row) {
+                        footerSeparator
+                        footerAction(L10n.t("操作", "Actions"), keys: ["⌘", "↩"]) { model.showActions() }
+                    }
+                }
+                .modifier(GlassCapsule())
+                .fixedSize()
+            }
+        }
+        .padding(.horizontal, kSearchListInset)
+        .frame(height: kSearchFooterZone)
+    }
+
+    private var footerSeparator: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.18))
+            .frame(width: 1, height: 14)
+    }
+
+    private func footerAction(_ title: String, keys: [String], primary: Bool = false,
+                              action: @escaping () -> Void) -> some View {
+        // 胶囊里的字和键帽统一亮色（用户 2026-09-27 点名：「操作」不要专门压灰），
+        // 主次只靠字重分
+        HStack(spacing: 6) {
             Text(title)
+                .font(.system(size: 12, weight: primary ? .semibold : .medium))
+                .foregroundStyle(Color.primary.opacity(0.9))
+                .lineLimit(1)
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { Keycap(label: $0, bright: true) }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+    }
+
+    /// 分组头：一行小字，和下面行的标题左对齐，没有分隔线（Raycast 的样子）。
+    /// 吸顶时不垫底色（垫了就是玻璃上横着一条色带），滚上去的行由 `PinnedHeaderClip` 在它下沿裁掉。
+    /// 头自己接住 hover：吸顶时底下压着被裁掉的行，不接的话鼠标停在头上会选中一行看不见的。
+    /// 截断的段右边写「还有 N 条」（历史写「更多」），能跳时后面跟 ⇥、点一下也跳。
+    private func sectionHeader(_ section: SearchSection) -> some View {
+        HStack(spacing: 0) {
+            Text(section.title ?? "")
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.5))
                 .padding(.leading, kSearchRowIconSize + kSearchIconGap)
             Spacer(minLength: 8)
+            if section.hidden > 0 || section.moreUnknown {
+                HStack(spacing: 5) {
+                    Text(section.moreUnknown ? L10n.t("更多", "More")
+                                             : L10n.t("还有 \(section.hidden) 条", "\(section.hidden) more"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.primary.opacity(0.4))
+                    if section.jump != nil { Keycap(label: "⇥", small: true) }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if let jump = section.jump { model.select(jump) }
+                }
+            }
         }
         .frame(height: kSearchSectionHeaderHeight)
-        .padding(.top, first ? 0 : kSearchSectionTopSpace)
         .padding(.bottom, kSearchSectionRuleSpace)
         .padding(.horizontal, kSearchRowInset)
+        .contentShape(Rectangle())
+        .onHover { _ in }
+    }
+}
+
+/// 列表内容里埋的一个空 NSView，经它的 `enclosingScrollView` 拿到 SwiftUI ScrollView
+/// 底下真正的 NSScrollView。引用类型，存进去不触发重绘。
+private final class SearchScrollState {
+    weak var probe: NSView?
+}
+
+private struct ScrollViewProbe: NSViewRepresentable {
+    let state: SearchScrollState
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        state.probe = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) { state.probe = view }
+}
+
+/// 有吸顶分组头的段里的行：滚进视口最上面那条带子（分组头钉着的位置）的部分裁掉。
+/// 分组头不垫底色，不裁的话滚上去的行和头上的字叠在一起。行只有在头吸顶时才会进这条带子
+/// （没吸顶时行总在自己的头下面），所以不用判断头吸没吸顶。
+private struct PinnedHeaderClip: ViewModifier {
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        if active {
+            content.mask {
+                GeometryReader { geo in
+                    let top = geo.frame(in: .named(kSearchScrollSpace)).minY
+                    Rectangle().padding(.top, min(geo.size.height, max(0, kSearchStickyHeaderHeight - top)))
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// 行首图标（主列表、操作列表、底栏左边的胶囊共用一份）。`box` 是格子边长 —— 格子宽度
+/// 不随图标种类变，文字列才能在全面板落在同一条竖线上。
+private struct SearchRowIcon: View {
+    let row: SearchRow
+    let icon: IconInfo?
+    var searchBrowser: String? = nil
+    var box: CGFloat = kSearchRowIconSize
+    /// 紧凑（操作列表 / 底栏）：App 图标不放大、符号小一号。
+    var compact = false
+
+    var body: some View {
+        content.frame(width: box, height: box)
+    }
+
+    /// App 图标自带一圈透明边距，按 favicon 的格子画会显小：两行的行里放大到 28/22 画，
+    /// 格子不变、文字不动；紧凑行里行高只有 34，放大就顶到上下边了，按格子画。
+    private var appSide: CGFloat { compact ? imageSide * 1.15 : box * 28 / 22 }
+    private var symbolSize: CGFloat { box * (compact ? 0.62 : 0.68) }
+    /// 站点图标画多大。紧凑行里别撑满格子：旁边几行是 14pt 的线性符号，满格的彩色图标
+    /// 显大一圈（用户 2026-09-27 截图）；缩到 16，格子宽度不变、文字不动。
+    private var imageSide: CGFloat { compact ? min(box, 16) : box }
+
+    @ViewBuilder
+    private var content: some View {
+        switch row {
+        case .command(let command, let target):
+            if command == .primary {
+                // 默认动作用对象自己的图标：动作和对象在视觉上连在一起（Raycast 的做法）
+                SearchRowIcon(row: target, icon: icon, searchBrowser: searchBrowser, box: box, compact: compact)
+            } else {
+                Image(systemName: command.symbol(for: target))
+                    .font(.system(size: symbolSize, weight: .medium))
+                    .foregroundStyle(command.isDestructive ? Color(nsColor: .systemRed) : Color.primary.opacity(0.7))
+            }
+        case .url:
+            Image(systemName: "arrow.up.right.square")
+                .font(.system(size: symbolSize + 2, weight: .regular))
+                .foregroundStyle(.secondary)
+        case .bookmark, .history:
+            // 图标由 helper 按域名向扩展要（Chrome 缓存的），还没到就先用类型图标占位
+            if let icon {
+                Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
+                    .frame(width: imageSide, height: imageSide)
+            } else {
+                Image(systemName: { if case .bookmark = row { return "bookmark" } else { return "clock" } }())
+                    .font(.system(size: symbolSize, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+        case .folder, .opener, .app:
+            // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）
+            if let icon {
+                let isApp: Bool = { if case .folder = row { return false } else { return true } }()
+                Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
+                    .frame(width: isApp ? appSide : imageSide + 2, height: isApp ? appSide : imageSide + 2)
+            } else {
+                Image(systemName: { if case .folder = row { return "folder" } else { return "app" } }())
+                    .font(.system(size: symbolSize, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+        case .action(.webSearch):
+            // 默认搜索引擎那行用要执行搜索的那个浏览器的 App 图标（用户点名）
+            if let searchBrowser, let appIcon = BrowserSupport.icon(searchBrowser) {
+                Image(nsImage: appIcon).resizable().interpolation(.high).scaledToFit()
+                    .frame(width: appSide, height: appSide)
+            } else {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: symbolSize, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        case .action(let a):
+            // 站内搜索用那个站的 favicon（和书签行同一条路取），没到之前用类型图标
+            if let icon {
+                Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
+                    .frame(width: imageSide, height: imageSide)
+            } else {
+                Image(systemName: a.symbol)
+                    .font(.system(size: symbolSize, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        case .tab, .closed:
+            if let icon {
+                Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
+                    .frame(width: imageSide, height: imageSide)
+            } else {
+                Image(systemName: "globe")
+                    .font(.system(size: symbolSize, weight: .regular))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// 键帽：底栏、⌘ 数字角标、⇥ 提示共用这一款（圆角方块 + 细描边），全面板只有一种按键长相。
+private struct Keycap: View {
+    let label: String
+    var small = false
+    /// 底栏胶囊里用亮色；列表里的角标、⇥ 仍是次级色，别和标题抢
+    var bright = false
+
+    var body: some View {
+        // 18 / 15：20 的版本在胶囊里显得顶（用户 2026-09-27 要小一号）
+        let side: CGFloat = small ? 15 : 18
+        Text(label)
+            .font(.system(size: small ? 9.5 : 10.5, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(Color.primary.opacity(bright ? 0.9 : 0.65))
+            .padding(.horizontal, label.count > 1 ? (small ? 4 : 5) : 0)
+            .frame(minWidth: side, minHeight: side)
+            .background(RoundedRectangle(cornerRadius: small ? 3.5 : 4.5, style: .continuous)
+                .fill(Color.primary.opacity(0.07)))
+            .overlay(RoundedRectangle(cornerRadius: small ? 3.5 : 4.5, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.16), lineWidth: 0.5))
+    }
+}
+
+/// 底栏的胶囊：macOS 26 起是系统的 Liquid Glass（`.glassEffect`，折射的是底下渐隐的列表），
+/// 之前的系统退回磨砂材质 + 细描边。
+private struct GlassCapsule: ViewModifier {
+    func body(content: Content) -> some View {
+        let shaped = content
+            .padding(.horizontal, 12)
+            .frame(height: kSearchCapsuleHeight)
+        if #available(macOS 26.0, *) {
+            shaped.glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            shaped
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5))
+        }
     }
 }
 
@@ -880,11 +1715,17 @@ private struct SearchRowView: View {
     let closable: Bool
     /// 非 nil 时行尾画这个浏览器的图标（跨浏览器搜索、多浏览器）。
     let browserBadge: String?
+    /// 跨浏览器搜索、同一个浏览器开了多个 Profile：行尾写是哪个 Profile 的。
+    var profileBadge: String? = nil
     /// 「搜索」操作行行首画的浏览器（搜索会发给它）。
     let searchBrowser: String?
     /// 文件夹行：回车默认用的打开方式及其图标。
     let defaultOpener: OpenerApp?
     let defaultOpenerIcon: IconInfo?
+    /// 操作列表里的行：单行、矮一截，不画副标题。
+    var compact = false
+    /// 活标签：同网址的一共几个（>1 行尾标「重复」）。
+    var duplicates = 1
     let onHover: () -> Void
     let onPick: () -> Void
     let onClose: () -> Void
@@ -893,30 +1734,12 @@ private struct SearchRowView: View {
     @State private var lastMouseScreenPoint: CGPoint?
     @State private var hovering = false
 
-    private var title: String {
-        switch row {
-        case .tab(let item):     return item.tab.title.isEmpty ? item.tab.url : Self.decodeEntities(item.tab.title)
-        case .closed(let entry): return entry.title.isEmpty ? entry.url : Self.decodeEntities(entry.title)
-        case .url:               return L10n.t("在新标签打开", "Open in new tab")
-        case .bookmark(let bm):  return bm.title.isEmpty ? bm.url : Self.decodeEntities(bm.title)
-        case .history(let h):    return h.title.isEmpty ? h.url : Self.decodeEntities(h.title)
-        case .action(let a):     return a.title
-        case .folder(let f):     return f.name
-        case .opener(let o, _):  return o.name
-        case .app(let a):        return a.name
-        }
-    }
+    private var title: String { row.displayTitle }
 
-    /// 书签 / 历史的标题偶尔带着没解码的 HTML 实体（`&#x27;s`），只解常见那几个，
-    /// 不走 NSAttributedString 的 HTML 解析（那个要起 WebKit，太重）。
-    private static func decodeEntities(_ text: String) -> String {
-        guard text.contains("&") else { return text }
-        var out = text
-        for (entity, char) in [("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""),
-                               ("&#39;", "'"), ("&#x27;", "'"), ("&apos;", "'"), ("&nbsp;", " ")] {
-            out = out.replacingOccurrences(of: entity, with: char)
-        }
-        return out
+    /// 删除类操作：图标和字标红。
+    private var destructive: Bool {
+        if case .command(let command, _) = row { return command.isDestructive }
+        return false
     }
 
     /// 书签的副标题是「文件夹 · 完整地址」（用户要看到地址；放不下末尾省略），根下的只有地址。
@@ -931,6 +1754,7 @@ private struct SearchRowView: View {
         case .folder(let f):     return (f.path as NSString).abbreviatingWithTildeInPath
         case .opener(_, let f):  return L10n.t("打开「\(f.name)」", "Open “\(f.name)”")
         case .app(let a):        return (a.path as NSString).deletingLastPathComponent
+        case .command:           return ""
         }
     }
 
@@ -951,25 +1775,25 @@ private struct SearchRowView: View {
 
     var body: some View {
         HStack(spacing: kSearchIconGap) {
-            leadingIcon
-                .frame(width: kSearchRowIconSize, height: kSearchRowIconSize)
+            SearchRowIcon(row: row, icon: icon, searchBrowser: searchBrowser, compact: compact)
                 .opacity(dimmed ? 0.55 : 1)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
                     Text(title)
-                        .font(.system(size: 13.5, weight: selected ? .semibold : .regular))
+                        .font(.system(size: compact ? 13 : 13.5, weight: selected ? .semibold : .regular))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .foregroundStyle(dimmed ? Color.primary.opacity(0.55)
-                                                : (selected ? Color.primary : Color.primary.opacity(0.85)))
+                        .foregroundStyle(destructive ? Color(nsColor: .systemRed)
+                                         : dimmed ? Color.primary.opacity(0.55)
+                                         : (selected ? Color.primary : Color.primary.opacity(0.85)))
                     if case .tab(let item) = row, item.tab.pinned == true {
                         Image(systemName: "star.fill")
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.20))
                     }
                 }
-                if !subtitle.isEmpty {
+                if !compact, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
@@ -984,9 +1808,9 @@ private struct SearchRowView: View {
                 .layoutPriority(1)
         }
         .padding(.horizontal, kSearchRowInset)
-        .frame(height: kSearchRowHeight)
+        .frame(height: compact ? kSearchCompactRowHeight : kSearchRowHeight)
         .background {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: kSearchHighlightRadius, style: .continuous)
                 .fill(selected ? (scheme == .dark ? Color.white.opacity(0.20)
                                                   : Color.black.opacity(0.10))
                                : Color.clear)
@@ -1013,76 +1837,9 @@ private struct SearchRowView: View {
     }
 
     @ViewBuilder
-    private var leadingIcon: some View {
-        switch row {
-        case .url:
-            Image(systemName: "arrow.up.right.square")
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(.secondary)
-        case .bookmark, .history:
-            // 图标由 helper 按域名向扩展要（Chrome 缓存的），还没到就先用类型图标占位
-            if let icon {
-                Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
-            } else {
-                Image(systemName: { if case .bookmark = row { return "bookmark" } else { return "clock" } }())
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(.secondary)
-            }
-        case .folder, .opener, .app:
-            // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；App 图标自带透明边距，放大画
-            if let icon {
-                let isApp: Bool = { if case .folder = row { return false } else { return true } }()
-                Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
-                    .frame(width: kSearchRowIconSize + (isApp ? 6 : 2), height: kSearchRowIconSize + (isApp ? 6 : 2))
-            } else {
-                Image(systemName: { if case .folder = row { return "folder" } else { return "app" } }())
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(.secondary)
-            }
-        case .action(.webSearch):
-            // 默认搜索引擎那行用要执行搜索的那个浏览器的 App 图标（用户点名）
-            if let searchBrowser, let appIcon = BrowserSupport.icon(searchBrowser) {
-                // App 图标自带一圈透明边距，按 favicon 的格子画会显小：放大到 28pt 居中，
-                // 外层 22pt 的格子不变，文字位置不动
-                Image(nsImage: appIcon).resizable().interpolation(.high).scaledToFit()
-                    .frame(width: kSearchRowIconSize + 6, height: kSearchRowIconSize + 6)
-            } else {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        case .action(let a):
-            // 站内搜索用那个站的 favicon（和书签行同一条路取），没到之前用类型图标
-            if let icon {
-                Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
-            } else {
-                Image(systemName: a.symbol)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        default:
-            Group {
-                if let icon {
-                    Image(nsImage: icon.image).resizable().interpolation(.high)
-                } else {
-                    Image(systemName: "globe").resizable().foregroundStyle(.secondary)
-                }
-            }
-            .scaledToFit()
-        }
-    }
-
-    @ViewBuilder
     private var trailing: some View {
         if let quickKey {
-            Text("⌘\(quickKey)")
-                .font(.system(size: 11, weight: .medium))
-                .monospacedDigit()
-                .foregroundStyle(Color.primary.opacity(0.7))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.primary.opacity(0.10)))
+            Keycap(label: "⌘\(quickKey)")
         } else if hovering, isTab, closable {
             // hover 到活标签：行尾的时间换成 ✕，点它关掉这个标签，面板不关
             Button(action: onClose) {
@@ -1094,16 +1851,36 @@ private struct SearchRowView: View {
             }
             .buttonStyle(.plain)
             .help(L10n.t("关闭标签", "Close tab"))
-        } else if let browserBadge, let icon = BrowserSupport.icon(browserBadge) {
-            Image(nsImage: icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 16, height: 16)
-                .opacity(0.85)
-                .help(BrowserSupport.displayName(browserBadge))
+        } else if profileBadge != nil || browserBadge.flatMap(BrowserSupport.icon) != nil {
+            HStack(spacing: 5) {
+                if let profileBadge {
+                    Text(profileBadge)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.45))
+                        .lineLimit(1)
+                }
+                if let browserBadge, let icon = BrowserSupport.icon(browserBadge) {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
+                        .opacity(0.85)
+                        .help(BrowserSupport.displayName(browserBadge))
+                }
+            }
         } else {
             switch row {
             case .tab(let item):
+                if duplicates > 1 {
+                    Text(L10n.t("重复", "Duplicate"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.55))
+                        .padding(.horizontal, 5)
+                        .frame(height: 16)
+                        .background(Capsule().fill(Color.primary.opacity(0.08)))
+                        .help(L10n.t("还开着 \(duplicates - 1) 个同样的页面，⌘↩ 可以一起关掉",
+                                     "\(duplicates - 1) more tab(s) with this page are open; ⌘↩ closes them"))
+                }
                 if isCurrent {
                     Text(L10n.t("当前", "Current"))
                         .font(.system(size: 10))
@@ -1124,7 +1901,7 @@ private struct SearchRowView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Color.primary.opacity(0.30))
             case .bookmark:
-                Text(L10n.t("书签", "Bookmark"))
+                Text(L10n.t("浏览器书签", "Browser bookmark"))
                     .font(.system(size: 10))
                     .foregroundStyle(Color.primary.opacity(0.30))
             case .history(let h):
@@ -1138,24 +1915,49 @@ private struct SearchRowView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Color.primary.opacity(0.30))
             case .folder:
-                // 回车会用哪个 App 开：画它的图标；旁边提示 ⌘↩ 可以换
-                HStack(spacing: 6) {
-                    if let opener = defaultOpener, let appIcon = defaultOpenerIcon {
-                        Image(nsImage: appIcon.image).resizable().scaledToFit()
-                            .frame(width: 18, height: 18)
-                            .help(opener.name)
-                    }
-                    Text("⌘↩")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.primary.opacity(0.30))
+                // 回车会用哪个 App 开：画它的图标（换一个走 ⌘↩，底栏写着）
+                if let opener = defaultOpener, let appIcon = defaultOpenerIcon {
+                    Image(nsImage: appIcon.image).resizable().scaledToFit()
+                        .frame(width: 18, height: 18)
+                        .help(opener.name)
                 }
             case .app(let a):
-                if a.isRunning {
-                    Text(L10n.t("运行中", "Running"))
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.primary.opacity(0.30))
-                }
+                if a.isRunning { RunningDot() }
+            case .command:
+                EmptyView()
             }
+        }
+    }
+}
+
+/// 运行中的 App 行尾：呼吸的绿点 + 「运行中」（用户 2026-09-27 定的；只放点不放字被否了，
+/// 光一个点看不出是什么意思）。系统开了「减少动态效果」就是静止的点。
+///
+/// 动画交给 Core Animation 的 repeatForever，不用 TimelineView —— 后者每帧重算一遍视图，
+/// 几个运行中的 App 就是几份每秒 60 次的 SwiftUI 更新。代价是各行 onAppear 的时刻不同、
+/// 呼吸会错拍，所以起步前先等到时钟对齐一个整周期，几颗点同起同落。
+private struct RunningDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
+    private static let halfCycle: TimeInterval = 1.2
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(Color(nsColor: .systemGreen))
+                .frame(width: 7, height: 7)
+                .opacity(dim ? 0.3 : 1)
+                .scaleEffect(dim ? 0.8 : 1)
+                .animation(.easeInOut(duration: Self.halfCycle).repeatForever(autoreverses: true), value: dim)
+            Text(L10n.t("运行中", "Running"))
+                .font(.system(size: 10))
+                .foregroundStyle(Color.primary.opacity(0.30))
+        }
+        .onAppear {
+                guard !reduceMotion else { return }
+                let cycle = Self.halfCycle * 2
+                let wait = cycle - Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle)
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { dim = true }
         }
     }
 }
@@ -1168,6 +1970,68 @@ private struct SearchRowView: View {
 /// 一次性快捷键唤出，没有「按住」这回事。`.nonactivatingPanel` + canBecomeKey 让
 /// 键盘输入进面板、浏览器仍是前台 App —— 菜单栏不会切成我们的、浏览器窗口
 /// 也不会退到后面，关掉面板键盘焦点自动回到浏览器。
+/// 拖面板时离对齐位置多近就吸过去。
+private let kSearchSnapDistance: CGFloat = 8
+
+/// 拖面板时的对齐辅助线：一个不接鼠标的透明窗口，铺在基准（浏览器窗口 / 屏幕）上、
+/// 压在面板下面，只在吸住的那一刻画线。
+@MainActor
+private final class SearchPanelGuides {
+    private var window: NSPanel?
+    private let lines = GuideLinesView()
+
+    func show(verticalX: CGFloat?, horizontalY: CGFloat?, in area: NSRect, below panel: NSWindow) {
+        guard verticalX != nil || horizontalY != nil else { hide(); return }
+        let window = self.window ?? make()
+        if window.frame != area { window.setFrame(area, display: false) }
+        lines.verticalX = verticalX.map { $0 - area.minX }
+        lines.horizontalY = horizontalY.map { $0 - area.minY }
+        lines.needsDisplay = true
+        window.order(.below, relativeTo: panel.windowNumber)
+    }
+
+    func hide() { window?.orderOut(nil) }
+
+    private func make() -> NSPanel {
+        let window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                             backing: .buffered, defer: true)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.level = .popUpMenu
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        window.isReleasedWhenClosed = false
+        window.animationBehavior = .none
+        window.contentView = lines
+        self.window = window
+        return window
+    }
+}
+
+private final class GuideLinesView: NSView {
+    var verticalX: CGFloat?
+    var horizontalY: CGFloat?
+
+    /// 灰色 1.5pt 虚线，照 PasteMemo 快捷面板的吸附线（用户 2026-09-27 点名；第一版是 1pt 强调色实线）。
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.setStrokeColor(NSColor.gray.withAlphaComponent(0.4).cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.setLineDash(phase: 0, lengths: [6, 4])
+        if let x = verticalX {
+            ctx.move(to: CGPoint(x: x, y: bounds.minY))
+            ctx.addLine(to: CGPoint(x: x, y: bounds.maxY))
+            ctx.strokePath()
+        }
+        if let y = horizontalY {
+            ctx.move(to: CGPoint(x: bounds.minX, y: y))
+            ctx.addLine(to: CGPoint(x: bounds.maxX, y: y))
+            ctx.strokePath()
+        }
+    }
+}
+
 private final class SearchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -1195,6 +2059,28 @@ final class TabSearchPanel {
     private var shown = false
     /// 本轮是跨浏览器搜索：贴屏幕居中偏上，不再依赖浏览器窗口定位。
     private var isGlobal = false
+    /// 本轮定位的基准（浏览器窗口，跨浏览器时是屏幕）和默认顶边。拖动时的辅助线就画在
+    /// 「基准的水平中线」和「默认顶边」这两条上 —— 对上了就是回到默认位置。
+    private var anchorFrame = NSRect.zero
+
+    /// 上一轮关面板时的现场。90 秒内、上次没选任何东西就关的（Esc、点到别处、再按一次
+    /// 快捷键），重开时回到原来的输入、模式、选中项、滚动位置，输入整段选中（接着找就按
+    /// 方向键，重新搜直接打字覆盖）；选定了东西 / 执行了操作才关的、或超过 90 秒的，从头开始
+    ///（照 Raycast 的「回到根」，用户 2026-09-27 定的）。⌘E 和 ⌥Space 各算各的。
+    private struct Session {
+        let closedAt: Date
+        let completed: Bool
+        let global: Bool
+        let query: String
+        let mode: SearchMode
+        let cursorID: String?
+        let scrollY: CGFloat
+    }
+    private var lastSession: Session?
+    private var closingAfterPick = false
+    private static let restoreWindow: TimeInterval = 90
+    private var defaultTopY: CGFloat = 0
+    private let guides = SearchPanelGuides()
 
     var isVisible: Bool { shown }
 
@@ -1205,6 +2091,9 @@ final class TabSearchPanel {
     var pickHandler: ((SearchPick) -> Void)?
     /// 用户要在面板里关掉一个活标签（参数 item.id）。面板不关。
     var closeHandler: ((String) -> Void)?
+    /// 「操作」列表里选了一项（默认动作除外，那个走 pickHandler）。`staysInPanel` 的
+    /// 那几项调用时面板还开着、已退回原列表；其余面板已关。
+    var commandHandler: ((RowCommand, SearchRow) -> Void)?
     /// 面板里按了 ⌘,：面板已关，去开设置。
     var openSettingsHandler: (() -> Void)?
     /// 输入变了（已去首尾空白）。MRUController 拿它去问扩展要历史记录。
@@ -1225,10 +2114,31 @@ final class TabSearchPanel {
 
     init() {
         model.onPick = { [weak self] row in
+            guard let self else { return }
+            // 操作列表里的一项：默认动作等于选定那一行本身；删除类留在面板里（先退回
+            // 原列表再执行，数据刷新后列表原地收缩）；其余关面板再执行。
+            if case .command(let command, let target) = row {
+                if command == .primary { self.model.onPick?(target); return }
+                if command.staysInPanel {
+                    self.model.leaveActions()
+                    self.commandHandler?(command, target)
+                } else {
+                    let handler = self.commandHandler
+                    self.closingAfterPick = true
+                    self.close()
+                    handler?(command, target)
+                }
+                return
+            }
+            // 记住「这个输入选了它」，下次同样的输入它往前排
+            if let identity = row.memoryIdentity {
+                SearchMemory.shared.record(query: self.model.baseQuery, identity: identity)
+            }
             // 先关面板再切：关面板会把 key 还给浏览器，切换命令随后到达时
             // 焦点已经在它那边了。
-            let pick = self?.pickHandler
-            self?.close()
+            let pick = self.pickHandler
+            self.closingAfterPick = true
+            self.close()
             switch row {
             case .tab(let item):     pick?(.tab(item))
             case .closed(let entry): pick?(.closed(entry))
@@ -1239,14 +2149,40 @@ final class TabSearchPanel {
             case .folder(let f):     pick?(.folder(f, nil))
             case .opener(let o, let f): pick?(.folder(f, o))
             case .app(let a):        pick?(.app(a))
+            case .command:           break   // 上面已处理
             }
         }
+        model.memory = SearchMemory.shared
         model.onCloseTab = { [weak self] itemID in self?.closeHandler?(itemID) }
+        model.onExtensionUpdateTap = { [weak self] in
+            self?.closingAfterPick = true
+            self?.close()
+            NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
+        }
         model.onContentHeightChange = { [weak self] height in self?.resizeToContent(height) }
         fieldHandle.onCommit = { [weak self] in
             guard let self, let pending = self.pendingContentHeight else { return }
             self.resizeToContent(pending)
         }
+    }
+
+    /// 列表底下的 NSScrollView（SwiftUI ScrollView 的实体）。
+    private var listScrollView: NSScrollView? {
+        guard let root = hostingView else { return nil }
+        var stack: [NSView] = [root]
+        while let view = stack.popLast() {
+            if let scrollView = view as? NSScrollView { return scrollView }
+            stack.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+
+    private func setListScrollOffset(_ y: CGFloat) {
+        guard let scrollView = listScrollView else { return }
+        let clip = scrollView.contentView
+        let maxY = max(0, (scrollView.documentView?.frame.height ?? 0) - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: min(max(0, y), maxY)))
+        scrollView.reflectScrolledClipView(clip)
     }
 
     /// 启动时调用：在屏幕外把面板整棵建出来并画一遍，然后收起。
@@ -1276,14 +2212,42 @@ final class TabSearchPanel {
         model.searchBrowser = searchBrowser
         // 此刻浏览器还是前台、还没有任何我们的窗口拿 key，读到的就是用户正在用的输入源
         let inputSource = Self.currentInputSourceID()
+        let restore = lastSession.flatMap { session -> Session? in
+            guard !session.completed, session.global == global,
+                  Date().timeIntervalSince(session.closedAt) < Self.restoreWindow else { return nil }
+            return session
+        }
+        lastSession = nil
+        model.clearActions()   // 上一轮停在操作列表里就关了的话，这次从主列表开始
         model.query = ""
         model.resetMode()   // 上一轮停在别的模式的话回到第一个
+        if let restore {
+            if modes.contains(restore.mode) { model.select(restore.mode) }
+            model.query = restore.query
+        }
         model.icons = icons
         model.setItems(items, closed: closed, bookmarks: bookmarks,
                        folders: folders, apps: apps, openers: openers, keepCursor: false)
+        if let restore, let id = restore.cursorID,
+           let index = model.rows.firstIndex(where: { $0.id == id }) {
+            model.setCursor(index, source: .mouse)   // 不触发自动滚动，滚动位置下面单独还原
+        }
+        // 面板常驻，列表底下那个 NSScrollView 还停在上一轮滚到的位置；游标重算后若刚好和
+        // 上一轮同一个下标（都是第 1 行），「游标变了才滚」那条不触发，选中项就在视野外
+        setListScrollOffset(restore?.scrollY ?? 0)
         // ⌘E 唤出时 ⌘ 多半还按着，角标要立刻出现，不等下一次 flagsChanged
         model.commandHeld = NSEvent.modifierFlags.contains(.command)
         present(inputSource: inputSource)
+        if let restore {
+            // 输入整段选中：接着找按方向键，重新搜直接打字就覆盖掉
+            if !restore.query.isEmpty, let field = fieldHandle.field {
+                field.stringValue = restore.query
+                field.currentEditor()?.selectAll(nil)
+            }
+            // 新数据的行要等下一轮布局才排好，滚动位置那时再还原一次
+            let y = restore.scrollY
+            DispatchQueue.main.async { [weak self] in self?.setListScrollOffset(y) }
+        }
     }
 
     /// 面板开着时数据变了（MRU 推送 / 在面板里关了标签）。
@@ -1307,6 +2271,11 @@ final class TabSearchPanel {
     func close() {
         guard shown, let panel else { return }
         shown = false
+        lastSession = Session(closedAt: Date(), completed: closingAfterPick, global: isGlobal,
+                              query: model.baseQuery, mode: model.mode,
+                              cursorID: model.baseCursorID,
+                              scrollY: listScrollView?.contentView.bounds.minY ?? 0)
+        closingAfterPick = false
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors = []
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
@@ -1324,10 +2293,14 @@ final class TabSearchPanel {
         let anchor = (isGlobal ? nil : ChromeWindowLocator.frontmostWindowFrame()) ?? defaultScreen.visibleFrame
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? defaultScreen
         visibleFrame = screen.visibleFrame
-        topY = anchor.maxY - anchor.height * 0.16
+        anchorFrame = anchor
+        defaultTopY = anchor.maxY - anchor.height * 0.16
+        // 用户拖过就按拖到的位置（相对默认位置的偏移）；出界由 frame(for:) 夹回屏幕里
+        let offset = Self.savedOffset
+        topY = defaultTopY + offset.height
 
         let size = NSSize(width: kSearchPanelWidth, height: panelHeight(content: model.contentHeight))
-        panel.setFrame(frame(for: size, midX: anchor.midX), display: true)
+        panel.setFrame(frame(for: size, midX: anchor.midX + offset.width), display: true)
 
         shown = true
         installMonitors(for: panel)
@@ -1416,12 +2389,9 @@ final class TabSearchPanel {
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             // ⌘⌫ 不接管：那是删掉整段输入的键（用户 2026-09-26 点名），关标签只留 hover ✕
             guard mods == .command else { return event }
-            // ⌘↩：文件夹行展开打开方式
+            // ⌘↩：展开游标那一行的操作（组字中不动，那时回车归输入法）
             if event.keyCode == UInt16(kVK_Return) || event.keyCode == UInt16(kVK_ANSI_KeypadEnter) {
-                if self.model.rows.indices.contains(self.model.cursor),
-                   case .folder(let folder) = self.model.rows[self.model.cursor] {
-                    self.model.showOpeners(for: folder)
-                }
+                if !self.fieldHandle.isComposing { self.model.showActions() }
                 return nil
             }
             guard let chars = event.charactersIgnoringModifiers else { return event }
@@ -1442,6 +2412,19 @@ final class TabSearchPanel {
                 return nil
             }
             return event
+        }!)
+
+        // 拖动面板：输入框左边的放大镜、输入框里文字右边的空白（Raycast 的样子）。
+        // 点在文字上照常放光标、拖选；双击放给输入框（选词）。
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self, event.window === self.panel, event.clickCount == 1,
+                  self.isDragHandle(event.locationInWindow) else { return event }
+            if !self.trackDrag(), let editor = self.fieldHandle.field?.currentEditor() as? NSTextView,
+               !editor.hasMarkedText() {
+                // 只是点了一下：和点在输入框空白处一样，光标放到末尾
+                editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+            }
+            return nil
         }!)
 
         // 点到别处 / 切走 App：面板失去 key 就收起。
@@ -1474,6 +2457,87 @@ final class TabSearchPanel {
         guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
               let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { return nil }
         return Unmanaged<CFString>.fromOpaque(raw).takeUnretainedValue() as String
+    }
+
+    /// 这一下按在能拖面板的地方吗：输入框那一行里，输入框左边（放大镜），或者输入框里
+    /// 已输入文字的右边。输入框右边是模式标签（点它切模式），不算。
+    private func isDragHandle(_ point: NSPoint) -> Bool {
+        guard let panel, let content = panel.contentView, let field = fieldHandle.field else { return false }
+        let inWindow = content.convert(content.bounds, to: nil)
+        guard point.y >= inWindow.maxY - kSearchFieldHeight, point.y <= inWindow.maxY else { return false }
+        let fieldRect = field.convert(field.bounds, to: nil)
+        if point.x < fieldRect.minX { return true }
+        return point.x <= fieldRect.maxX && point.x > textEnd(of: field) + 6
+    }
+
+    /// 输入框里文字（含组字中的）末尾的 x，窗口坐标。没字时就是输入框左边。
+    private func textEnd(of field: NSTextField) -> CGFloat {
+        guard let editor = field.currentEditor() as? NSTextView,
+              let layout = editor.layoutManager, let container = editor.textContainer else {
+            return field.convert(field.bounds, to: nil).minX
+        }
+        let used = layout.usedRect(for: container)
+        return editor.convert(NSPoint(x: used.maxX + editor.textContainerOrigin.x, y: 0), to: nil).x
+    }
+
+    /// 跟着鼠标拖面板，直到松手。返回是不是真的拖了（没过 3pt 算单击）。
+    ///
+    /// 面板中线靠近基准的水平中线、顶边靠近默认高度时吸过去：画辅助线 + 触控板轻震一下
+    /// （照 Raycast）。两条都对上就是默认位置，所以「拖回辅助线」就是恢复默认，不另设按钮。
+    /// 松手记下相对默认位置的偏移，下次打开照用（浏览器内按浏览器窗口、跨浏览器按屏幕算）。
+    private func trackDrag() -> Bool {
+        guard let panel else { return false }
+        let start = NSEvent.mouseLocation
+        let startFrame = panel.frame
+        let centeredX = anchorFrame.midX - startFrame.width / 2
+        var moved = false
+        var snappedX = false
+        var snappedY = false
+        while let event = panel.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]),
+              event.type == .leftMouseDragged {
+            let now = NSEvent.mouseLocation
+            let dx = now.x - start.x, dy = now.y - start.y
+            if !moved, hypot(dx, dy) < 3 { continue }
+            moved = true
+            var x = startFrame.minX + dx
+            var top = startFrame.maxY + dy
+            let snapX = abs(x - centeredX) <= kSearchSnapDistance
+            let snapY = abs(top - defaultTopY) <= kSearchSnapDistance
+            if snapX { x = centeredX }
+            if snapY { top = defaultTopY }
+            if (snapX && !snappedX) || (snapY && !snappedY) {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            }
+            snappedX = snapX
+            snappedY = snapY
+            panel.setFrameOrigin(NSPoint(x: x, y: top - startFrame.height))
+            guides.show(verticalX: snapX ? anchorFrame.midX : nil,
+                        horizontalY: snapY ? defaultTopY : nil,
+                        in: anchorFrame, below: panel)
+        }
+        guides.hide()
+        guard moved else { return false }
+        topY = panel.frame.maxY
+        if let screen = panel.screen { visibleFrame = screen.visibleFrame }
+        Self.savedOffset = CGSize(width: snappedX ? 0 : panel.frame.midX - anchorFrame.midX,
+                                  height: snappedY ? 0 : panel.frame.maxY - defaultTopY)
+        return true
+    }
+
+    /// 用户拖出来的位置：相对默认位置（基准水平居中、顶边在默认高度）的偏移。没拖过是 0。
+    private static var savedOffset: CGSize {
+        get {
+            guard let pair = UserDefaults.standard.array(forKey: "searchPanelOffset") as? [Double],
+                  pair.count == 2, pair.allSatisfy(\.isFinite) else { return .zero }
+            return CGSize(width: pair[0], height: pair[1])
+        }
+        set {
+            if newValue == .zero {
+                UserDefaults.standard.removeObject(forKey: "searchPanelOffset")
+            } else {
+                UserDefaults.standard.set([Double(newValue.width), Double(newValue.height)], forKey: "searchPanelOffset")
+            }
+        }
     }
 
     private func frame(for size: NSSize, midX: CGFloat) -> NSRect {

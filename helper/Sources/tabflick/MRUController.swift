@@ -307,6 +307,15 @@ final class MRUController {
         var browser: String?
         /// 扩展上报的自身版本（requestSettings 握手带来）。
         var extVersion: String?
+        /// 这个 Profile 的窗口最近一次获得焦点（扩展 0.17.0 起上报 `focused`）。多 Profile 时认前台用。
+        var focusedAt: Date?
+        /// Profile 的固定身份（扩展 0.17.0 起在握手里带，存在它自己的 storage.local）。
+        /// 连接 id 每次重连都变，「最近关闭」按这个分账。nil = 老扩展。
+        var profileKey: String?
+        var extensionID: String?
+        /// 浏览器自己给这个 Profile 起的名字（`BrowserProfiles` 读出来的），读不到是 nil。
+        var profileName: String?
+        let connectedAt = Date()
         /// 该浏览器的全部书签（摊平），扩展连上时整份推过来、变动时整份重推。
         /// 只放内存：扩展一重连就有，不值得落盘。
         var bookmarks: [BookmarkInfo] = []
@@ -318,14 +327,48 @@ final class MRUController {
 
     /// 当前应该服务的客户端：前台浏览器对应的连接优先；只有一个连接时
     /// 直接用它（单浏览器用户完全不依赖 pid 识别这条链路）；多连接身份
-    /// 不明时退回最近推送者。
+    /// 不明时退回最近推送者。同一个浏览器有多条连接（多 Profile）时由
+    /// `ProfilePicker` 认前台是哪个 Profile 的窗口 —— 原来取字典里第一条，
+    /// 和用户正对着哪个窗口无关（2026-09-27 V2EX 用户报的）。
     private var activeClientID: UUID? {
-        if let match = clients.first(where: { $0.value.browser == ChromeWindowLocator.activeBundleID })?.key {
-            return match
-        }
+        let front = ChromeWindowLocator.activeBundleID
+        let matches = clients.filter { $0.value.browser == front }
+        if matches.count == 1 { return matches.first?.key }
+        if matches.count > 1 { return frontProfile(among: matches) }
         if clients.count == 1 { return clients.keys.first }
         if let last = lastPushClient, clients[last] != nil { return last }
         return clients.keys.first
+    }
+
+    private var lastProfilePick: (id: UUID, reason: ProfilePicker.Reason)?
+
+    /// 多 Profile 时「前台是哪个」的判定结果，缓存 0.25 秒：判定要跨进程问一次 AX 窗口标题
+    /// （中位 0.06ms，浏览器卡住时最多等 0.15s），而 `activeClientID` 在一次 MRU 推送里要读好几次。
+    /// 用户按下 ⌃⇥、打开搜索面板时 `invalidateProfilePick()` 强制重判 —— 那两个时刻必须准。
+    private var profilePickCache: (at: Date, ids: Set<UUID>, id: UUID)?
+
+    func invalidateProfilePick() { profilePickCache = nil }
+
+    private func frontProfile(among matches: [UUID: ClientState]) -> UUID? {
+        let ids = Set(matches.keys)
+        if let cached = profilePickCache, cached.ids == ids, Date().timeIntervalSince(cached.at) < 0.25 {
+            return cached.id
+        }
+        let candidates = matches.map { id, client in
+            ProfilePicker.Candidate(id: id, currentTitle: client.tabs.first?.title,
+                                    allTitles: client.tabs.map(\.title), focusedAt: client.focusedAt)
+        }
+        let windowTitle = ChromeWindowLocator.focusedWindowTitle()
+        guard let pick = ProfilePicker.pick(candidates, windowTitle: windowTitle,
+                                            lastPush: lastPushClient) else { return nil }
+        if pick.reason == .title, let windowTitle { learnProfileName(pick.id, windowTitle: windowTitle) }
+        // 换了 Profile 或换了判据才记一笔（这个属性访问很频繁，别刷屏）
+        if lastProfilePick?.id != pick.id || lastProfilePick?.reason != pick.reason {
+            lastProfilePick = pick
+            log("👤 profile → client \(pick.id.uuidString.prefix(8)) by \(pick.reason.rawValue) (\(matches.count) connections)")
+        }
+        profilePickCache = (Date(), ids, pick.id)
+        return pick.id
     }
 
     /// 活动客户端（前台浏览器）的标签列表。切换器/菜单/命令都只看它。
@@ -372,22 +415,30 @@ final class MRUController {
     /// 「只切换当前窗口」在这里不适用：前台不是浏览器时根本没有「当前窗口」
     /// 这个概念，全局模式一律列全部窗口。
     private var globalItems: [SwitcherItem] {
-        // 同一个浏览器可能有多条连接（多开的 profile 各有一份扩展），
-        // 按 bundle id 合并成一组，免得列表里出现两个同名分区。
-        var byBrowser: [String: [(tab: TabInfo, clientID: UUID)]] = [:]
+        // 同一个浏览器多开 Profile 时每个 Profile 一条连接：按「浏览器 + Profile」分组，
+        // 组头写「Google Chrome · 工作」（2026-09-28 用户要的，原来合成一组「Google Chrome」、
+        // 和状态栏 / 搜索面板都已按 Profile 分对不上）。只有一个 Profile 的浏览器照旧一组。
+        struct Group { let browser: String; let profile: String?; var entries: [(tab: TabInfo, clientID: UUID)] }
+        var groups: [String: Group] = [:]
         for (id, client) in clients where !client.tabs.isEmpty {
             let browser = effectiveBrowser(of: id)
-            byBrowser[browser, default: []].append(contentsOf: client.tabs.map { ($0, id) })
+            let profile = profileLabel(for: id)
+            let key = browser + "|" + (profile ?? "")
+            groups[key, default: Group(browser: browser, profile: profile, entries: [])]
+                .entries.append(contentsOf: client.tabs.map { ($0, id) })
         }
-        return byBrowser
-            .map { browser, entries -> (browser: String, recency: Double, entries: [(tab: TabInfo, clientID: UUID)]) in
-                (browser, entries.compactMap(\.tab.lastAccessed).max() ?? 0, entries)
+        return groups.values
+            .map { group -> (group: Group, recency: Double) in
+                (group, group.entries.compactMap(\.tab.lastAccessed).max() ?? 0)
             }
             .sorted { a, b in
-                a.recency != b.recency ? a.recency > b.recency : a.browser < b.browser
+                a.recency != b.recency ? a.recency > b.recency
+                    : (a.group.browser, a.group.profile ?? "") < (b.group.browser, b.group.profile ?? "")
             }
-            .flatMap { group in
-                group.entries.map { SwitcherItem(tab: $0.tab, browser: group.browser, clientID: $0.clientID) }
+            .flatMap { pair in
+                pair.group.entries.map {
+                    SwitcherItem(tab: $0.tab, browser: pair.group.browser, clientID: $0.clientID, profile: pair.group.profile)
+                }
             }
     }
 
@@ -475,6 +526,11 @@ final class MRUController {
     /// 那一段会**永远是空的**且没有任何提示 —— 用户只会以为功能坏了。
     /// 这正是这套提示存在的意义，所以这次提。
     static let requiredExtensionVersion = "0.9"
+    /// 这版 TabFlick 配套的扩展版本（= extension/manifest.json 的 version，改扩展时两处一起升）。
+    /// 低于它不影响基本功能，但有功能用不上（操作里的重新加载 / 删除历史、多 Profile 分账），
+    /// 状态栏、设置页、搜索面板给不打扰的提示（用户 2026-09-27 要的）。和上面那个
+    /// `requiredExtensionVersion`（协议不兼容才提，弹窗）是两回事。
+    static let latestExtensionVersion = "0.17.1"
 
     /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
     private static func isOlder(_ v: String, than required: String) -> Bool {
@@ -521,16 +577,35 @@ final class MRUController {
             .union(connectedByBrowser.keys)
         return known.sorted().map { bundleID in
             let client = connectedByBrowser[bundleID]
-            let needsUpdate: Bool = {
-                guard let ext = client?.extVersion else { return false }
-                return Self.isOlder(ext, than: Self.requiredExtensionVersion)
-            }()
+            // 这个浏览器任何一个 Profile 的扩展要更新都算
+            let needsUpdate = clients.keys.contains { id in
+                clients[id]?.browser == bundleID && extensionNeedsUpdate(id)
+            }
             return BrowserStatus(bundleID: bundleID,
                                  name: BrowserSupport.displayName(bundleID),
                                  connected: client != nil,
                                  extVersion: client?.extVersion,
                                  needsUpdate: needsUpdate)
         }
+    }
+
+    /// 这条连接的扩展该更新了：版本低于配套版本；或者版本号够了却没带 Profile 标识 ——
+    /// 扩展文件换了、浏览器里跑的还是旧代码（没在扩展页点 ↻，只比版本号查不出来）。
+    func extensionNeedsUpdate(_ id: UUID) -> Bool {
+        guard let client = clients[id], let version = client.extVersion else { return false }
+        if Self.isOlder(version, than: Self.latestExtensionVersion) { return true }
+        return client.profileKey == nil
+    }
+
+    /// 要更新扩展的那些连接，给用户看的名字（「Google Chrome · 个人资料名」）。状态栏警告项用。
+    var outdatedExtensionNames: [String] {
+        clients.keys
+            .filter(extensionNeedsUpdate)
+            .sorted { (clients[$0]?.connectedAt ?? .distantPast) < (clients[$1]?.connectedAt ?? .distantPast) }
+            .map { id in
+                let name = BrowserSupport.displayName(effectiveBrowser(of: id))
+                return profileLabel(for: id).map { "\(name) · \($0)" } ?? name
+            }
     }
 
     /// 记录扩展上报的版本供状态列表展示；低于最低兼容版本时弹一次提醒。
@@ -553,13 +628,26 @@ final class MRUController {
 
     private func pushSettings(to id: UUID) {
         // 身份必须用**识别结果**，不能用 effectiveBrowser 的前台猜测：
-        // 猜错一次就是把别家浏览器的置顶恢复进来。未识别 → 发的配置不含
-        // 收藏/待办，识别完成时 handleClientIdentified 会补推完整版。
-        let browser = clients[id]?.browser
-        if browser == nil {
-            log("⏳ settings without favorites → client \(id.uuidString.prefix(8))（身份未识别，待识别后补推）")
+        // 猜错一次就是把别家浏览器的置顶恢复进来。范围不明 → 发的配置不含
+        // 收藏/待办（扩展见此不补开、不清理），身份齐了再补推完整版。
+        let scope = favoriteScope(of: id)
+        if scope == nil {
+            log("⏳ settings without favorites → client \(id.uuidString.prefix(8))（浏览器 / Profile 身份未齐，齐了补推）")
         }
-        server.send(settings.payload(favoritesFor: browser), to: id)
+        server.send(settings.payload(favoritesFor: scope), to: id)
+    }
+
+    /// 这条连接的收藏账本范围（浏览器 + Profile）。nil = 还不能下发收藏：浏览器没识别、
+    /// 握手没到、或新扩展却没带 Profile 标识 —— 下发错了就是在别的 Profile 里补开一排
+    /// 置顶，宁可先不发（扩展收到不含收藏的配置什么都不动）。老扩展不报 Profile，
+    /// 范围是「浏览器 + 无 Profile」，行为同以前。
+    private func favoriteScope(of id: UUID) -> FavoriteScope? {
+        guard let client = clients[id], let browser = client.browser, let ext = client.extVersion else { return nil }
+        if Self.isOlder(ext, than: Self.panelCommandsExtensionVersion) {
+            return FavoriteScope(browser: browser, profile: nil)
+        }
+        guard let key = client.profileKey else { return nil }
+        return FavoriteScope(browser: browser, profile: key)
     }
 
     /// 数据没就绪时让 event tap 放行快捷键，降级到前台应用自己的行为。
@@ -617,6 +705,23 @@ final class MRUController {
         }
         search.closeHandler = { [weak self] itemID in
             self?.closeFromSearch(itemID: itemID)
+        }
+        search.commandHandler = { [weak self] command, target in
+            self?.runSearchCommand(command, on: target)
+        }
+        search.model.badgeProvider = { [weak self] row in
+            guard let self else { return (nil, nil) }
+            @MainActor func of(_ id: UUID?) -> (browser: String?, profile: String?) {
+                guard let id else { return (nil, nil) }
+                return (self.effectiveBrowser(of: id), self.profileLabel(for: id))
+            }
+            switch row {
+            case .tab(let item):     return of(item.clientID)
+            case .bookmark(let bm):  return of(bm.clientID)
+            case .history(let h):    return of(h.clientID)
+            case .closed(let entry): return (entry.browser, self.profileLabel(forClosed: entry))
+            default:                 return (nil, nil)
+            }
         }
         search.queryHandler = { [weak self] query in
             self?.scheduleHistoryQuery(query)
@@ -734,7 +839,9 @@ final class MRUController {
     /// 取前 300 条足够：面板只列 5 条匹配，再往前的记录用户自己也记不得了。
     private var searchClosed: [ClosedTab] {
         let browser = activeBrowser
-        return Array(closedTabs.entries.lazy.filter { $0.browser == browser }.prefix(300))
+        // 多 Profile 时只列前台这个 Profile 的（用户 2026-09-27 定：⌘E 只搜当前 Profile）
+        let profile = activeClientID.flatMap { clients[$0]?.profileKey }
+        return Array(closedTabs.entries.lazy.filter { $0.browser == browser && $0.profile == profile }.prefix(300))
     }
 
     /// 当前浏览器的书签。
@@ -755,6 +862,8 @@ final class MRUController {
     var openerProvider: (() -> [OpenerApp])?
     /// 用某个 App 打开文件夹（落库 + toast 由 main.swift 那边做）。
     var openFolderHandler: ((FavoriteFolder, OpenerApp) -> Void)?
+    /// 取消收藏一个文件夹（落库 + toast 和状态栏那条是同一段，main.swift 接进来）。
+    var unfavoriteFolderHandler: ((FavoriteFolder) -> Void)?
     private let appCatalog = AppCatalog()
 
     private var searchFolders: [FavoriteFolder] {
@@ -777,10 +886,23 @@ final class MRUController {
 
     private var globalSearchClosed: [ClosedTab] { Array(closedTabs.entries.prefix(300)) }
 
+    /// 跨浏览器搜索的书签。开着书签同步的多个 Profile 会各推一份一样的：同网址只列一条，
+    /// 优先前台那个 Profile 的（选中后开在你正在用的那个里）。
     private var globalSearchBookmarks: [BookmarkInfo] {
-        clients.flatMap { id, client in
-            client.bookmarks.map { var bm = $0; bm.clientID = id; return bm }
+        let front = activeClientID
+        let order = clients.keys.sorted { a, b in
+            (a == front) != (b == front) ? a == front : a.uuidString < b.uuidString
         }
+        var seen = Set<String>()
+        var result: [BookmarkInfo] = []
+        for id in order {
+            for bookmark in clients[id]?.bookmarks ?? [] where seen.insert(bookmark.url).inserted {
+                var copy = bookmark
+                copy.clientID = id
+                result.append(copy)
+            }
+        }
+        return result
     }
 
     /// 跨浏览器时「搜索 / 打开网址」这类没有归属的动作发给谁：最近用过的那个浏览器。
@@ -837,6 +959,23 @@ final class MRUController {
         log("🖼  favicon query: \(batch.count) site(s)")
         server.send(["type": "faviconQuery",
                      "items": batch.map { ["key": $0.key, "url": $0.url] }], to: clientID)
+        // 扩展几秒内没回（2026-09-27 实测过整批石沉大海：发了十几次、一次回包都没有，
+        // 历史行全是占位图标）：没回的这些当作「浏览器也没有」，自己去站上取。
+        // 不兜这一层的话 faviconInflight 永远不清，这些站再也不会被问第二次。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            MainActor.assumeIsolated { self?.fallBackUnanswered(batch.map(\.key)) }
+        }
+    }
+
+    private func fallBackUnanswered(_ keys: [String]) {
+        let stale = keys.filter { faviconInflight.contains($0) }
+        guard !stale.isEmpty else { return }
+        log("🖼  favicon reply timed out: \(stale.count) site(s), fetching from the sites")
+        for key in stale {
+            faviconInflight.remove(key)
+            let host = key.hasPrefix("site:") ? String(key.dropFirst(5)) : ""
+            icons.fetchSiteIcon(host: host, key: key) { [weak self] in self?.refreshOverlayImages() }
+        }
     }
 
     private func handleFaviconReply(_ root: [String: Any]) {
@@ -894,10 +1033,11 @@ final class MRUController {
 
     private func handleHistoryReply(_ root: [String: Any], from clientID: UUID) {
         guard let id = (root["requestId"] as? NSNumber)?.intValue,
-              var pending = historyPending[id],
               let raw = root["items"],
               let payload = try? JSONSerialization.data(withJSONObject: raw),
               let decoded = try? JSONDecoder().decode([HistoryInfo].self, from: payload) else { return }
+        if handleLegacyProbeReply(id, items: decoded, from: clientID) { return }
+        guard var pending = historyPending[id] else { return }
         pending.items += decoded.map { var h = $0; h.clientID = clientID; return h }
         pending.waiting.remove(clientID)
         if pending.waiting.isEmpty {
@@ -915,13 +1055,14 @@ final class MRUController {
         let closed = searchIsGlobal ? globalSearchClosed : searchClosed
         let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
         search.update(items: items, closed: closed, bookmarks: bookmarks,
-                      folders: searchFolders, apps: appCatalog.entries, openers: openerProvider?() ?? [],
+                      folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
                       icons: iconMap(for: items, closed: closed), animated: animated)
     }
 
     /// 搜索快捷键：开着就关，关着就开。cycling 中不开 —— 两个浮层叠一起没法用。
     /// `global` = ⌥⌘E 唤出的跨浏览器搜索：所有浏览器的标签合成一张表、贴屏幕居中。
     func toggleTabSearch(global: Bool = false) {
+        invalidateProfilePick()
         if search.isVisible {
             search.close()
             return
@@ -940,12 +1081,18 @@ final class MRUController {
         // App 清单：「全部」模式里应用排第一，所以每次打开都保证清单是新的
         //（后台线程扫、一分钟内不重扫，扫完刷新面板）
         appCatalog.refreshIfStale { [weak self] in self?.refreshSearch() }
+        search.model.showBrowserIcons = global && Set(clients.keys.map { effectiveBrowser(of: $0) }).count > 1
+        // ⌘E 只看前台这个 Profile 的扩展；⌥Space 用到所有连接，任何一个要更新都提示
+        search.model.extensionOutdated = global
+            ? clients.keys.contains(where: extensionNeedsUpdate)
+            : activeClientID.map(extensionNeedsUpdate) ?? false
         search.show(items: items, closed: closed, bookmarks: bookmarks,
-                    folders: searchFolders, apps: appCatalog.entries, openers: openerProvider?() ?? [],
+                    folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
                     siteSearches: settings.siteSearches, modes: settings.activeSearchModes,
                     allEmptyContent: settings.allEmptyContent,
                     icons: iconMap(for: items, closed: closed),
-                    global: global, showBrowserBadges: global && browsers.count > 1,
+                    // 多个浏览器，或同一个浏览器开了多个 Profile（多条连接）都要标归属
+                    global: global, showBrowserBadges: global && (browsers.count > 1 || clients.count > 1),
                     searchBrowser: (global ? mostRecentClientID : activeClientID).map { effectiveBrowser(of: $0) })
         setEventTapSearchPanelOpen(true)
         // 「全部」没输入时要列历史的话，打开就得去要一次最近访问的
@@ -971,7 +1118,7 @@ final class MRUController {
             server.send(["type": "switch", "tabId": item.tab.id], to: clientID)
         case .closed(let entry):
             log("🔍 reopen closed → \(entry.displayTitle.prefix(50))")
-            reopenClosedTab(id: entry.id, browser: entry.browser)   // 自己会激活浏览器
+            reopenClosedTab(id: entry.id)   // 自己会激活浏览器、按记录的 Profile 找连接
         case .url(let url):
             guard let clientID = target(fallbackClient) else { return }
             log("🔍 open url → \(url.prefix(80))")
@@ -1011,6 +1158,95 @@ final class MRUController {
         }
     }
 
+    /// 「操作」列表里选了一项（⌘↩ 展开的；默认动作不走这里）。拷贝 / 重新加载 / 在访达中
+    /// 显示 / 退出时面板已关；关闭 / 移除 / 删除 / 取消收藏时面板还开着、已退回原列表，
+    /// 这里改完数据刷新一下，列表原地收缩。
+    private func runSearchCommand(_ command: RowCommand, on target: SearchRow) {
+        switch command {
+        case .primary:
+            return
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath:
+            guard let text = target.copyText(for: command) else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            let title: String
+            switch command {
+            case .copyURL:      title = L10n.t("已拷贝网址", "URL copied")
+            case .copyTitle:    title = L10n.t("已拷贝标题", "Title copied")
+            case .copyMarkdown: title = L10n.t("已拷贝 Markdown 链接", "Markdown link copied")
+            default:            title = L10n.t("已拷贝路径", "Path copied")
+            }
+            Toast.show(title, detail: text)
+        case .reloadTab:
+            guard case .tab(let item) = target, supportsPanelCommands(item.clientID) else { return }
+            log("🔍 reload → \(item.tab.title.prefix(50)) (tabId \(item.tab.id))")
+            server.send(["type": "reload", "tabId": item.tab.id], to: item.clientID)
+            Toast.show(L10n.t("已重新加载", "Reloaded"), detail: target.displayTitle)
+        case .closeTab:
+            guard case .tab(let item) = target else { return }
+            closeFromSearch(itemID: item.id)
+        case .closeDuplicates:
+            guard case .tab(let item) = target, let tabs = clients[item.clientID]?.tabs else { return }
+            // 同一条连接里和它网址完全相同的其余标签，留下它自己
+            let key = TabSearchModel.duplicateKey(item)
+            let others = tabs.filter {
+                $0.id != item.tab.id
+                    && TabSearchModel.duplicateKey(SwitcherItem(tab: $0, browser: item.browser, clientID: item.clientID)) == key
+            }
+            guard !others.isEmpty else { return }
+            log("🔍 close \(others.count) duplicate(s) of \(item.tab.title.prefix(50))")
+            for tab in others {
+                server.send(["type": "close", "tabId": tab.id], to: item.clientID)
+            }
+            let closedIDs = Set(others.map(\.id))
+            clients[item.clientID]?.tabs.removeAll { closedIDs.contains($0.id) }
+            publishStatus()
+            updateReadiness()
+            refreshSearch(animated: true)
+        case .removeClosed:
+            guard case .closed(let entry) = target else { return }
+            log("🔍 forget closed → \(entry.displayTitle.prefix(50))")
+            closedTabs.remove(id: entry.id)
+            refreshSearch()
+        case .deleteHistory:
+            guard case .history(let entry) = target,
+                  let clientID = entry.clientID ?? (searchIsGlobal ? mostRecentClientID : activeClientID),
+                  supportsPanelCommands(clientID) else { return }
+            log("🔍 delete history → \(entry.url.prefix(80))")
+            server.send(["type": "deleteHistory", "url": entry.url], to: clientID)
+            search.model.removeHistory(url: entry.url)
+        case .revealInFinder:
+            guard let path = target.filePath else { return }
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        case .unfavorite:
+            guard case .folder(let folder) = target else { return }
+            unfavoriteFolderHandler?(folder)
+            refreshSearch()
+        case .quitApp:
+            guard case .app(let app) = target else { return }
+            log("🔍 quit app → \(app.name)")
+            if app.bundleID == Bundle.main.bundleIdentifier { NSApp.terminate(nil); return }
+            let running = app.bundleID.map { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
+                ?? NSWorkspace.shared.runningApplications.filter { $0.bundleURL?.standardizedFileURL.path == app.path }
+            // 普通退出：有没存的文档由那个 App 自己问，不强退
+            running.forEach { $0.terminate() }
+        }
+    }
+
+    /// 「重新加载」「从历史记录中删除」是扩展 0.17.0 加的命令。老扩展收到只会忽略 ——
+    /// 照发不误再报「已重新加载」、把历史从列表里摘掉，就是在说假话。不支持时如实说。
+    private static let panelCommandsExtensionVersion = "0.17.0"
+
+    private func supportsPanelCommands(_ clientID: UUID) -> Bool {
+        if let version = clients[clientID]?.extVersion,
+           !Self.isOlder(version, than: Self.panelCommandsExtensionVersion) { return true }
+        Toast.show(L10n.t("扩展版本太旧，做不了这个操作", "The extension is too old for this"),
+                   detail: L10n.t("下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
+                                  "Download the latest extension zip, replace the folder, then reload it in chrome://extensions."),
+                   kind: .failure)
+        return false
+    }
+
     /// 面板里关掉一个活标签（⌘⌫ / 行尾 ✕）。面板不关，列表原地收缩。
     /// 和切换器的 closeTab 一样点对点发给所属连接、本地同步剔除。
     private func closeFromSearch(itemID: String) {
@@ -1031,6 +1267,9 @@ final class MRUController {
               let type = root["type"] as? String else { return }
 
         switch type {
+        case "focused":
+            // 这个 Profile 的某个窗口刚获得焦点（多 Profile 时认前台用）
+            clients[clientID]?.focusedAt = Date()
         case "mru":
             guard clients[clientID] != nil,
                   let raw = root["tabs"],
@@ -1092,6 +1331,7 @@ final class MRUController {
                     title: entry["title"] as? String ?? "",
                     favIconUrl: entry["favIconUrl"] as? String ?? "",
                     browser: browser,
+                    profile: clients[clientID]?.profileKey,
                     reason: CloseReason(rawValue: entry["reason"] as? String ?? "") ?? .manual,
                     // 夹到「现在」：时钟错乱送来一个未来时刻的话，它会永远
                     // 排在降序列表最前，把真正最近关的那些挤出可见范围。
@@ -1119,9 +1359,11 @@ final class MRUController {
             guard let tabId = (root["tabId"] as? NSNumber)?.intValue,
                   let url = root["url"] as? String, url.hasPrefix("http"),
                   let host = URL(string: url)?.host else { return }
-            // 只在**这个浏览器**的账本里去重/认领 —— 隔离主体原则
-            let browser = effectiveBrowser(of: clientID)
-            let mine = settings.favorites.filter { $0.browser == browser }
+            // 只在**这个浏览器 + Profile**的账本里去重/认领 —— 隔离主体原则。
+            // 范围不明（身份没齐）就不认：扩展只有收到收藏后才会收编上报，正常走不到这里
+            guard let scope = favoriteScope(of: clientID) else { return }
+            let browser = scope.browser
+            let mine = settings.favorites.filter(scope.contains)
             // 已绑定这个标签的收藏 → 无事
             if mine.contains(where: { favoriteTabBindings[$0.id] == tabId }) {
                 return
@@ -1135,11 +1377,13 @@ final class MRUController {
                 favoriteTabBindings[orphan.id] = tabId
                 return
             }
+            // 多 Profile：升级前的收藏里有这个置顶 → 归这个 Profile（它真开着），不新建
+            if adoptLegacyFavorite(scope: scope, url: url, host: host, tabId: tabId) != nil { return }
             let title = root["title"] as? String ?? ""
             log("★ browser pin → favorite: \(title.prefix(50)) (\(host)) [\(browser)]")
             let fav = FavoriteTab(url: url, title: title,
                                   favIconUrl: root["favIconUrl"] as? String,
-                                  browser: browser)
+                                  browser: browser, profile: scope.profile)
             favoriteTabBindings[fav.id] = tabId
             settings.favorites.append(fav)
 
@@ -1149,9 +1393,9 @@ final class MRUController {
             // 收藏一并移除。绑定命中优先 —— 漂移后按域名已经判不准了。
             let tabId = (root["tabId"] as? NSNumber)?.intValue
             let host = root["host"] as? String
-            let reporter = effectiveBrowser(of: clientID)
+            guard let scope = favoriteScope(of: clientID) else { return }
             let index = settings.favorites.firstIndex { fav in
-                guard fav.browser == reporter else { return false }   // 只动自己浏览器的账
+                guard scope.contains(fav) else { return false }   // 只动自己浏览器 + Profile 的账
                 if let tabId, favoriteTabBindings[fav.id] == tabId { return true }
                 guard let host, !host.isEmpty else { return false }
                 return URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
@@ -1165,9 +1409,9 @@ final class MRUController {
         case "unpinsApplied":
             // 扩展补做完了离线期间攒下的取消置顶，销账
             guard let hosts = root["hosts"] as? [String], !hosts.isEmpty else { return }
-            let browser = effectiveBrowser(of: clientID)
-            settings.pendingUnpins.removeAll { $0.browser == browser && hosts.contains($0.host) }
-            log("☆ pending unpins applied [\(browser)]: \(hosts.joined(separator: ", "))")
+            guard let scope = favoriteScope(of: clientID) else { return }
+            settings.pendingUnpins.removeAll { scope.contains($0) && hosts.contains($0.host) }
+            log("☆ pending unpins applied [\(scope.browser)]: \(hosts.joined(separator: ", "))")
 
         case "favoriteBound":
             // 扩展核对收藏后上报「这个收藏现在对应哪个活标签」
@@ -1176,11 +1420,24 @@ final class MRUController {
             favoriteTabBindings[favId] = tabId
 
         case "requestSettings":
-            // 扩展（重）连上了，向我们要一份当前配置（按它的浏览器过滤收藏）
-            pushSettings(to: clientID)
-            // 顺带核对版本配套：扩展和 app 按 major.minor 成对发布。
+            // 扩展（重）连上了，向我们要一份当前配置（按它的浏览器 + Profile 过滤收藏）。
+            // 先记版本和 Profile 标识再下发：收藏的范围要靠它们。
             // 旧扩展不带 extVersion 字段 → 按 0.1.0 处理，必然提示。
+            let reportedKey = (root["profileKey"] as? String).flatMap { BrowserProfiles.isProfileKey($0) ? $0 : nil }
+            // 握手一条连接只有一次，记下来：多 Profile 的问题全靠这行排查（扩展是不是新代码、
+            // 标识带没带、校验过没过）
+            log("🤝 client \(clientID.uuidString.prefix(8)) handshake: ext \(root["extVersion"] as? String ?? "?"), "
+                + "profileKey \(reportedKey.map { String($0.prefix(8)) } ?? (root["profileKey"] == nil ? "absent" : "invalid")), "
+                + "extensionId \((root["extensionId"] as? String).map { String($0.prefix(6)) } ?? "absent")")
+            if let key = reportedKey {
+                clients[clientID]?.profileKey = key
+                if let ext = root["extensionId"] as? String, BrowserProfiles.isExtensionID(ext) {
+                    clients[clientID]?.extensionID = ext
+                }
+            }
             recordExtensionVersion(clientID, root["extVersion"] as? String ?? "0.1.0")
+            if reportedKey != nil { profileIdentityChanged(clientID) }
+            pushSettings(to: clientID)
 
         case "openSettings":
             // 用户点了浏览器工具栏的 TabFlick 图标
@@ -1254,8 +1511,194 @@ final class MRUController {
         // 身份确定后把**属于它的**收藏推过去（初次 requestSettings 时
         // 身份可能还没解析出来，发的是兜底浏览器那份）
         pushSettings(to: id)
+        profileIdentityChanged(id)
         updateReadiness()
         publishStatus()
+    }
+
+    // MARK: - 多 Profile 的身份
+
+    /// 浏览器身份或 Profile 标识刚到（两者到的先后不定）。两样都齐了才处理老记录的归属。
+    private func profileIdentityChanged(_ id: UUID) {
+        guard let client = clients[id], let browser = client.browser, client.profileKey != nil else { return }
+        // 升级前的置顶（没标 Profile）：这个浏览器只连着这一个 Profile 时整批归它（单 Profile
+        // 用户原样接管）。连着多个时不整批给任何一个 —— 给错了就是在那个 Profile 里补开一排
+        // 别人的置顶；改成谁真开着这个置顶标签就归谁（`adoptLegacyFavorite`）。
+        if clients.values.filter({ $0.browser == browser }).count == 1, let key = client.profileKey {
+            adoptLegacyFavoritesWholesale(browser: browser, profile: key)
+        }
+        scheduleLegacyClosedProbe(browser: browser)
+    }
+
+    private func adoptLegacyFavoritesWholesale(browser: String, profile: String) {
+        guard settings.favorites.contains(where: { $0.browser == browser && $0.profile == nil }) else { return }
+        var updated = settings.favorites
+        for index in updated.indices where updated[index].browser == browser && updated[index].profile == nil {
+            updated[index].profile = profile
+        }
+        settings.pendingUnpins = settings.pendingUnpins.map { pending in
+            guard pending.browser == browser, pending.profile == nil else { return pending }
+            var copy = pending
+            copy.profile = profile
+            return copy
+        }
+        settings.favorites = updated
+        log("★ legacy favorites of \(browser) → profile \(profile.prefix(8))")
+    }
+
+    // MARK: 老「最近关闭」的归属：看哪个 Profile 的历史里有这些站
+
+    /// 升级前的「最近关闭」没标 Profile。归属不能按「谁先上报」：TabFlick 一重启所有 Profile
+    /// 同时重连，先后是随机的（2026-09-27 实测 1000 条被归到了刚建的空 Profile）。也读不了
+    /// 浏览器数据目录（macOS 隐私保护）。改成问历史：拿最近几条老记录的域名，向这个浏览器的
+    /// 每个 Profile 各查一次历史（现成的 historyQuery，不用改扩展），命中最多且唯一的那个就是
+    /// 它们的来源 —— 标签是在哪个 Profile 里开的，它的历史里就有。等 2 秒再问：重启时所有
+    /// Profile 陆续重连，一轮问齐。
+    private struct LegacyProbe {
+        let browser: String
+        let round: Int
+        let clientID: UUID
+        let host: String
+    }
+    private var legacyProbes: [Int: LegacyProbe] = [:]
+    private var legacyRounds: [String: (round: Int, expected: Int, received: Int, hits: [UUID: Int])] = [:]
+    private var legacyProbeTimers: [String: Timer] = [:]
+    private static let legacyOwnerKey = "closedTabsLegacyOwner"
+
+    private func scheduleLegacyClosedProbe(browser: String) {
+        guard !(UserDefaults.standard.stringArray(forKey: Self.legacyOwnerKey) ?? []).contains(browser),
+              closedTabs.entries.contains(where: { $0.browser == browser && $0.profile == nil }) else { return }
+        legacyProbeTimers[browser]?.invalidate()
+        let timer = Timer(timeInterval: 2, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.probeLegacyClosed(browser: browser) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        legacyProbeTimers[browser] = timer
+    }
+
+    private func probeLegacyClosed(browser: String) {
+        let keyed = clients.filter { $0.value.browser == browser && $0.value.profileKey != nil }.map(\.key)
+        var hosts: [String] = []
+        for entry in closedTabs.entries where entry.browser == browser && entry.profile == nil {
+            if let host = URL(string: entry.url)?.host, !hosts.contains(host) { hosts.append(host) }
+            if hosts.count == 5 { break }
+        }
+        guard !keyed.isEmpty, !hosts.isEmpty else { return }
+        let round = (legacyRounds[browser]?.round ?? 0) + 1
+        legacyRounds[browser] = (round, keyed.count * hosts.count, 0, [:])
+        for clientID in keyed {
+            for host in hosts {
+                historyRequestID += 1
+                legacyProbes[historyRequestID] = LegacyProbe(browser: browser, round: round, clientID: clientID, host: host)
+                server.send(["type": "historyQuery", "text": host, "requestId": historyRequestID], to: clientID)
+            }
+        }
+    }
+
+    /// 历史回包里属于归属探测的那些（按 requestId 认）。返回 true = 已处理，别再当搜索结果。
+    private func handleLegacyProbeReply(_ id: Int, items: [HistoryInfo], from clientID: UUID) -> Bool {
+        guard let probe = legacyProbes.removeValue(forKey: id) else { return false }
+        guard var state = legacyRounds[probe.browser], state.round == probe.round else { return true }
+        state.received += 1
+        if items.contains(where: { URL(string: $0.url)?.host == probe.host }) {
+            state.hits[probe.clientID, default: 0] += 1
+        }
+        legacyRounds[probe.browser] = state
+        guard state.received == state.expected else { return true }
+        // 一轮问齐：命中最多且唯一的那个 Profile 接管；都没命中而且只连着一个 Profile
+        //（单 Profile 用户清过历史）也归它；分不出来就先不归，下次有 Profile 连上再问
+        let keyed = clients.filter { $0.value.browser == probe.browser && $0.value.profileKey != nil }
+        let ranked = state.hits.sorted { $0.value > $1.value }
+        var owner: UUID?
+        if let top = ranked.first, top.value > 0, ranked.dropFirst().first?.value != top.value {
+            owner = top.key
+        } else if ranked.isEmpty, keyed.count == 1,
+                  clients.values.filter({ $0.browser == probe.browser }).count == 1 {
+            owner = keyed.first?.key
+        }
+        log("🗂  legacy closed-tab probe [\(probe.browser)]: \(state.hits.map { "\($0.key.uuidString.prefix(8))=\($0.value)" }.joined(separator: " ")) → \(owner.map { String($0.uuidString.prefix(8)) } ?? "undecided")")
+        guard let owner, let key = clients[owner]?.profileKey else { return true }
+        closedTabs.adoptLegacy(browser: probe.browser, profile: key)
+        var adopted = UserDefaults.standard.stringArray(forKey: Self.legacyOwnerKey) ?? []
+        adopted.append(probe.browser)
+        UserDefaults.standard.set(adopted, forKey: Self.legacyOwnerKey)
+        publishStatus()
+        return true
+    }
+
+    // MARK: Profile 名字：从窗口标题学
+
+    /// Chrome 开了多个 Profile 时，窗口标题在标签标题后面带着 Profile 名（「页面 - 工作」）。
+    /// 按标题认前台 Profile 的那一刻，把后缀里最后一段记成它的名字 —— 本来就要读这个标题，
+    /// 零额外开销，也不用读浏览器数据目录（那要多要一个隐私权限）。后缀原样记一次日志备查。
+    private var lastTitleSuffix: String?
+
+    private func learnProfileName(_ id: UUID, windowTitle: String) {
+        guard let tabTitle = clients[id]?.tabs.first?.title, !tabTitle.isEmpty,
+              windowTitle.count > tabTitle.count, windowTitle.hasPrefix(tabTitle) else { return }
+        let suffix = String(windowTitle.dropFirst(tabTitle.count))
+        if suffix != lastTitleSuffix {
+            lastTitleSuffix = suffix
+            log("👤 window title suffix for \(id.uuidString.prefix(8)): “\(suffix)”")
+        }
+        let parts = suffix.components(separatedBy: " - ").map { $0.trimmingCharacters(in: .whitespaces) }
+        // 只有浏览器名（「 - Google Chrome」）不算 Profile 名
+        guard let name = parts.last, !name.isEmpty, name.count <= 40,
+              name != BrowserSupport.displayName(effectiveBrowser(of: id)),
+              clients[id]?.profileName != name else { return }
+        clients[id]?.profileName = name
+        log("👤 client \(id.uuidString.prefix(8)) = profile “\(name)”")
+        publishStatus()
+    }
+
+    /// 多 Profile 时认领一条老收藏：这个 Profile 真开着和它同网址（再退一步同域名）的置顶标签。
+    /// 返回认领到的收藏 id。
+    private func adoptLegacyFavorite(scope: FavoriteScope, url: String, host: String, tabId: Int) -> String? {
+        guard let profile = scope.profile else { return nil }
+        let legacy = settings.favorites.indices.filter {
+            settings.favorites[$0].browser == scope.browser && settings.favorites[$0].profile == nil
+                && favoriteTabBindings[settings.favorites[$0].id] == nil
+        }
+        let exact = legacy.first { index in
+            let fav = settings.favorites[index]
+            return (settings.favoriteCurrentUrls[fav.id] ?? fav.url) == url || fav.url == url
+        }
+        let sameHost = legacy.first { index in
+            let fav = settings.favorites[index]
+            return URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
+                || URL(string: fav.url)?.host == host
+        }
+        guard let index = exact ?? sameHost else { return nil }
+        let id = settings.favorites[index].id
+        favoriteTabBindings[id] = tabId
+        settings.favorites[index].profile = profile
+        log("★ legacy favorite → profile \(profile.prefix(8)): \(settings.favorites[index].title.prefix(50))")
+        return id
+    }
+
+    /// 给用户看的 Profile 名：浏览器自己的 Profile 名（从窗口标题学到的），还没学到按连上的
+    /// 先后编号。这个浏览器只连着一个 Profile 时返回 nil —— 不用区分，别多一截字。
+    func profileLabel(for id: UUID) -> String? {
+        guard let client = clients[id] else { return nil }
+        let browser = effectiveBrowser(of: id)
+        let siblings = clients.filter { effectiveBrowser(of: $0.key) == browser }
+            .sorted { $0.value.connectedAt < $1.value.connectedAt }
+        guard siblings.count > 1 else { return nil }
+        if let name = client.profileName { return name }
+        let number = (siblings.firstIndex { $0.key == id } ?? 0) + 1
+        return L10n.t("个人资料 \(number)", "Profile \(number)")
+    }
+
+    /// 按 Profile 标识认名字（设置页的置顶列表用）：那个 Profile 连着才认得出。
+    func profileLabel(forKey key: String) -> String? {
+        clients.first(where: { $0.value.profileKey == key }).flatMap { profileLabel(for: $0.key) }
+    }
+
+    /// 某条「最近关闭」记录所属 Profile 的名字（跨浏览器搜索行尾用）：那个 Profile 连着才认得出。
+    private func profileLabel(forClosed entry: ClosedTab) -> String? {
+        guard let key = entry.profile,
+              let id = clients.first(where: { $0.value.profileKey == key })?.key else { return nil }
+        return profileLabel(for: id)
     }
 
     func handleClientDisconnected(_ id: UUID) {
@@ -1289,6 +1732,7 @@ final class MRUController {
     // MARK: - 来自 EventTap
 
     func step(backward: Bool) {
+        if !cycling { invalidateProfilePick() }   // 起手这一下必须按此刻的前台窗口判
         if !cycling {
             cycling = true
             // 全局还是当前浏览器，由 event tap 在按下那一刻按「前台是不是
@@ -1420,11 +1864,12 @@ final class MRUController {
     /// 快照里每个分组第一项的位置。globalItems 拼装时同一浏览器的项就是
     /// 连在一起的，所以只需要找「与前一项浏览器不同」的位置。
     private func groupStarts() -> [Int] {
+        // 和浮层分组同一个依据（浏览器 + Profile），不然方向键跳组和画出来的组对不上
         var starts: [Int] = []
-        var lastBrowser: String?
-        for (index, item) in snapshot.enumerated() where item.browser != lastBrowser {
+        var lastKey: String?
+        for (index, item) in snapshot.enumerated() where item.groupKey != lastKey {
             starts.append(index)
-            lastBrowser = item.browser
+            lastKey = item.groupKey
         }
         return starts
     }
@@ -1492,9 +1937,8 @@ final class MRUController {
     /// 置顶标签可能已漂到别的域名，光看域名会误判成「未收藏」。
     /// 只查活动浏览器自己的账本。
     var currentTabFavorited: Bool? {
-        guard let tab = tabs.first else { return nil }
-        let browser = activeBrowser
-        let mine = settings.favorites.filter { $0.browser == browser }
+        guard let tab = tabs.first, let scope = activeClientID.flatMap(favoriteScope(of:)) else { return nil }
+        let mine = settings.favorites.filter(scope.contains)
         if mine.contains(where: { favoriteTabBindings[$0.id] == tab.id }) { return true }
         guard let host = URL(string: tab.url)?.host else { return nil }
         return mine.contains { fav in
@@ -1511,11 +1955,13 @@ final class MRUController {
             favoriteTabBindings.removeValue(forKey: fav.id)
             guard let host = URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host
                     ?? URL(string: fav.url)?.host else { continue }
-            guard let clientID = clients.first(where: { effectiveBrowser(of: $0.key) == fav.browser })?.key else {
+            // 只发给收藏所属的那个 Profile：发给同浏览器的别的 Profile 会把人家同域名的置顶也撤了
+            let owner = FavoriteScope(browser: fav.browser, profile: fav.profile)
+            guard let clientID = clients.keys.first(where: { favoriteScope(of: $0) == owner }) else {
                 // 浏览器不在线：记账，等它下次连上补做。不记的话它自己的
                 // 会话恢复会把置顶带回来，收编扫描再把它加回列表（用户实测：
                 // 关着浏览器删掉，重开又回来了）。
-                let pending = PendingUnpin(browser: fav.browser, host: host)
+                let pending = PendingUnpin(browser: fav.browser, host: host, profile: fav.profile)
                 if !settings.pendingUnpins.contains(pending) {
                     settings.pendingUnpins.append(pending)
                 }
@@ -1529,9 +1975,9 @@ final class MRUController {
 
     /// 收藏 / 取消收藏当前标签（活动浏览器的账本）。
     func toggleFavoriteCurrentTab() {
-        guard let current = tabs.first else { return }
-        let browser = activeBrowser
-        let mine = settings.favorites.filter { $0.browser == browser }
+        guard let current = tabs.first, let scope = activeClientID.flatMap(favoriteScope(of:)) else { return }
+        let browser = scope.browser
+        let mine = settings.favorites.filter(scope.contains)
 
         // 取消：绑定命中优先（漂移后域名对不上，绑定还在）
         if let bound = mine.first(where: { favoriteTabBindings[$0.id] == current.id }),
@@ -1548,7 +1994,7 @@ final class MRUController {
         } else {
             log("★ favorite: \(current.title.prefix(50)) (\(host)) [\(browser)]")
             let fav = FavoriteTab(url: current.url, title: current.title,
-                                  favIconUrl: current.favIconUrl, browser: browser)
+                                  favIconUrl: current.favIconUrl, browser: browser, profile: scope.profile)
             favoriteTabBindings[fav.id] = current.id
             settings.favorites.append(fav)
         }
@@ -1560,11 +2006,10 @@ final class MRUController {
     /// 只处理**该客户端浏览器**账下的收藏 —— tabId 在不同浏览器间会撞号，
     /// 拿别的浏览器的推送对账必然张冠李戴。
     private func syncFavoriteBindings(for clientID: UUID) {
-        guard let client = clients[clientID] else { return }
-        let browser = effectiveBrowser(of: clientID)
+        guard let client = clients[clientID], let scope = favoriteScope(of: clientID) else { return }
         for (favId, tabId) in favoriteTabBindings {
             guard let fav = settings.favorites.first(where: { $0.id == favId }),
-                  fav.browser == browser else { continue }
+                  scope.contains(fav) else { continue }
             guard let tab = client.tabs.first(where: { $0.id == tabId }) else {
                 favoriteTabBindings.removeValue(forKey: favId)
                 continue
@@ -1581,6 +2026,9 @@ final class MRUController {
     /// + 最近关闭的那些。
     struct MenuBrowser {
         let bundleID: String
+        /// 这一行对应的连接（`UUID.uuidString`）。菜单里的点选、找回、清空都按它路由 ——
+        /// 按 bundle id 路由的话，同一个浏览器开了多个 Profile 时会落到别的 Profile 头上。
+        let key: String
         let name: String
         let entries: [(tab: TabInfo, icon: NSImage?)]
         /// 最近关闭的标签，最新在前。子菜单末尾单列一段，点一条即找回。
@@ -1601,22 +2049,31 @@ final class MRUController {
         return ordered.compactMap { id in
             guard let client = clients[id], !client.tabs.isEmpty else { return nil }
             let bundleID = effectiveBrowser(of: id)
+            let browserName = BrowserSupport.displayName(bundleID)
             return MenuBrowser(
                 bundleID: bundleID,
-                name: BrowserSupport.displayName(bundleID),
+                key: id.uuidString,
+                name: profileLabel(for: id).map { "\(browserName) · \($0)" } ?? browserName,
                 entries: client.tabs.map { ($0, icons.image(for: $0.favIconUrl)?.image) },
-                closed: closedTabs.recent(browser: bundleID, limit: Self.menuClosedTabLimit)
+                closed: closedTabs.recent(browser: bundleID, profile: client.profileKey, limit: Self.menuClosedTabLimit)
                     .map { ($0, icons.image(for: $0.favIconUrl)?.image) },
-                closedTotal: closedTabs.count(browser: bundleID))
+                closedTotal: closedTabs.count(browser: bundleID, profile: client.profileKey))
         }
     }
 
-    /// 找回一个已关闭的标签。
-    func reopenClosedTab(id: String, browser bundleID: String) {
+    /// 找回一个已关闭的标签。`via` 是点选时所在的那条连接（状态栏子菜单），没有就按记录
+    /// 自己的浏览器 + Profile 找 —— 多 Profile 时开回它原来那个 Profile，不是随便一个。
+    func reopenClosedTab(id: String, via clientKey: String? = nil) {
         guard let record = closedTabs.entries.first(where: { $0.id == id }) else { return }
+        let bundleID = record.browser
         log("↩︎ reopen: \(record.displayTitle.prefix(50)) [\(bundleID)]")
 
-        if let clientID = clients.first(where: { effectiveBrowser(of: $0.key) == bundleID })?.key {
+        let viaClient = clientKey.flatMap(UUID.init(uuidString:)).flatMap { clients[$0] != nil ? $0 : nil }
+        let sameProfile = clients.first(where: {
+            effectiveBrowser(of: $0.key) == bundleID && $0.value.profileKey == record.profile
+        })?.key
+        let sameBrowser = clients.first(where: { effectiveBrowser(of: $0.key) == bundleID })?.key
+        if let clientID = viaClient ?? sameProfile ?? sameBrowser {
             // 用户是从状态栏点进来的，浏览器多半不在前台 —— 跨 App 的激活
             // 必须 helper 来做（和菜单点选活标签同一条路）。
             _ = NSRunningApplication
@@ -1636,9 +2093,10 @@ final class MRUController {
         closedTabs.remove(id: id)
     }
 
-    /// 清空某个浏览器的已关闭记录。
-    func clearClosedTabs(browser: String) {
-        closedTabs.clear(browser: browser)
+    /// 清空某个 Profile（状态栏那一行对应的连接）的已关闭记录。
+    func clearClosedTabs(client clientKey: String) {
+        guard let id = UUID(uuidString: clientKey), let client = clients[id] else { return }
+        closedTabs.clear(browser: effectiveBrowser(of: id), profile: client.profileKey)
     }
 
     /// 状态栏子菜单点选：激活对应浏览器并切到该标签。
@@ -1646,9 +2104,10 @@ final class MRUController {
     /// 和 ⌃⇥ 的 commit 不同，走到这里时浏览器多半不在前台：扩展的
     /// windows.update(focused:) 只管浏览器自己窗口之间的焦点，跨 App 的
     /// 激活必须由 helper 在 macOS 层面做。命令点对点发给该浏览器的连接。
-    func activateFromMenu(tabId: Int, browser bundleID: String) {
-        guard let clientID = clients.first(where: { effectiveBrowser(of: $0.key) == bundleID })?.key,
+    func activateFromMenu(tabId: Int, client clientKey: String) {
+        guard let clientID = UUID(uuidString: clientKey),
               let target = clients[clientID]?.tabs.first(where: { $0.id == tabId }) else { return }
+        let bundleID = effectiveBrowser(of: clientID)
         _ = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleID)
             .first?
