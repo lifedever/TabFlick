@@ -1076,9 +1076,11 @@ private func listHeight(content: CGFloat) -> CGFloat {
 /// 滚到底时最后一行停在胶囊上方。
 private let kSearchFooterZone: CGFloat = 48
 private let kSearchCapsuleHeight: CGFloat = 30
+/// 列表顶部的渐隐高度，不超过列表内边距 —— 吸顶分组头的字从 5pt 左右开始，再宽就把字顶也淡掉了。
+private let kSearchTopFade: CGFloat = 5
 
 private func panelHeight(content: CGFloat) -> CGFloat {
-    kSearchFieldHeight + 1 + listHeight(content: content) + kSearchFooterZone
+    kSearchFieldHeight + listHeight(content: content) + kSearchFooterZone
 }
 
 // MARK: - 输入框
@@ -1219,7 +1221,8 @@ private struct TabSearchView: View {
             .padding(.horizontal, kSearchListInset + kSearchRowInset)
             .frame(height: kSearchFieldHeight)
 
-            Divider().opacity(0.6)
+            // 输入框下面不画线（用户 2026-09-28 定的，和底栏一样不用发丝线）：分区靠 54pt 的
+            // 输入栏和列表内边距，滚上去的行在顶部 `kSearchTopFade` 里渐隐，不会被硬切
 
             // 列表一直铺到面板底，底栏胶囊浮在它上面；列表在底部那条带子里渐隐
             //（照 Raycast：不画横线、不铺整条实底）
@@ -1318,6 +1321,9 @@ private struct TabSearchView: View {
     /// 胶囊浮在上面不压一条实底。
     private var footerFade: some View {
         VStack(spacing: 0) {
+            // 顶部一道窄渐隐：没滚动时这段正好是列表内边距（空的），看不出来；滚动时行淡进输入栏
+            LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: kSearchTopFade)
             Rectangle()
             LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
                 .frame(height: kSearchFooterZone)
@@ -1420,16 +1426,18 @@ private struct TabSearchView: View {
     private var footer: some View {
         HStack(spacing: 8) {
             if model.actionTarget == nil, model.extensionOutdated {
-                // 扩展要更新：不打断，只在底栏左边挂一个（用户 2026-09-27 要的），点了看升级说明
-                HStack(spacing: 6) {
+                // 扩展要更新：不打断，只在底栏左边挂一个（用户 2026-09-27 要的），点了看升级说明。
+                // 图标、文字落在列表的图标列、文字列上（同下面的对象胶囊）
+                HStack(spacing: kSearchIconGap) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(Color(nsColor: .systemOrange))
+                        .frame(width: kSearchRowIconSize)
                     Text(L10n.t("扩展需要更新", "Extension update required"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.primary.opacity(0.9))
                 }
-                .modifier(GlassCapsule())
+                .modifier(GlassCapsule(leading: kSearchRowInset))
                 .fixedSize()
                 .contentShape(Capsule())
                 .onTapGesture { model.onExtensionUpdateTap?() }
@@ -1437,19 +1445,20 @@ private struct TabSearchView: View {
                              "Download the latest extension zip, replace the folder, then reload it in chrome://extensions."))
             }
             if let target = model.actionTarget {
-                HStack(spacing: 7) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.primary.opacity(0.45))
+                // 图标、文字正好落在上面列表的图标列、文字列上（用户 2026-09-28 量出来错开了：
+                // 前面那个「‹」把两样都往右顶了一截）。「‹」去掉 —— 右边胶囊有「返回 esc」，
+                // 点这个胶囊本身也返回。胶囊和选中底同样缩进 kSearchListInset，里面左边距用
+                // 行的 kSearchRowInset，图标格子同宽，所以列就对上了。
+                HStack(spacing: kSearchIconGap) {
                     SearchRowIcon(row: target, icon: model.icons[target.favIconUrl],
-                                  searchBrowser: model.searchBrowser, box: 16, compact: true)
+                                  searchBrowser: model.searchBrowser, box: kSearchRowIconSize, compact: true)
                     Text(target.displayTitle)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.primary.opacity(0.75))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                .modifier(GlassCapsule())
+                .modifier(GlassCapsule(leading: kSearchRowInset))
                 .contentShape(Capsule())
                 .onTapGesture { _ = model.escape() }
                 .layoutPriority(-1)
@@ -1690,9 +1699,13 @@ private struct Keycap: View {
 /// 底栏的胶囊：macOS 26 起是系统的 Liquid Glass（`.glassEffect`，折射的是底下渐隐的列表），
 /// 之前的系统退回磨砂材质 + 细描边。
 private struct GlassCapsule: ViewModifier {
+    /// 左边距。底栏左边那两个胶囊用行的内边距，让图标、文字和列表对齐。
+    var leading: CGFloat = 12
+
     func body(content: Content) -> some View {
         let shaped = content
-            .padding(.horizontal, 12)
+            .padding(.leading, leading)
+            .padding(.trailing, 12)
             .frame(height: kSearchCapsuleHeight)
         if #available(macOS 26.0, *) {
             shaped.glassEffect(.regular.interactive(), in: Capsule())
