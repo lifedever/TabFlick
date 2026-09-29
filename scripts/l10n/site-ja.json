@@ -30,7 +30,6 @@
  "Nothing found? Search the web.": "見つからなければWeb検索。",
  "With the browser's own engine, or site search like GitHub and YouTube.": "ブラウザの検索エンジンのほか、GitHubやYouTubeなどのサイト内検索も使えます。",
  "From any app.": "どのAppからでも。",
- "Press ⌥Space to search every browser's tabs and jump straight there.": "⌥Spaceで、すべてのブラウザのタブを検索してそのまま移動できます。",
  "Web and site search": "Web検索とサイト内検索",
  "Bookmarks with folder and address": "ブックマークはフォルダとアドレスも表示",
  "Folders: Enter opens, ⌘↩ picks an app": "フォルダ：↩で開く、⌘↩でAppを選ぶ",
@@ -56,7 +55,6 @@
  "Download extension": "拡張機能をダウンロード",
  "Step by step": "詳しい手順",
  "Allow Accessibility": "アクセシビリティを許可",
- "On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.": "初回起動時にガイドが表示されます。TabFlickのアイコンを「アクセシビリティ」のリストにドラッグすると、Appが再起動します。メニューバーのアイコンが明るくなれば接続済みです。",
  "The extension asks for tabs, bookmarks, history, favicons and search; the data only goes to TabFlick on this Mac. After an update, allow any new permissions and reload the extension. Logs live at": "拡張機能はタブ、ブックマーク、履歴、ファビコン、検索の権限を使いますが、データはこのMacのTabFlickにしか送られません。アップデート後は新しい権限を許可し、拡張機能を再読み込みしてください。ログの保存先：",
  ".": "。",
  "Why an app plus an extension": "Appと拡張機能の2つが必要な理由",
@@ -100,5 +98,7 @@
  "Confirm the connection": "接続を確認",
  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "アップデート：TabFlickのリリースノートに拡張機能の更新が記載されていたら、新しいzipをダウンロードしてフォルダの中身を置き換え、chrome://extensionsのTabFlick Bridgeカードにある再読み込みボタン（↻）をクリックします。",
  "← Back to home": "← ホームに戻る",
- "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "TabFlick を起動しておくと、メニューバーのアイコンが明るくなり、メニューにブラウザ名とタブ数が表示されます。これで接続完了です。⌃ を押したまま ⇥ を押すとスイッチャーが開きます。"
+ "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "TabFlick を起動しておくと、メニューバーのアイコンが明るくなり、メニューにブラウザ名とタブ数が表示されます。これで接続完了です。⌃ を押したまま ⇥ を押すとスイッチャーが開きます。",
+ "Press ⌥Space to search every browser's tabs and jump straight there. With nothing typed it lists recent tabs and apps; Enter takes you back to what you were doing.": "⌥Spaceで、すべてのブラウザのタブを検索してそのまま移動できます。何も入力していないときは最近使ったタブとアプリが並び、Returnキーで直前の作業に戻れます。",
+ "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.": "初回起動時に「システム設定」の「アクセシビリティ」が開き、TabFlickはすでにリストに入っています。スイッチをオンにするとAppが再起動します。メニューバーのアイコンが明るくなれば接続済みです。"
 }

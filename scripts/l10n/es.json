@@ -51,8 +51,6 @@
  "Window": "Ventana",
  "Close Window": "Cerrar ventana",
  "Minimize": "Minimizar",
- "Drag this icon into the Accessibility list": "Arrastrar este icono a la lista de Accesibilidad",
- "Authorize TabFlick": "Autorizar TabFlick",
  "What's New in TabFlick": "Novedades de TabFlick",
  "Updated to {0}": "Actualizado a {0}",
  "What changed": "Cambios",
@@ -291,5 +289,9 @@
  "Couldn't run “{0}”": "No se pudo ejecutar “{0}”",
  "Command": "Comando",
  "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Permite que TabFlick controle {0} en Ajustes del Sistema → Privacidad y seguridad → Automatización.",
- "Lock Screen": "Bloquear pantalla"
+ "Lock Screen": "Bloquear pantalla",
+ "Recent browser tabs and apps": "Pestañas del navegador y apps recientes",
+ "In any other app": "En otras apps",
+ "Recent": "Recientes",
+ "App": "App"
 }

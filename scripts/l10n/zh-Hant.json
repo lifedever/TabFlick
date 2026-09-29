@@ -51,8 +51,6 @@
  "Window": "視窗",
  "Close Window": "關閉視窗",
  "Minimize": "縮到最小",
- "Drag this icon into the Accessibility list": "把圖像拖到「輔助使用」列表裡",
- "Authorize TabFlick": "授權 TabFlick",
  "What's New in TabFlick": "TabFlick 更新內容",
  "Updated to {0}": "已更新到 {0}",
  "What changed": "這一版改了什麼",
@@ -291,5 +289,9 @@
  "Couldn't run “{0}”": "無法執行「{0}」",
  "Command": "指令",
  "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制「{0}」。",
- "Lock Screen": "鎖定螢幕"
+ "Lock Screen": "鎖定螢幕",
+ "Recent browser tabs and apps": "最近使用的瀏覽器分頁和 App",
+ "In any other app": "其他 App 裡",
+ "Recent": "最近使用",
+ "App": "App"
 }

@@ -96,10 +96,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onRequestAuthorization: (() -> Void)?
 
     /// 未授权模式：菜单里只留授权入口和退出。
-    ///
-    /// 关键是这个入口必须在**菜单**里而不是窗口里 —— PermissionFlow 的浮层只在
-    /// 系统设置是前台应用时可见，任何属于我们自己的窗口都会把它挤掉。菜单点完
-    /// 就收起，不占前台，这正是 PasteMemo 那边一直好用的原因。
     private var unauthorized = false
 
     func showUnauthorized() {

@@ -33,8 +33,7 @@ MainActor.assumeIsolated {
     // 权限要在装键盘钩子之前确认。打包成 .app 后没有终端，
     // 缺权限如果只往 stderr 打字，用户看到的就是「双击图标什么都没发生」。
     if !PermissionGuide.isTrusted {
-        // 入口只放在菜单栏，不开窗口 —— PermissionFlow 的浮层会被任何属于
-        // 我们的窗口盖住或挤走，而菜单点完就收起，不占前台。
+        // 入口只放在菜单栏，不开窗口
         log("Accessibility permission missing — waiting via menu bar")
 
         MainMenu.install(openSettings: nil)   // 至少让 ⌘Q 可用
@@ -50,7 +49,7 @@ MainActor.assumeIsolated {
         permissionCoordinator = coordinator
         permissionStatusItem = statusItem
 
-        // 首次启动时用户不知道该看哪儿，主动把浮层打开一次
+        // 用户不知道该看哪儿，启动时主动引导一次
         coordinator.authorize()
     } else {
         let settings = AppSettings()

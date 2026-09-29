@@ -43,7 +43,7 @@ One box for open tabs, recently closed tabs, bookmarks, history, favorite folder
 - **Tab changes scope.** All, Browser tabs, Search, History, Browser bookmarks, Recently closed, Folders, Apps. Pick which ones are in the cycle and their order in Settings.
 - **Pinyin works.** Chinese titles match full pinyin and initials.
 - **Nothing found? Search the web** with the browser's own default engine, or with site search such as GitHub and YouTube (templates are editable).
-- **From any app.** ⌥Space opens the panel outside the browser and searches every connected browser's tabs.
+- **From any app.** ⌥Space opens the panel outside the browser and searches every connected browser's tabs. With nothing typed it lists recent browser tabs and running apps together, most recent first; Enter goes back to what you were doing before.
 - **⌘↩ for actions.** Copy the URL, title or a Markdown link, reload, close the tab, delete from history, open a folder with another app or copy its path. The footer shows what Enter will do.
 - **Learns as you go.** Search the same thing again and what you picked last time comes first; the closest match gets its own top row. Word initials (`pr` finds Pull Request) and one-letter typos still match.
 - **Duplicate tabs are marked**, with an action to close the others.
@@ -67,7 +67,7 @@ Requires macOS 14+ and Chrome (or another Chromium browser) 116+.
 
 1. **App.** Download the DMG for your Mac from [Releases](https://github.com/lifedever/TabFlick/releases/latest) (`arm64` for Apple Silicon, `x86_64` for Intel) and drag TabFlick into Applications. If macOS says the developer can't be verified, right-click TabFlick in Applications and choose Open.
 2. **Extension.** Download [TabFlick-Extension.zip](https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip), unzip it somewhere permanent, open `chrome://extensions`, turn on Developer mode and click **Load unpacked**. [Step-by-step guide](https://www.lifedever.com/TabFlick/install-extension.html).
-3. **Accessibility.** On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means both halves are connected.
+3. **Accessibility.** On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means both halves are connected.
 
 The extension asks for tabs, bookmarks, history, favicons and search. The data only goes to TabFlick on the same Mac over a local WebSocket. After an update, allow any new permissions Chrome asks about and reload the extension.
 

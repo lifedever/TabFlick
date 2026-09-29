@@ -155,8 +155,8 @@
   "page": "docs/index.html"
  },
  {
-  "key": "Press ⌥Space to search every browser's tabs and jump straight there.",
-  "zh": "按 ⌥Space，搜所有浏览器的标签，选中就切过去。",
+  "key": "Press ⌥Space to search every browser's tabs and jump straight there. With nothing typed it lists recent tabs and apps; Enter takes you back to what you were doing.",
+  "zh": "按 ⌥Space，搜所有浏览器的标签，选中就切过去。没输入时列的是最近用过的标签和 App，回车回到上一件事。",
   "page": "docs/index.html"
  },
  {
@@ -285,8 +285,8 @@
   "page": "docs/index.html"
  },
  {
-  "key": "On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.",
-  "zh": "第一次启动会弹出引导，把 TabFlick 图标拖进「辅助功能」列表，App 会自动重启。菜单栏图标变亮就是连上了。",
+  "key": "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.",
+  "zh": "第一次启动会打开「系统设置」的「辅助功能」页，TabFlick 已经在列表里，打开它的开关，App 会自动重启。菜单栏图标变亮就是连上了。",
   "page": "docs/index.html"
  },
  {

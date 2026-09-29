@@ -51,8 +51,6 @@
  "Window": "윈도우",
  "Close Window": "윈도우 닫기",
  "Minimize": "최소화",
- "Drag this icon into the Accessibility list": "이 아이콘을 손쉬운 사용 목록으로 드래그하세요",
- "Authorize TabFlick": "TabFlick 권한 부여",
  "What's New in TabFlick": "TabFlick의 새로운 기능",
  "Updated to {0}": "{0} 버전으로 업데이트됨",
  "What changed": "변경 사항",
@@ -291,5 +289,9 @@
  "Couldn't run “{0}”": "‘{0}’ 실행할 수 없음",
  "Command": "명령",
  "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 {0}을(를) 제어하도록 허용하세요.",
- "Lock Screen": "화면 잠금"
+ "Lock Screen": "화면 잠금",
+ "Recent browser tabs and apps": "최근 사용한 브라우저 탭과 앱",
+ "In any other app": "다른 앱에서",
+ "Recent": "최근 사용",
+ "App": "앱"
 }

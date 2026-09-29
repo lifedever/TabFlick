@@ -786,15 +786,14 @@ private struct SearchPane: View {
             .disabled(!settings.tabSearch)
 
             Section {
-                Picker(L10n.t("「全部」没输入时显示", "“All” shows when empty"),
-                       selection: Binding(
-                           get: { settings.allEmptyContent?.rawValue ?? "none" },
-                           set: { settings.allEmptyContent = SearchMode(rawValue: $0) })) {
-                    ForEach(AppSettings.allEmptyChoices) { mode in
-                        Text(mode.label).tag(mode.rawValue)
-                    }
-                    Text(L10n.t("不显示", "Nothing")).tag("none")
+                Picker(L10n.t("浏览器里", "In a browser"), selection: $settings.allEmptyContent) {
+                    ForEach(AppSettings.allEmptyChoices) { Text($0.label).tag($0) }
                 }
+                Picker(L10n.t("别的 App 里", "In any other app"), selection: $settings.globalEmptyContent) {
+                    ForEach(AppSettings.globalEmptyChoices) { Text($0.label).tag($0) }
+                }
+            } header: {
+                Text(L10n.t("「全部」没输入时显示", "“All” shows when empty"))
             }
 
             Section {

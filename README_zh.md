@@ -43,7 +43,7 @@ Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你用过的顺序�
 - **Tab 换范围。** 全部、浏览器标签、搜索、历史记录、浏览器书签、最近关闭、文件夹、应用依次切，哪些进循环、什么顺序在设置里定。
 - **中文用拼音也能搜。** 全拼和首字母都认，`mnjt` 能找到「蒙牛集团」。
 - **没找到就搜网页。** 用浏览器自己的默认引擎，也可以用 GitHub、YouTube 这类站内搜索（模板可改）。
-- **在别的 App 里也能用。** 按 ⌥Space，搜所有浏览器的标签。
+- **在别的 App 里也能用。** 按 ⌥Space，搜所有浏览器的标签。没输入时列的是最近用过的浏览器标签和正在运行的 App，按时间排在一起，回车回到上一件事。
 - **⌘↩ 展开操作。** 拷贝网址、标题或 Markdown 链接，重新加载，关闭标签，从历史记录里删除，文件夹换个 App 打开或拷贝路径。底栏写着回车会做什么。
 - **越用越顺手。** 同一个词再搜时，上次选的那条排在前面；最贴切的一条单独提到最前。英文首字母（`pr` 找到 Pull Request）和打错一个字母也能找到。
 - **重复的标签会标出来**，操作里可以关掉其余几个。
@@ -67,7 +67,7 @@ Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你用过的顺序�
 
 1. **装 App。** 从 [Releases](https://github.com/lifedever/TabFlick/releases/latest) 下载对应的 DMG（Apple 芯片选 `arm64`，Intel 选 `x86_64`），把 TabFlick 拖进「应用程序」。第一次打开如果提示无法验证开发者，在「应用程序」里右键 TabFlick 选「打开」。
 2. **装扩展。** 下载 [TabFlick-Extension.zip](https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip)，解压到不会误删的位置，打开 `chrome://extensions`，开启开发者模式，点「加载已解压的扩展程序」选中文件夹。[图文步骤](https://www.lifedever.com/TabFlick/install-extension.html)。
-3. **给辅助功能权限。** 第一次启动会弹出引导，把 TabFlick 图标拖进「辅助功能」列表，App 会自动重启。菜单栏图标变亮就是两端连上了。
+3. **给辅助功能权限。** 第一次启动会打开「系统设置」的「辅助功能」页，TabFlick 已经在列表里，打开它的开关，App 会自动重启。菜单栏图标变亮就是两端连上了。
 
 扩展要标签、书签、历史记录、图标、搜索这几项权限，数据只通过本机 WebSocket 交给同一台 Mac 上的 TabFlick。升级后 Chrome 提示新权限时点允许，再重新加载扩展。
 

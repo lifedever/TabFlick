@@ -53,6 +53,12 @@ final class AppCatalog {
         }
     }
 
+    /// 这次运行里最近一次切到前台的时间（key 见 `AppEntry.usageKey`）。
+    func lastActivated(_ key: String) -> Date? { activatedAt[key] }
+
+    /// 扫描目录里的那一条（带访达注释、英文原名）；装在别处的没有。
+    func entry(atPath path: String) -> AppEntry? { entries.first { $0.path == path } }
+
     /// 面板里的默认顺序（2026-09-27 用户定的）：运行中的在前，两组里都按最近用过排
     ///（最近切到前台和 Spotlight 记的上次打开，取新的那个），都没有记录的按名字。
     /// 有输入时 `TabSearch.rank` 先按匹配度、同分保持这里的顺序（它的排序是稳定的）。

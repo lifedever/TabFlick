@@ -30,7 +30,6 @@
  "Nothing found? Search the web.": "Rien trouvé ? Cherchez sur le Web.",
  "With the browser's own engine, or site search like GitHub and YouTube.": "Avec le moteur du navigateur, ou une recherche sur site comme GitHub ou YouTube.",
  "From any app.": "Depuis n'importe quelle app.",
- "Press ⌥Space to search every browser's tabs and jump straight there.": "Appuyez sur ⌥Space pour chercher dans les onglets de tous les navigateurs et y aller directement.",
  "Web and site search": "Recherche Web et sur site",
  "Bookmarks with folder and address": "Favoris avec dossier et adresse",
  "Folders: Enter opens, ⌘↩ picks an app": "Dossiers : Entrée ouvre, ⌘↩ choisit l'app",
@@ -56,7 +55,6 @@
  "Download extension": "Télécharger l'extension",
  "Step by step": "Pas à pas",
  "Allow Accessibility": "Autoriser l'accès Accessibilité",
- "On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.": "Au premier lancement, un guide s'affiche ; faites glisser l'icône de TabFlick dans la liste Accessibilité et l'app redémarre. Une icône allumée dans la barre des menus signifie que tout est connecté.",
  "The extension asks for tabs, bookmarks, history, favicons and search; the data only goes to TabFlick on this Mac. After an update, allow any new permissions and reload the extension. Logs live at": "L'extension demande l'accès aux onglets, aux favoris, à l'historique, aux favicons et à la recherche ; les données ne vont qu'à TabFlick sur ce Mac. Après une mise à jour, acceptez les nouvelles autorisations et rechargez l'extension. Les journaux se trouvent dans",
  ".": ".",
  "Why an app plus an extension": "Pourquoi une app et une extension",
@@ -100,5 +98,7 @@
  "Confirm the connection": "Vérifier la connexion",
  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "Mise à jour : quand les notes d'une version de TabFlick signalent une mise à jour de l'extension, téléchargez le nouveau zip, remplacez le contenu du dossier, puis cliquez sur le bouton d'actualisation (↻) de la carte TabFlick Bridge dans chrome://extensions.",
  "← Back to home": "← Retour à l'accueil",
- "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "Lorsque TabFlick est ouvert, l'icône de la barre des menus s'allume et son menu affiche votre navigateur avec le nombre d'onglets. Maintenez ⌃ et appuyez sur ⇥ pour afficher le sélecteur."
+ "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "Lorsque TabFlick est ouvert, l'icône de la barre des menus s'allume et son menu affiche votre navigateur avec le nombre d'onglets. Maintenez ⌃ et appuyez sur ⇥ pour afficher le sélecteur.",
+ "Press ⌥Space to search every browser's tabs and jump straight there. With nothing typed it lists recent tabs and apps; Enter takes you back to what you were doing.": "Appuyez sur ⌥Space pour chercher dans les onglets de tous les navigateurs et y aller directement. Sans rien taper, il affiche les onglets et apps récents ; Retour vous ramène à ce que vous faisiez.",
+ "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.": "Au premier lancement, Réglages Système s'ouvre sur Accessibilité avec TabFlick déjà dans la liste ; activez-le et l'app redémarre. Une icône allumée dans la barre des menus signifie que tout est connecté."
 }

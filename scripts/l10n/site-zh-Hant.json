@@ -30,7 +30,6 @@
  "Nothing found? Search the web.": "沒找到就搜尋網路。",
  "With the browser's own engine, or site search like GitHub and YouTube.": "用瀏覽器自己的預設搜尋引擎，也可以加 GitHub、YouTube 這類站內搜尋。",
  "From any app.": "在其他 App 裡也能用。",
- "Press ⌥Space to search every browser's tabs and jump straight there.": "按 ⌥Space 搜尋所有瀏覽器的分頁，選中就切過去。",
  "Web and site search": "網路搜尋和站內搜尋",
  "Bookmarks with folder and address": "書籤附資料夾和網址",
  "Folders: Enter opens, ⌘↩ picks an app": "資料夾：↩ 打開，⌘↩ 換 App",
@@ -56,7 +55,6 @@
  "Download extension": "下載擴充功能",
  "Step by step": "圖文步驟",
  "Allow Accessibility": "允許輔助使用權限",
- "On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.": "第一次啟動會出現引導，把 TabFlick 圖像拖進「輔助使用」列表，App 會自動重新啟動。選單列圖像變亮就是連上了。",
  "The extension asks for tabs, bookmarks, history, favicons and search; the data only goes to TabFlick on this Mac. After an update, allow any new permissions and reload the extension. Logs live at": "擴充功能需要分頁、書籤、歷史記錄、網站圖示、搜尋這幾項權限，資料只交給本機的 TabFlick，不連網。更新後 Chrome 提示新權限時點允許，再重新載入擴充功能。記錄檔在",
  ".": "。",
  "Why an app plus an extension": "為什麼要一個 App 加一個擴充功能",
@@ -100,5 +98,7 @@
  "Confirm the connection": "確認連線",
  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "升級：TabFlick 發新版時，如果版本說明提到擴充功能有更新，下載新的 zip，取代資料夾裡的內容，再到 chrome://extensions 點 TabFlick Bridge 卡片上的重新載入按鈕（↻）。",
  "← Back to home": "← 返回首頁",
- "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "保持 TabFlick 執行中，選單列圖示變亮、選單裡列出瀏覽器和分頁數，就是兩端接通了。之後按住 ⌃ 點 ⇥ 就能叫出切換器。"
+ "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "保持 TabFlick 執行中，選單列圖示變亮、選單裡列出瀏覽器和分頁數，就是兩端接通了。之後按住 ⌃ 點 ⇥ 就能叫出切換器。",
+ "Press ⌥Space to search every browser's tabs and jump straight there. With nothing typed it lists recent tabs and apps; Enter takes you back to what you were doing.": "按 ⌥Space 搜尋所有瀏覽器的分頁，選中就切過去。沒輸入時列出最近用過的分頁和 App，按 Return 回到上一件事。",
+ "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.": "第一次啟動會打開「系統設定」的「輔助使用」頁面，TabFlick 已經在列表裡，打開它的開關，App 會自動重新啟動。選單列圖像變亮就是連上了。"
 }

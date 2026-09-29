@@ -63,6 +63,27 @@ enum SearchMode: String, CaseIterable, Identifiable, Codable {
     static let defaultEnabled: Set<SearchMode> = [.all, .tabs, .actions, .history, .bookmarks, .closed, .folders]
 }
 
+/// 「全部」没输入时列什么（设置项）。原始值和 `SearchMode` 的一致，老设置存的字符串原样读得出。
+enum EmptyContent: String, CaseIterable, Identifiable {
+    case tabs, history, bookmarks, closed, folders, apps
+    /// 浏览器标签和运行中的 App 按最近用过排在一起（只给跨浏览器面板，用户 2026-09-29 要的）
+    case recent
+    case none
+
+    var id: String { rawValue }
+
+    /// 对应的单独模式；「最近使用」和「不显示」没有。
+    var mode: SearchMode? { SearchMode(rawValue: rawValue) }
+
+    var label: String {
+        switch self {
+        case .recent: return L10n.t("最近使用的浏览器标签和应用", "Recent browser tabs and apps")
+        case .none:   return L10n.t("不显示", "Nothing")
+        default:      return mode?.label ?? rawValue
+        }
+    }
+}
+
 /// 切换器浮层的排布方式。
 enum SwitcherLayout: String, CaseIterable, Identifiable {
     /// 横向一行，放不下时左右滚动（默认，和 macOS ⌘⇥ 一个形态）。
@@ -349,6 +370,7 @@ final class AppSettings: ObservableObject {
         static let searchModeOrder = "searchModeOrder"
         static let searchModesEnabled = "searchModesEnabled"
         static let allEmptyContent = "allEmptyContent"
+        static let globalEmptyContent = "globalEmptyContent"
         static let globalSwitcher = "globalSwitcher"
         static let globalSwitcherStyle = "globalSwitcherStyle"
         static let globalExcludedApps = "globalExcludedApps"
@@ -533,15 +555,24 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// 「全部」模式没输入时列什么。nil = 空着。默认标签（用户 2026-09-26 定的）。
-    @Published var allEmptyContent: SearchMode? {
+    /// 浏览器里（⌘E）「全部」模式没输入时列什么。默认标签（用户 2026-09-26 定的）。
+    @Published var allEmptyContent: EmptyContent {
         didSet {
             guard oldValue != allEmptyContent else { return }
-            UserDefaults.standard.set(allEmptyContent?.rawValue ?? "none", forKey: Key.allEmptyContent)
+            UserDefaults.standard.set(allEmptyContent.rawValue, forKey: Key.allEmptyContent)
         }
     }
-    /// 可以选的项（「全部」和「搜索」本身没有「没输入时的内容」）。
-    static let allEmptyChoices: [SearchMode] = [.tabs, .history, .bookmarks, .closed, .folders, .apps]
+    /// 跨浏览器面板（别的 App 里那个键）没输入时列什么。默认「最近使用」，见 init 里的迁移。
+    @Published var globalEmptyContent: EmptyContent {
+        didSet {
+            guard oldValue != globalEmptyContent else { return }
+            UserDefaults.standard.set(globalEmptyContent.rawValue, forKey: Key.globalEmptyContent)
+        }
+    }
+    /// 可以选的项（「全部」和「搜索」本身没有「没输入时的内容」）。「最近使用」只给跨浏览器面板：
+    /// 在浏览器里按 ⌘E 要找的几乎总是标签，混进 App 会把它挤下去。
+    static let allEmptyChoices: [EmptyContent] = [.tabs, .history, .bookmarks, .closed, .folders, .apps, .none]
+    static let globalEmptyChoices: [EmptyContent] = [.tabs, .recent, .history, .bookmarks, .closed, .folders, .apps, .none]
 
     /// 按顺序、只取勾选的；一个都没勾就退回「全部」。
     var activeSearchModes: [SearchMode] {
@@ -722,7 +753,12 @@ final class AppSettings: ObservableObject {
         searchModeOrder = Self.normalizedModeOrder(defaults.stringArray(forKey: Key.searchModeOrder))
         searchModesEnabled = defaults.stringArray(forKey: Key.searchModesEnabled)
             .map { Set($0.compactMap(SearchMode.init(rawValue:))) } ?? SearchMode.defaultEnabled
-        allEmptyContent = defaults.string(forKey: Key.allEmptyContent).map { SearchMode(rawValue: $0) } ?? .tabs
+        let browserEmpty = defaults.string(forKey: Key.allEmptyContent).flatMap(EmptyContent.init(rawValue:)) ?? .tabs
+        allEmptyContent = browserEmpty
+        // 默认「最近使用」（用户 2026-09-29 定的）；拆开之前在共用那项里改过别的（历史、不显示…）的，
+        // 跨浏览器面板沿用他改的那个
+        globalEmptyContent = defaults.string(forKey: Key.globalEmptyContent).flatMap(EmptyContent.init(rawValue:))
+            ?? (browserEmpty == .tabs ? .recent : browserEmpty)
         globalSwitcher = defaults.bool(forKey: Key.globalSwitcher)   // 未设置即默认 false
         globalSwitcherStyle = GlobalSwitcherStyle(rawValue: defaults.string(forKey: Key.globalSwitcherStyle) ?? "") ?? .list
         globalExcludedApps = defaults.data(forKey: Key.globalExcludedApps)

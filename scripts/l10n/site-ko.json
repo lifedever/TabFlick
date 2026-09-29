@@ -30,7 +30,6 @@
  "Nothing found? Search the web.": "결과가 없으면 웹 검색.",
  "With the browser's own engine, or site search like GitHub and YouTube.": "브라우저의 기본 검색 엔진이나 GitHub, YouTube 같은 사이트 검색을 사용합니다.",
  "From any app.": "어떤 앱에서든.",
- "Press ⌥Space to search every browser's tabs and jump straight there.": "⌥Space를 눌러 모든 브라우저의 탭을 검색하고 바로 이동합니다.",
  "Web and site search": "웹 검색과 사이트 검색",
  "Bookmarks with folder and address": "폴더와 주소가 함께 표시되는 북마크",
  "Folders: Enter opens, ⌘↩ picks an app": "폴더: Enter 키로 열기, ⌘↩로 앱 선택",
@@ -56,7 +55,6 @@
  "Download extension": "확장 프로그램 다운로드",
  "Step by step": "단계별 안내",
  "Allow Accessibility": "손쉬운 사용 허용",
- "On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.": "처음 실행하면 안내가 나타납니다. TabFlick 아이콘을 손쉬운 사용 목록으로 드래그하면 앱이 다시 실행됩니다. 메뉴 막대 아이콘이 밝아지면 연결된 것입니다.",
  "The extension asks for tabs, bookmarks, history, favicons and search; the data only goes to TabFlick on this Mac. After an update, allow any new permissions and reload the extension. Logs live at": "확장 프로그램은 탭, 북마크, 방문 기록, 파비콘, 검색 권한을 요청하며, 데이터는 이 Mac의 TabFlick으로만 전달됩니다. 업데이트 후에는 새 권한을 허용하고 확장 프로그램을 다시 로드하세요. 로그는",
  ".": "에 있습니다.",
  "Why an app plus an extension": "앱과 확장 프로그램이 모두 필요한 이유",
@@ -100,5 +98,7 @@
  "Confirm the connection": "연결 확인",
  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "업그레이드: TabFlick 릴리스 노트에 확장 프로그램 업데이트가 있으면 새 zip을 다운로드해 폴더 내용을 교체한 다음, chrome://extensions의 TabFlick Bridge 카드에서 새로고침 버튼(↻)을 클릭하세요.",
  "← Back to home": "← 홈으로 돌아가기",
- "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "TabFlick이 실행 중이면 메뉴 막대 아이콘이 밝아지고 메뉴에 브라우저와 탭 수가 표시됩니다. 이제 ⌃를 누른 채 ⇥를 누르면 전환기가 열립니다."
+ "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "TabFlick이 실행 중이면 메뉴 막대 아이콘이 밝아지고 메뉴에 브라우저와 탭 수가 표시됩니다. 이제 ⌃를 누른 채 ⇥를 누르면 전환기가 열립니다.",
+ "Press ⌥Space to search every browser's tabs and jump straight there. With nothing typed it lists recent tabs and apps; Enter takes you back to what you were doing.": "⌥Space를 눌러 모든 브라우저의 탭을 검색하고 바로 이동합니다. 아무것도 입력하지 않으면 최근 사용한 탭과 앱이 나오고, Return 키를 누르면 방금 하던 작업으로 돌아갑니다.",
+ "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.": "처음 실행하면 시스템 설정의 손쉬운 사용 화면이 열리고 TabFlick이 이미 목록에 있습니다. 스위치를 켜면 앱이 다시 실행됩니다. 메뉴 막대 아이콘이 밝아지면 연결된 것입니다."
 }

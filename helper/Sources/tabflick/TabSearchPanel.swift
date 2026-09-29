@@ -20,10 +20,11 @@ struct SearchSection {
 
 /// 「全部」里一段装的是什么：决定分组头的名字，以及截断后 Tab 跳去哪个模式。
 enum SearchSectionKind: String {
-    case top, ops, apps, folders, tabs, closed, bookmarks, history
+    case top, ops, apps, folders, tabs, closed, bookmarks, history, recent
 
     var title: String {
         switch self {
+        case .recent:    return L10n.t("最近使用", "Recent")
         case .top:       return L10n.t("最佳匹配", "Top Hit")
         case .ops:       return L10n.t("操作", "Actions")
         case .apps:      return L10n.t("应用", "Apps")
@@ -37,7 +38,7 @@ enum SearchSectionKind: String {
 
     var mode: SearchMode? {
         switch self {
-        case .top:       return nil
+        case .top, .recent: return nil
         case .ops:       return .actions
         case .apps:      return .apps
         case .folders:   return .folders
@@ -396,8 +397,12 @@ final class TabSearchModel: ObservableObject {
     private var savedCursorIndex = 0
     /// 程序自己改输入（进出操作列表）：不重算、不去问历史，调用方自己 refilter。
     private var settingQueryQuietly = false
-    /// 「全部」模式没输入时列什么（设置项）。nil = 空着。
-    var allEmptyContent: SearchMode? = .tabs
+    /// 「全部」模式没输入时列什么（设置项，⌘E 和跨浏览器面板各一项，打开时传进来）。
+    var allEmptyContent: EmptyContent = .tabs
+    /// 「最近使用」的行，已按最近用过排好（MRUController 合的表，见 `RecentMix`）。
+    private var recent: [SearchRow] = []
+    /// 列表此刻就是「最近使用」那张混排表。
+    var showingRecent: Bool { layout.first?.kind == .recent }
     /// 「全部」模式下列表由哪几段拼成（按顺序），`sections` 据此切段。其他模式为空。
     private struct SectionSpec {
         let kind: SearchSectionKind
@@ -486,9 +491,22 @@ final class TabSearchModel: ObservableObject {
     /// 游标这次是被谁移动的。只有键盘移动才自动滚动 —— 理由同 SwitcherModel：
     /// hover 改游标 → 滚动 → 鼠标下换了一行 → 又 hover，游标会一路飞到底。
     private(set) var cursorSource: CursorSource = .keyboard
+    /// 这次输入之后用户自己选过没有（方向键、鼠标悬停、回到上次选的那一行）。没选过时游标
+    /// 只是停在默认位置，数据晚到重排（历史回包、MRU 推送）要跟着默认位置走：跟着原来那一项
+    /// 的话，晚到的历史被提成「最佳匹配」排到最前，高亮却在第二行，回车打开的不是屏上说的
+    /// 那条（用户 2026-09-29 截图报的）。
+    private var cursorTouched = false
 
-    /// 当前标签的 id（`all` 的首项）。行尾用「当前」代替时间。
-    var currentID: String? { all.first?.id }
+    /// 跨浏览器面板（⌥Space 那个键，打开时定死）。
+    var isGlobal = false
+    /// 跨浏览器面板是在浏览器前台打开的：那个浏览器（多 Profile 时是前台那个）正显示的标签。
+    /// 别的 App 前台时 nil。MRUController 打开时算好。
+    var globalCurrentID: String?
+
+    /// 当前标签。行尾用「当前」代替时间；没输入时放在第二行（见 `modeRows` 的 `.tabs`）。
+    /// 浏览器内是 `all` 的首项；跨浏览器时只有浏览器在前台才有 —— 别的 App 前台时首项是
+    /// 最后在看的那个网页，正是最可能要回去的，照常排第一。
+    var currentID: String? { isGlobal ? globalCurrentID : all.first?.id }
 
 
     /// 列表按段切开。「全部」里每种内容一段、带头：分组头的有无**不能**看「前面有没有别的段」——
@@ -540,8 +558,10 @@ final class TabSearchModel: ObservableObject {
     /// 每次按键只查字典、不再重算。标题会变（标签加载中），攒太多就整个清掉重来。
     private var candidateCache: [String: SearchCandidate] = [:]
 
-    func setCursor(_ index: Int, source: CursorSource) {
+    /// `touched: false` 只给默认落位用，其余一律算用户选的（见 `cursorTouched`）。
+    func setCursor(_ index: Int, source: CursorSource, touched: Bool = true) {
         cursorSource = source
+        cursorTouched = touched
         cursor = index
     }
 
@@ -599,10 +619,11 @@ final class TabSearchModel: ObservableObject {
     /// 模型里，继承它会落到刚切过去的那个标签，也就是现在的「当前」，毫无意义。
     func setItems(_ items: [SwitcherItem], closed: [ClosedTab], bookmarks: [BookmarkInfo],
                   folders: [FavoriteFolder] = [], apps: [AppEntry] = [], openers: [OpenerApp] = [],
-                  keepCursor: Bool = true) {
+                  recent: [SearchRow] = [], keepCursor: Bool = true) {
         let keep = keepCursor && rows.indices.contains(cursor) ? rows[cursor].id : nil
         let previousIndex = cursor
         all = items
+        self.recent = recent
         var counts: [String: Int] = [:]
         for item in items where item.tab.url.hasPrefix("http") { counts[Self.duplicateKey(item), default: 0] += 1 }
         duplicateCounts = counts
@@ -618,13 +639,18 @@ final class TabSearchModel: ObservableObject {
         }
     }
 
-    /// 数据刷新（MRU 推送、面板里关了标签、历史回包）而查询没变：游标留在原处、
-    /// **不滚动**。原来那一行没了（刚被关掉的就是游标所在那行——悬停时游标跟着鼠标）
-    /// 就落到同一位置的下一行。之前退回第 1 行并按键盘移动处理，列表跳回顶部
-    /// （用户 2026-09-26 反馈：标签多时关一个就回到顶上）。
+    /// 数据刷新（MRU 推送、面板里关了标签、历史回包）而查询没变：**不滚动**。
+    /// 用户选过某一行，游标就留在那一行；那一行没了（刚被关掉的就是游标所在那行——悬停时
+    /// 游标跟着鼠标）就落到同一位置的下一行。之前退回第 1 行并按键盘移动处理，列表跳回顶部
+    /// （用户 2026-09-26 反馈：标签多时关一个就回到顶上）。没选过就留在新排序的默认位置。
     private func refreshInPlace(keep: String?, previousIndex: Int) {
+        let touched = cursorTouched
         refilter(keepCursorOn: nil)
         guard !rows.isEmpty else { return }
+        guard touched else {
+            setCursor(cursor, source: .mouse, touched: false)   // 换成 .mouse 只为不滚动
+            return
+        }
         if let keep, let index = rows.firstIndex(where: { $0.id == keep }) {
             setCursor(index, source: .mouse)
         } else {
@@ -714,8 +740,9 @@ final class TabSearchModel: ObservableObject {
         refreshInPlace(keep: keep, previousIndex: cursor)
     }
 
-    private func candidate(title: String, url: String, identity: String? = nil) -> SearchCandidate {
-        let cacheKey = title + "\u{1F}" + url + "\u{1F}" + (identity ?? "")
+    private func candidate(title: String, url: String, identity: String? = nil,
+                           name: String? = nil) -> SearchCandidate {
+        let cacheKey = title + "\u{1F}" + url + "\u{1F}" + (identity ?? "") + "\u{1F}" + (name ?? "")
         if let hit = candidateCache[cacheKey] { return hit }
         let py: (full: String, initials: String)
         if let cached = pinyinCache[title] {
@@ -724,7 +751,8 @@ final class TabSearchModel: ObservableObject {
             py = Pinyin.index(title)
             pinyinCache[title] = py
         }
-        let made = SearchCandidate(title: title, url: url, pinyin: py.full, initials: py.initials, identity: identity)
+        let made = SearchCandidate(title: title, url: url, pinyin: py.full, initials: py.initials,
+                                   identity: identity, name: name)
         // 上限按「标签 + 最近关闭 + 书签 + 应用 + 历史」的量级留余量；到了整个清掉重来，
         // 别让标题不断变化的标签把它越攒越大（一条带字节键约 0.5KB）
         if candidateCache.count > 10_000 { candidateCache.removeAll(keepingCapacity: true) }
@@ -785,14 +813,20 @@ final class TabSearchModel: ObservableObject {
 
         if let keep, let index = rows.firstIndex(where: { $0.id == keep }) {
             setCursor(index, source: .keyboard)
-        } else if trimmed.isEmpty, rows.count > 1,
-                  mode == .tabs || (mode == .all && allEmptyContent == .tabs) {
-            // 空查询时首行是当前标签，回车切到它等于没切；游标落到上一个标签，
-            // 和 ⌃⇥ 按一下的落点一致（用户 2026-09-26 点名要求）。
-            setCursor(1, source: .keyboard)
         } else {
-            setCursor(0, source: .keyboard)
+            setCursor(0, source: .keyboard, touched: false)
         }
+    }
+
+    /// 没输入时当前那一项放第二行（用户 2026-09-29 定的）：第一行就是上一个，选中它、⌘1 也给它；
+    /// ⌘↩ 拷当前网址这类操作按一下 ↓ 就到。浏览器内当前标签本来在第一行，等于和上一个对调；
+    /// 跨浏览器按时间合表，别的浏览器刚用过的标签可能排在它前面，一样挪到第二行。
+    private func placingCurrentSecond(_ rows: [SearchRow]) -> [SearchRow] {
+        guard rows.count > 1, let current = currentID,
+              let index = rows.firstIndex(where: { $0.id == current }), index != 1 else { return rows }
+        var rows = rows
+        rows.insert(rows.remove(at: index), at: 1)
+        return rows
     }
 
     /// 单独模式的行（也给「全部」没输入时按设置借用）。
@@ -804,6 +838,7 @@ final class TabSearchModel: ObservableObject {
         case .tabs:
             let liveCandidates = all.map { candidate(title: $0.tab.title, url: $0.tab.url) }
             next = TabSearch.rank(liveCandidates, query: query, boosts: boosts).map { .tab(all[$0]) }
+            if trimmed.isEmpty { next = placingCurrentSecond(next) }
         case .actions:
             // 对当前输入的操作。没输入就没有可操作的，列表留空、视图给提示。
             if !trimmed.isEmpty { next = actionRows(trimmed) }
@@ -864,9 +899,18 @@ final class TabSearchModel: ObservableObject {
     private func allRows(_ trimmed: String) -> [SearchRow] {
         // 没输入：按设置列一种内容（默认标签的 MRU），列表空着也行
         if trimmed.isEmpty {
-            guard let content = allEmptyContent else { return [] }
-            let rows = modeRows(content, "")
-            if let kind = SearchSectionKind(content: content), !rows.isEmpty {
+            let rows: [SearchRow]
+            let kind: SearchSectionKind?
+            if allEmptyContent == .recent {
+                rows = placingCurrentSecond(recent)
+                kind = .recent
+            } else if let content = allEmptyContent.mode {
+                rows = modeRows(content, "")
+                kind = SearchSectionKind(content: content)
+            } else {
+                return []
+            }
+            if let kind, !rows.isEmpty {
                 layout = [SectionSpec(kind: kind, count: rows.count)]
             }
             return rows
@@ -1039,7 +1083,7 @@ final class TabSearchModel: ObservableObject {
         // 访达注释拼进标题一起匹配（和显示名同档、也认拼音）：名字古怪的 App 靠它起个好认的名字
         candidate(title: [app.name, app.comment].compactMap { $0 }.joined(separator: " "),
                   url: [app.alternateName, app.bundleID].compactMap { $0 }.joined(separator: " "),
-                  identity: app.path)
+                  identity: app.path, name: app.name)
     }
 
     /// 某一行对当前输入的得分（「最佳匹配」跨段比分用）。
@@ -1383,6 +1427,7 @@ private struct TabSearchView: View {
             defaultOpenerIcon: model.openers.first.flatMap { model.icons["file:" + $0.path] },
             compact: model.actionTarget != nil,
             duplicates: { if case .tab(let item) = row { return model.duplicateCount(of: item) } else { return 1 } }(),
+            inRecent: model.showingRecent,
             onHover: { model.setCursor(index, source: .mouse) },
             onPick: { model.onPick?(row) },
             onClose: { model.onCloseTab?(row.id) })
@@ -1856,6 +1901,8 @@ private struct SearchRowView: View {
     var compact = false
     /// 活标签：同网址的一共几个（>1 行尾标「重复」）。
     var duplicates = 1
+    /// 在「最近使用」里（标签和 App 混排）：App 行第二行写「应用」而不是所在目录。
+    var inRecent = false
     let onHover: () -> Void
     let onPick: () -> Void
     let onClose: () -> Void
@@ -1883,6 +1930,10 @@ private struct SearchRowView: View {
         case .action(let a):     return a.subtitle
         case .folder(let f):     return (f.path as NSString).abbreviatingWithTildeInPath
         case .opener(_, let f):  return L10n.t("打开「\(f.name)」", "Open “\(f.name)”")
+        // 「最近使用」里和标签混排：第二行写「应用」说明是什么（写网址的是标签），不写所在目录——
+        // 运行中的 App 多半都在 /Applications，那行字等于没说（用户 2026-09-29 定的）
+        case .app(let a) where inRecent:
+            return [L10n.t("应用", "App"), a.comment].compactMap { $0 }.joined(separator: " · ")
         // 有访达注释就先写注释：搜注释命中时能看出是因为它
         case .app(let a):        return [a.comment, (a.path as NSString).deletingLastPathComponent]
                                      .compactMap { $0 }.joined(separator: " · ")
@@ -2057,7 +2108,14 @@ private struct SearchRowView: View {
                         .help(opener.name)
                 }
             case .app(let a):
-                if a.isRunning { RunningDot() }
+                // 「最近使用」里前台那个 App 和当前标签一样标「当前」
+                if isCurrent {
+                    Text(L10n.t("当前", "Current"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.30))
+                } else if a.isRunning {
+                    RunningDot()
+                }
             case .appCommand:
                 // 一级里它和 App 挨着、图标一样，写明是命令；二级里全是操作，不用写
                 if !compact {
@@ -2343,9 +2401,11 @@ final class TabSearchPanel {
 
     func show(items: [SwitcherItem], closed: [ClosedTab], bookmarks: [BookmarkInfo],
               folders: [FavoriteFolder] = [], apps: [AppEntry] = [], openers: [OpenerApp] = [],
-              siteSearches: [SiteSearch], modes: [SearchMode], allEmptyContent: SearchMode? = .tabs,
+              siteSearches: [SiteSearch], modes: [SearchMode], allEmptyContent: EmptyContent = .tabs,
+              recent: [SearchRow] = [],
               icons: [String: IconInfo],
-              global: Bool = false, showBrowserBadges: Bool = false, searchBrowser: String? = nil) {
+              global: Bool = false, showBrowserBadges: Bool = false, searchBrowser: String? = nil,
+              globalCurrent: String? = nil) {
         if shown { close() }
         isGlobal = global
         model.siteSearches = siteSearches
@@ -2353,6 +2413,8 @@ final class TabSearchPanel {
         model.modes = modes
         model.showBrowserBadges = showBrowserBadges
         model.searchBrowser = searchBrowser
+        model.isGlobal = global
+        model.globalCurrentID = global ? globalCurrent : nil
         // 此刻浏览器还是前台、还没有任何我们的窗口拿 key，读到的就是用户正在用的输入源
         let inputSource = Self.currentInputSourceID()
         let restore = lastSession.flatMap { session -> Session? in
@@ -2370,7 +2432,7 @@ final class TabSearchPanel {
         }
         model.icons = icons
         model.setItems(items, closed: closed, bookmarks: bookmarks,
-                       folders: folders, apps: apps, openers: openers, keepCursor: false)
+                       folders: folders, apps: apps, openers: openers, recent: recent, keepCursor: false)
         if let restore, let id = restore.cursorID,
            let index = model.rows.firstIndex(where: { $0.id == id }) {
             model.setCursor(index, source: .mouse)   // 不触发自动滚动，滚动位置下面单独还原
@@ -2397,17 +2459,17 @@ final class TabSearchPanel {
     /// `animated` 给关标签用：那一行淡出、下面的行滑上来。
     func update(items: [SwitcherItem], closed: [ClosedTab], bookmarks: [BookmarkInfo],
                 folders: [FavoriteFolder] = [], apps: [AppEntry] = [], openers: [OpenerApp] = [],
-                icons: [String: IconInfo], animated: Bool = false) {
+                recent: [SearchRow] = [], icons: [String: IconInfo], animated: Bool = false) {
         guard shown else { return }
         model.icons = icons
         if animated {
             withAnimation(.easeOut(duration: 0.15)) {
                 model.setItems(items, closed: closed, bookmarks: bookmarks,
-                               folders: folders, apps: apps, openers: openers)
+                               folders: folders, apps: apps, openers: openers, recent: recent)
             }
         } else {
             model.setItems(items, closed: closed, bookmarks: bookmarks,
-                           folders: folders, apps: apps, openers: openers)
+                           folders: folders, apps: apps, openers: openers, recent: recent)
         }
     }
 

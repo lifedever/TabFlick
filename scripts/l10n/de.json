@@ -51,8 +51,6 @@
  "Window": "Fenster",
  "Close Window": "Fenster schließen",
  "Minimize": "Im Dock ablegen",
- "Drag this icon into the Accessibility list": "Symbol in die Liste „Bedienungshilfen“ ziehen",
- "Authorize TabFlick": "TabFlick autorisieren",
  "What's New in TabFlick": "Neu in TabFlick",
  "Updated to {0}": "Aktualisiert auf {0}",
  "What changed": "Änderungen",
@@ -291,5 +289,9 @@
  "Couldn't run “{0}”": "„{0}“ konnte nicht ausgeführt werden",
  "Command": "Befehl",
  "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, {0} zu steuern.",
- "Lock Screen": "Bildschirm sperren"
+ "Lock Screen": "Bildschirm sperren",
+ "Recent browser tabs and apps": "Zuletzt verwendete Browser-Tabs und Apps",
+ "In any other app": "In anderen Apps",
+ "Recent": "Zuletzt verwendet",
+ "App": "App"
 }

@@ -51,8 +51,6 @@
  "Window": "ウインドウ",
  "Close Window": "ウインドウを閉じる",
  "Minimize": "しまう",
- "Drag this icon into the Accessibility list": "このアイコンを「アクセシビリティ」のリストにドラッグしてください",
- "Authorize TabFlick": "TabFlickを許可",
  "What's New in TabFlick": "TabFlickの更新内容",
  "Updated to {0}": "{0}にアップデートしました",
  "What changed": "このバージョンの変更点",
@@ -291,5 +289,9 @@
  "Couldn't run “{0}”": "「{0}」を実行できませんでした",
  "Command": "コマンド",
  "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "「システム設定 → プライバシーとセキュリティ → オートメーション」で TabFlick に {0} の制御を許可してください。",
- "Lock Screen": "画面をロック"
+ "Lock Screen": "画面をロック",
+ "Recent browser tabs and apps": "最近使ったブラウザのタブとアプリ",
+ "In any other app": "ほかのApp",
+ "Recent": "最近使った項目",
+ "App": "アプリ"
 }

@@ -148,12 +148,51 @@ struct TabSearchCheck {
                 print("✗ \(name)：期望 \(want)，实际 \(got)")
             }
         }
+        // 整条输入等于名字：+4（用户 2026-09-29：打「Firefox」时 App 该压过 firefox.com）
+        let appID = "/Applications/Firefox.app", siteID = "https://www.firefox.com/"
+        let exact: [SearchCandidate] = [
+            cand("Firefox: The fast, private browser", siteID),                       // 0 网页，标题开头
+            SearchCandidate(title: "Firefox 火狐", url: "org.mozilla.firefox",        // 1 App，标题拼了访达注释
+                            identity: appID, name: "Firefox"),
+            cand("Google Chrome Canary", "app:/Applications/Google Chrome Canary.app"), // 2
+            cand("Google Chrome", "app:/Applications/Google Chrome.app"),               // 3
+        ]
+        let exactCases: [(String, String, [String: Int], [Int])] = [
+            // 网页 8；App 8 + 4 = 12（名字是「Firefox」，不是带注释的标题）
+            ("全名命中压过标题开头", "firefox", [:], [1, 0]),
+            ("全名命中不分大小写", "FIREFOX", [:], [1, 0]),
+            ("只打前缀时同分按原顺序", "fire", [:], [0, 1]),
+            // 网页选过两次 +6 = 14 > 12：记忆多出两次才反超
+            ("网页多选两次才反超", "firefox", [siteID: 6], [0, 1]),
+            // App 也选过一次 12 + 3 = 15 > 14
+            ("两边都选过时差一次不反超", "firefox", [siteID: 6, appID: 3], [1, 0]),
+            // 3 = 8 + 6 + 4 = 18 > 2 = 14；多打的空格不影响
+            ("多词全名", "google chrome", [:], [3, 2]),
+            ("多词全名，词间多个空格", "google   chrome", [:], [3, 2]),
+            ("多出一个词就不是全名", "google chrome canary", [:], [2]),
+        ]
+        for (name, query, boosts, want) in exactCases {
+            let got = TabSearch.rank(exact, query: query, boosts: boosts)
+            if got != want {
+                failures += 1
+                print("✗ \(name)：期望 \(want)，实际 \(got)")
+            }
+        }
+        // 「Mozilla」和「firefox」一样长、只靠网址命中：只有网址那 2 分，长度相同不算全名
+        let sameLength = cand("Mozilla", siteID)
+        let exactScores: [(SearchCandidate, Int)] = [(exact[1], 12), (exact[0], 8), (sameLength, 2)]
+        for (c, want) in exactScores where TabSearch.score(c, query: "firefox") != want {
+            failures += 1
+            print("✗ 全名得分「\(c.title)」：期望 \(want)，实际 \(String(describing: TabSearch.score(c, query: "firefox")))")
+        }
+
         let py = Pinyin.index("掘金 - Swift 并发")
         if py.full != "juejin-swiftbingfa" || py.initials != "jj-swiftbf" {
             failures += 1
             print("✗ 拼音索引：\(py)")
         }
         let total = cases.count + urlCases.count + schemeCases.count + mdCases.count + 2 + extraCases.count
+            + exactCases.count + 1
         print(failures == 0
               ? "全部通过（\(total) 组）"
               : "\(failures) 项失败（共 \(total) 组）")

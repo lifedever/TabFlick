@@ -1,10 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// 辅助功能权限相关的小工具。
-///
-/// 引导界面在 `PermissionWindowController` —— 那里需要一个可拖拽的 app 图标
-/// 和常驻的等待状态，NSAlert 两样都做不到（它是模态的，弹着就没法轮询）。
+/// 辅助功能权限相关的小工具。引导流程在 `PermissionCoordinator`。
 enum PermissionGuide {
 
     static var isTrusted: Bool {

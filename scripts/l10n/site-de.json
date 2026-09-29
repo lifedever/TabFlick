@@ -30,7 +30,6 @@
  "Nothing found? Search the web.": "Nichts gefunden? Im Web suchen.",
  "With the browser's own engine, or site search like GitHub and YouTube.": "Mit der Suchmaschine des Browsers oder per Websitesuche, etwa auf GitHub und YouTube.",
  "From any app.": "Aus jeder App.",
- "Press ⌥Space to search every browser's tabs and jump straight there.": "⌥Space durchsucht die Tabs aller Browser und springt direkt zum Treffer.",
  "Web and site search": "Web- und Websitesuche",
  "Bookmarks with folder and address": "Lesezeichen mit Ordner und Adresse",
  "Folders: Enter opens, ⌘↩ picks an app": "Ordner: ↩ öffnet, ⌘↩ wählt eine App",
@@ -56,7 +55,6 @@
  "Download extension": "Erweiterung herunterladen",
  "Step by step": "Schritt für Schritt",
  "Allow Accessibility": "Bedienungshilfen erlauben",
- "On first launch a guide appears; drag the TabFlick icon into the Accessibility list and the app relaunches. A lit menu bar icon means it's connected.": "Beim ersten Start erscheint eine Anleitung: das TabFlick-Symbol in die Liste „Bedienungshilfen“ ziehen, danach startet die App neu. Ein helles Symbol in der Menüleiste bedeutet: verbunden.",
  "The extension asks for tabs, bookmarks, history, favicons and search; the data only goes to TabFlick on this Mac. After an update, allow any new permissions and reload the extension. Logs live at": "Die Erweiterung benötigt Zugriff auf Tabs, Lesezeichen, Verlauf, Favicons und Suche; die Daten gehen nur an TabFlick auf diesem Mac. Nach einem Update neue Berechtigungen erlauben und die Erweiterung neu laden. Protokolle liegen unter",
  ".": ".",
  "Why an app plus an extension": "Warum App plus Erweiterung",
@@ -100,5 +98,7 @@
  "Confirm the connection": "Verbindung prüfen",
  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "Aktualisieren: Nennen die Versionshinweise von TabFlick ein Update der Erweiterung, die neue ZIP-Datei herunterladen, den Ordnerinhalt ersetzen und in chrome://extensions auf der Karte von TabFlick Bridge auf „Neu laden“ (↻) klicken.",
  "← Back to home": "← Zur Startseite",
- "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "Solange TabFlick läuft, leuchtet das Symbol in der Menüleiste und das Menü zeigt den Browser mit der Anzahl der Tabs. ⌃ gedrückt halten und ⇥ drücken öffnet den Umschalter."
+ "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "Solange TabFlick läuft, leuchtet das Symbol in der Menüleiste und das Menü zeigt den Browser mit der Anzahl der Tabs. ⌃ gedrückt halten und ⇥ drücken öffnet den Umschalter.",
+ "Press ⌥Space to search every browser's tabs and jump straight there. With nothing typed it lists recent tabs and apps; Enter takes you back to what you were doing.": "⌥Space durchsucht die Tabs aller Browser und springt direkt zum Treffer. Ohne Eingabe zeigt es die zuletzt verwendeten Tabs und Apps; Return bringt dich zurück zu dem, was du gerade gemacht hast.",
+ "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.": "Beim ersten Start öffnen sich die Systemeinstellungen bei „Bedienungshilfen“, TabFlick steht schon in der Liste; einschalten, danach startet die App neu. Ein helles Symbol in der Menüleiste bedeutet: verbunden."
 }

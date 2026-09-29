@@ -26,14 +26,18 @@ struct SearchCandidate {
     let wordInitialsKey: [UInt8]
     /// 这一项是谁（记忆加分按它记账）：网页是网址，App / 文件夹是路径。默认同 url。
     let identity: String
+    /// 「整条输入等于名字」比的是它。默认就是标题；App 的标题拼了访达注释，这里单给名字本身。
+    let nameKey: [UInt8]
 
-    init(title: String, url: String, pinyin: String = "", initials: String = "", identity: String? = nil) {
+    init(title: String, url: String, pinyin: String = "", initials: String = "", identity: String? = nil,
+         name: String? = nil) {
         self.title = title
         self.url = url
         self.pinyin = pinyin
         self.initials = initials
         self.identity = identity ?? url
         titleKey = Self.key(title)
+        nameKey = name.map(Self.key) ?? titleKey
         urlKey = Self.key(url)
         pinyinKey = Array(pinyin.utf8)
         initialsKey = Array(initials.utf8)
@@ -73,7 +77,9 @@ enum TabSearch {
     /// 空查询 = 不过滤，原顺序（MRU）返回。
     ///
     /// 得分（每个词）：标题以词开头 8、标题含词 6、拼音（全拼或首字母）/ 英文词头含词 4、
-    /// 只有网址含词 2、模糊命中 1，各词累加，再加记忆分（`boosts`，按 identity 查）。
+    /// 只有网址含词 2、模糊命中 1，各词累加；整条输入等于名字（`nameKey`）再加 4 ——
+    /// 打「Firefox」时 App「Firefox」要压过标题以 Firefox 开头的网页（用户 2026-09-29 定的）；
+    /// 最后加记忆分（`boosts`，按 identity 查）。
     /// 同分保持原顺序 —— 原顺序就是 MRU，最近用过的排前面本身就是一种相关性。
     /// 拼音排在标题子串之后：用户能敲汉字时汉字命中一定更准。
     /// 返回的是**原数组下标**，调用方自己去取项，这样候选项不必带完整的标签结构。
@@ -160,7 +166,24 @@ enum TabSearch {
             }
         }
         // 模糊那一遍只收「至少一个词靠模糊才命中」的，严格命中的第一遍已经收过
-        return allowFuzzy && !usedFuzzy ? nil : total
+        if allowFuzzy { return usedFuzzy ? total : nil }
+        return equalsQuery(candidate.nameKey, terms) ? total + 4 : total
+    }
+
+    /// 名字是否就是整条输入（各词以单个空格相连）。逐段比，不拼新数组 —— 每个候选都要过一遍。
+    private nonisolated static func equalsQuery(_ key: [UInt8], _ terms: [Term]) -> Bool {
+        let length = terms.reduce(terms.count - 1) { $0 + $1.bytes.count }
+        guard key.count == length else { return false }
+        var i = key.startIndex
+        for (n, term) in terms.enumerated() {
+            if n > 0 {
+                guard key[i] == 0x20 else { return false }
+                i += 1
+            }
+            guard key[i..<(i + term.bytes.count)].elementsEqual(term.bytes) else { return false }
+            i += term.bytes.count
+        }
+        return true
     }
 
     /// 英文词头命中：词头串里连续出现（`pr` ⊂ merge-pull-request 的 `mpr`），或从第一个

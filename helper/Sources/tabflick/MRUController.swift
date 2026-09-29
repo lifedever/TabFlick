@@ -743,7 +743,7 @@ final class MRUController {
         search.modeHandler = { [weak self] mode in
             // 切到历史记录模式（或设成列历史的「全部」）时没输入也要拉一次最近访问的
             guard let self else { return }
-            if mode == .history || (mode == .all && self.settings.allEmptyContent == .history) {
+            if mode == .history || (mode == .all && self.searchEmptyContent == .history) {
                 self.scheduleHistoryQuery(self.search.model.query)
             }
         }
@@ -1010,7 +1010,7 @@ final class MRUController {
         let text = query.trimmingCharacters(in: .whitespaces)
         // 空输入只有两种情况要问：历史记录模式、或「全部」设成没输入时列历史
         let wantsRecent = search.currentMode == .history
-            || (search.currentMode == .all && settings.allEmptyContent == .history)
+            || (search.currentMode == .all && searchEmptyContent == .history)
         guard !text.isEmpty || wantsRecent else { search.setHistory([], for: ""); return }
         let timer = Timer(timeInterval: 0.12, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.sendHistoryQuery(text) }
@@ -1056,6 +1056,7 @@ final class MRUController {
         let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
         search.update(items: items, closed: closed, bookmarks: bookmarks,
                       folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
+                      recent: searchEmptyContent == .recent ? recentSearchRows(items: items) : [],
                       icons: iconMap(for: items, closed: closed), animated: animated)
     }
 
@@ -1076,6 +1077,7 @@ final class MRUController {
         //（再往前的命中了也就显示 globe，不值得每次打开都发几百个请求）
         icons.prefetch(closed.prefix(60).map(\.favIconUrl)) { [weak self] in self?.refreshOverlayImages() }
         let bookmarks = global ? globalSearchBookmarks : searchBookmarks
+        let recent = searchEmptyContent == .recent ? recentSearchRows(items: items) : []
         // 多浏览器时行尾用浏览器图标认归属；只有一个浏览器时和浏览器内没区别
         let browsers = Set(items.compactMap(\.browser))
         // App 清单：「全部」模式里应用排第一，所以每次打开都保证清单是新的
@@ -1089,15 +1091,90 @@ final class MRUController {
         search.show(items: items, closed: closed, bookmarks: bookmarks,
                     folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
                     siteSearches: settings.siteSearches, modes: settings.activeSearchModes,
-                    allEmptyContent: settings.allEmptyContent,
+                    allEmptyContent: searchEmptyContent, recent: recent,
                     icons: iconMap(for: items, closed: closed),
                     // 多个浏览器，或同一个浏览器开了多个 Profile（多条连接）都要标归属
                     global: global, showBrowserBadges: global && (browsers.count > 1 || clients.count > 1),
-                    searchBrowser: (global ? mostRecentClientID : activeClientID).map { effectiveBrowser(of: $0) })
+                    searchBrowser: (global ? mostRecentClientID : activeClientID).map { effectiveBrowser(of: $0) },
+                    globalCurrent: global ? frontBrowserCurrentItem(in: items) ?? frontAppRow(in: recent) : nil)
         setEventTapSearchPanelOpen(true)
         // 「全部」没输入时要列历史的话，打开就得去要一次最近访问的
-        if settings.allEmptyContent == .history { scheduleHistoryQuery("") }
+        if searchEmptyContent == .history { scheduleHistoryQuery("") }
         log("🔍 tab search opened\(global ? " (global)" : ""): \(items.count) tabs, \(closed.count) closed, \(bookmarks.count) bookmarks")
+    }
+
+    /// 跨浏览器搜索键在浏览器前台按下时，那个浏览器（多 Profile 时是前台那个）正显示的标签
+    /// 在合表里的 id：面板把它当「当前」放到第二行，和 ⌘E 一样（用户 2026-09-29 要的）。
+    /// 前台不是已连接的浏览器时 nil。打开面板时读一次前台 App，不在 event tap 热路径上。
+    private func frontBrowserCurrentItem(in items: [SwitcherItem]) -> String? {
+        guard let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+              clients.values.contains(where: { $0.browser == front }),
+              let id = activeClientID, clients[id]?.browser == front,
+              let tab = clients[id]?.tabs.first else { return nil }
+        return items.first { $0.clientID == id && $0.tab.id == tab.id }?.id
+    }
+
+    /// 前台是普通 App（不是浏览器）时，它在「最近使用」里那一行：和当前标签一样放第二行、标「当前」。
+    private func frontAppRow(in recent: [SearchRow]) -> String? {
+        guard let path = NSWorkspace.shared.frontmostApplication?.bundleURL?.standardizedFileURL.path else { return nil }
+        return recent.first { row in
+            if case .app(let app) = row { return app.path == path }
+            return false
+        }?.id
+    }
+
+    /// 这次打开的面板「全部」没输入时列什么：⌘E 和跨浏览器面板各有一项设置。
+    private var searchEmptyContent: EmptyContent {
+        searchIsGlobal ? settings.globalEmptyContent : settings.allEmptyContent
+    }
+
+    /// 「最近使用」的行：所有浏览器的标签 + 运行中的普通 App（菜单栏小工具、TabFlick 自己不算），
+    /// 按最近用过排（规则在 `RecentMix`）。只在设成「最近使用」时算，打开和刷新面板时各一次。
+    private func recentSearchRows(items: [SwitcherItem]) -> [SearchRow] {
+        let own = Bundle.main.bundleIdentifier
+        var apps: [AppEntry] = []
+        var appTimes: [RecentMix.App] = []
+        var seen = Set<String>()
+        for app in NSWorkspace.shared.runningApplications {
+            guard app.activationPolicy == .regular, app.bundleIdentifier != own,
+                  let url = app.bundleURL?.standardizedFileURL, !seen.contains(url.path) else { continue }
+            seen.insert(url.path)
+            // 装在扫描目录里的用清单那份（带访达注释、英文原名），装在别处的现造一个
+            let entry = appCatalog.entry(atPath: url.path)
+                ?? AppEntry(name: app.localizedName ?? url.deletingPathExtension().lastPathComponent,
+                            alternateName: nil, path: url.path, bundleID: app.bundleIdentifier)
+            // TabFlick 启动前就切过的 App 没有切换记录，退到 Spotlight 的上次打开、再退到启动时间
+            let used = [appCatalog.lastActivated(entry.usageKey), entry.lastUsed, app.launchDate]
+                .compactMap { $0 }.max()
+            apps.append(entry)
+            appTimes.append(RecentMix.App(usedAt: used.map { $0.timeIntervalSince1970 * 1000 },
+                                          bundleID: app.bundleIdentifier))
+        }
+        // 每个浏览器正显示的标签：多 Profile 时只算最近在前台的那条连接（没上报过焦点的都算）
+        var showingClients = Set<UUID>()
+        for ids in Dictionary(grouping: clients.keys, by: { effectiveBrowser(of: $0) }).values {
+            let focused = ids.compactMap { id in clients[id]?.focusedAt.map { (id, $0) } }
+            if ids.count > 1, let latest = focused.max(by: { $0.1 < $1.1 }) {
+                showingClients.insert(latest.0)
+            } else {
+                showingClients.formUnion(ids)
+            }
+        }
+        let tabs = items.map { item in
+            RecentMix.Tab(lastAccessed: item.tab.lastAccessed, browser: item.browser,
+                          showing: showingClients.contains(item.clientID)
+                              && clients[item.clientID]?.tabs.first?.id == item.tab.id)
+        }
+        var activated: [String: Double] = [:]
+        for browser in Set(items.compactMap(\.browser)) {
+            if let at = appCatalog.lastActivated(browser) { activated[browser] = at.timeIntervalSince1970 * 1000 }
+        }
+        return RecentMix.order(tabs: tabs, apps: appTimes, browserActivatedAt: activated).map { ref in
+            switch ref {
+            case .tab(let i): return .tab(items[i])
+            case .app(let i): return .app(apps[i])
+            }
+        }
     }
 
     /// 面板里选定了一项。面板已经关掉、键盘焦点回到了浏览器。
