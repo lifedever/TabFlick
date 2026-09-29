@@ -276,7 +276,6 @@
  "Duplicate": "重複",
  "Type a title, URL or pinyin to find tabs, bookmarks, history, folders and apps. Tab changes scope, ⌘↩ shows actions for the selected item, and ⌘1–{0} picks a row.": "輸入標題、網址或拼音，找瀏覽器分頁、書籤、歷史記錄、資料夾和應用程式。Tab 切換範圍，⌘↩ 展開對這一項的操作，按住 ⌘ 時用 1–{0} 直接選。",
  "{0} more tab(s) with this page are open; ⌘↩ closes them": "還開著 {0} 個同樣的頁面，⌘↩ 可以一起關掉",
- "Search the same thing again and what you picked last time comes first. Stored only on this Mac.": "同樣的輸入再搜尋時，上次選的那一項排在前面。只存在這台 Mac 上。",
  "Close other duplicate tabs": "關閉其餘重複的分頁",
  "Get Info": "取得資訊",
  "Couldn't open Get Info": "打不開資訊視窗",
@@ -293,5 +292,6 @@
  "Recent browser tabs and apps": "最近使用的瀏覽器分頁和 App",
  "In any other app": "其他 App 裡",
  "Recent": "最近使用",
- "App": "App"
+ "App": "App",
+ "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "同樣的輸入再搜尋時，上次選的那一項排在前面；「最近使用」按你切換 App 的記錄排。都只存在這台 Mac 上，清除時一起清掉。"
 }

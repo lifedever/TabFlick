@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SRC="$ROOT/helper/Sources/tabflick"
 WORK="$(mktemp -d)"
-cp "$SRC"/{TabSearchPanel,TabSearch,Pinyin,L10n,L10nTables,Log,AppSettings,LoginItem,FavoriteFolders,Toast,WindowShadow,AppCatalog,SearchMemory}.swift "$WORK/"
+cp "$SRC"/{TabSearchPanel,TabSearch,Pinyin,L10n,L10nTables,Log,AppSettings,LoginItem,FavoriteFolders,Toast,WindowShadow,AppCatalog,AppActivity,AppCommands,SearchMemory}.swift "$WORK/"
 sed -i '' 's/^private final class SearchPanel: NSPanel/final class SearchPanel: NSPanel/' "$WORK/TabSearchPanel.swift"
 cp "$ROOT/scripts/site-demo/main.swift" "$WORK/"
 python3 - "$SRC/OverlayPanel.swift" "$WORK/stubs.swift" <<'PY'
@@ -45,7 +45,7 @@ private let kGlassBackdrop = true
 open(sys.argv[2],'w').write(stubs)
 PY
 cd "$WORK"
-swiftc -O main.swift stubs.swift TabSearchPanel.swift TabSearch.swift Pinyin.swift L10n.swift L10nTables.swift Log.swift AppSettings.swift LoginItem.swift FavoriteFolders.swift Toast.swift WindowShadow.swift AppCatalog.swift SearchMemory.swift -o demo -sdk "$(xcrun --show-sdk-path --sdk macosx)"
+swiftc -O main.swift stubs.swift TabSearchPanel.swift TabSearch.swift Pinyin.swift L10n.swift L10nTables.swift Log.swift AppSettings.swift LoginItem.swift FavoriteFolders.swift Toast.swift WindowShadow.swift AppCatalog.swift AppActivity.swift AppCommands.swift SearchMemory.swift -o demo -sdk "$(xcrun --show-sdk-path --sdk macosx)"
 ./demo shot s1 dark all git >/dev/null; ./demo shot s2 light all >/dev/null; ./demo shot s3 dark actions swift >/dev/null
 ./demo shot s4 dark folders >/dev/null; ./demo shot s5 light bookmarks >/dev/null
 ./demo video dark >/dev/null

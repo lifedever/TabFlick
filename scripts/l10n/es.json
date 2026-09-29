@@ -276,7 +276,6 @@
  "Duplicate": "Duplicada",
  "Type a title, URL or pinyin to find tabs, bookmarks, history, folders and apps. Tab changes scope, ⌘↩ shows actions for the selected item, and ⌘1–{0} picks a row.": "Escribe un título, una URL o pinyin para encontrar pestañas, marcadores, historial, carpetas y apps. Tab cambia el ámbito, ⌘↩ muestra acciones para el elemento seleccionado y ⌘1–{0} elige una fila.",
  "{0} more tab(s) with this page are open; ⌘↩ closes them": "Hay {0} pestaña(s) más con esta página; ⌘↩ las cierra",
- "Search the same thing again and what you picked last time comes first. Stored only on this Mac.": "Si repites una búsqueda, lo que elegiste la última vez aparece primero. Solo se guarda en este Mac.",
  "Close other duplicate tabs": "Cerrar las demás pestañas duplicadas",
  "Get Info": "Obtener información",
  "Couldn't open Get Info": "No se pudo abrir la información",
@@ -293,5 +292,6 @@
  "Recent browser tabs and apps": "Pestañas del navegador y apps recientes",
  "In any other app": "En otras apps",
  "Recent": "Recientes",
- "App": "App"
+ "App": "App",
+ "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "Si repites una búsqueda, lo que elegiste la última vez aparece primero; Recientes se ordena por las apps a las que cambias. Ambos se guardan solo en este Mac y se borran juntos."
 }

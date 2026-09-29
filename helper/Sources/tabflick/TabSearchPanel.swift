@@ -388,6 +388,34 @@ final class TabSearchModel: ObservableObject {
     @Published private(set) var folders: [FavoriteFolder] = []
     @Published private(set) var openers: [OpenerApp] = []
     @Published private(set) var apps: [AppEntry] = []
+    /// 正在运行的 App（bundle id；没有 bundle id 的记 "path:" + 路径）。行上的「运行中」读它，
+    /// 不再每画一行都问一遍系统（按方向键移动时整张表重画，十几个 App 行就是十几次跨进程查询）。
+    /// 换数据时算一次，App 启动 / 退出时再算。
+    @Published private(set) var runningApps: Set<String> = []
+    private var launchObservers: [NSObjectProtocol] = []
+
+    init() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            launchObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshRunningApps() }
+            })
+        }
+    }
+
+    private func refreshRunningApps() {
+        var next = Set<String>()
+        for app in NSWorkspace.shared.runningApplications {
+            if let id = app.bundleIdentifier { next.insert(id) }
+            if let path = app.bundleURL?.path { next.insert("path:" + path) }
+        }
+        if next != runningApps { runningApps = next }
+    }
+
+    /// 同 `AppEntry.isRunning` 的口径（有 bundle id 按它，没有按路径），读缓存。
+    func isRunning(_ app: AppEntry) -> Bool {
+        app.bundleID.map { runningApps.contains($0) } ?? runningApps.contains("path:" + app.path)
+    }
     /// ⌘↩ 展开了某一行的「操作」（子状态，Esc 退回原列表）。列表换成对它能做的事，
     /// 输入框用来过滤操作；文件夹的「打开方式」也在这里（原来单独一个子状态）。
     @Published private(set) var actionTarget: SearchRow?
@@ -401,6 +429,8 @@ final class TabSearchModel: ObservableObject {
     var allEmptyContent: EmptyContent = .tabs
     /// 「最近使用」的行，已按最近用过排好（MRUController 合的表，见 `RecentMix`）。
     private var recent: [SearchRow] = []
+    /// 「最近使用」每一行离开它的时间（行 id → 毫秒）：行尾「x 前」写的是离开多久了。
+    private(set) var recentLeftAt: [String: Double] = [:]
     /// 列表此刻就是「最近使用」那张混排表。
     var showingRecent: Bool { layout.first?.kind == .recent }
     /// 「全部」模式下列表由哪几段拼成（按顺序），`sections` 据此切段。其他模式为空。
@@ -440,6 +470,7 @@ final class TabSearchModel: ObservableObject {
         // willSet 发出，那时窗口先缩、内容后换，肉眼就是闪一下；didSet 里值已落定，
         // 同步改窗口尺寸时 SwiftUI 会在同一次布局里换上新内容。
         didSet {
+            rowsAreAllTabs = !rows.isEmpty && rows.allSatisfy { if case .tab = $0 { return true } else { return false } }
             let height = contentHeight
             if height != lastContentHeight {
                 lastContentHeight = height
@@ -547,6 +578,13 @@ final class TabSearchModel: ObservableObject {
 
     /// 能不能在面板里关标签：只剩一个标签时不关 —— 关掉浏览器窗口就跟着没了。
     var canCloseTabs: Bool { all.count > 1 }
+    /// 鼠标此刻停在哪一行（行的悬停回调维护）。不发布：只给面板的右键拦截用，不驱动界面。
+    var pointerIndex: Int?
+    /// 列表里全是浏览器标签（「浏览器标签」模式、⌘E 没输入时）。
+    private var rowsAreAllTabs = false
+    /// 悬停出关标签的 ✕：只在全是标签的列表里给（用户 2026-09-29 定的）。「全部」有输入、「最近使用」
+    /// 这些混排的列表里，有的行有 ✕、有的没有，看着乱；那里关标签走 ⌘↩ 的「关闭」。
+    var showsCloseButtons: Bool { canCloseTabs && rowsAreAllTabs }
 
     var onPick: ((SearchRow) -> Void)?
     /// 要求关掉某个活标签（参数 item.id）。
@@ -619,11 +657,13 @@ final class TabSearchModel: ObservableObject {
     /// 模型里，继承它会落到刚切过去的那个标签，也就是现在的「当前」，毫无意义。
     func setItems(_ items: [SwitcherItem], closed: [ClosedTab], bookmarks: [BookmarkInfo],
                   folders: [FavoriteFolder] = [], apps: [AppEntry] = [], openers: [OpenerApp] = [],
-                  recent: [SearchRow] = [], keepCursor: Bool = true) {
+                  recent: [SearchRow] = [], recentLeftAt: [String: Double] = [:], keepCursor: Bool = true) {
         let keep = keepCursor && rows.indices.contains(cursor) ? rows[cursor].id : nil
         let previousIndex = cursor
         all = items
         self.recent = recent
+        self.recentLeftAt = recentLeftAt
+        refreshRunningApps()
         var counts: [String: Int] = [:]
         for item in items where item.tab.url.hasPrefix("http") { counts[Self.duplicateKey(item), default: 0] += 1 }
         duplicateCounts = counts
@@ -726,7 +766,7 @@ final class TabSearchModel: ObservableObject {
             // 内置命令排在「打开」后面：回车默认仍是打开，常用命令一个 ↓ 就到
             let builtins = AppCommands.commands(for: app.bundleID).map { SearchRow.appCommand($0, app) }
             return [.command(.primary, target)] + builtins
-                + ([.getInfo, .revealInFinder, .copyPath] + (app.isRunning ? [.quitApp] : [])).map { .command($0, target) }
+                + ([.getInfo, .revealInFinder, .copyPath] + (isRunning(app) ? [.quitApp] : [])).map { .command($0, target) }
         case .url, .action, .opener, .command, .appCommand:
             return []
         }
@@ -1419,7 +1459,7 @@ private struct TabSearchView: View {
             selected: index == model.cursor,
             isCurrent: row.id == model.currentID,
             quickKey: model.commandHeld && index < kSearchQuickPickCount ? index + 1 : nil,
-            closable: model.canCloseTabs,
+            closable: model.showsCloseButtons,
             browserBadge: model.showBrowserIcons ? model.badgeProvider?(row).browser : nil,
             profileBadge: model.showBrowserBadges ? model.badgeProvider?(row).profile : nil,
             searchBrowser: model.searchBrowser,
@@ -1428,9 +1468,20 @@ private struct TabSearchView: View {
             compact: model.actionTarget != nil,
             duplicates: { if case .tab(let item) = row { return model.duplicateCount(of: item) } else { return 1 } }(),
             inRecent: model.showingRecent,
+            recentAgo: model.showingRecent ? relativeTime(msEpoch: model.recentLeftAt[row.id]) : nil,
+            appRunning: { if case .app(let app) = row { return model.isRunning(app) } else { return false } }(),
             onHover: { model.setCursor(index, source: .mouse) },
             onPick: { model.onPick?(row) },
-            onClose: { model.onCloseTab?(row.id) })
+            onClose: { model.onCloseTab?(row.id) },
+            onSecondaryClick: {
+                // 右键 = 选中这一行再 ⌘↩（用户 2026-09-29 要的）；已经在操作列表里就不管
+                guard model.actionTarget == nil else { return }
+                model.setCursor(index, source: .mouse)
+                model.showActions()
+            },
+            onPointer: { inside in
+                if inside { model.pointerIndex = index } else if model.pointerIndex == index { model.pointerIndex = nil }
+            })
     }
 
     private var list: some View {
@@ -1903,9 +1954,26 @@ private struct SearchRowView: View {
     var duplicates = 1
     /// 在「最近使用」里（标签和 App 混排）：App 行第二行写「应用」而不是所在目录。
     var inRecent = false
+    /// 「最近使用」里行尾写的「x 前」：离开它多久了（不是切到它多久了）。
+    var recentAgo: String? = nil
+    /// App 行：正在运行（模型缓存的结果，见 `TabSearchModel.runningApps`）。
+    var appRunning = false
     let onHover: () -> Void
     let onPick: () -> Void
     let onClose: () -> Void
+    /// 右键（或按住 ⌃ 点）：进这一行的操作（二级）。
+    var onSecondaryClick: () -> Void = {}
+    /// 鼠标进 / 出这一行（给面板的右键拦截认「点的是哪一行」）。
+    var onPointer: (Bool) -> Void = { _ in }
+
+    /// 这次点击是右键或按住 ⌃ 点（看 `currentEvent`）。**只是兜底**：测试程序里这样能分出右键，
+    /// 真实面板里却不管用（列表在 ScrollView 里，原因没抓到），右键的正路是面板层的鼠标监视器。
+    /// 盖一层只接右键的 NSView 也试过，右键到不了它。
+    private static var isSecondaryClick: Bool {
+        guard let event = NSApp.currentEvent else { return false }
+        return event.type == .rightMouseDown || event.type == .rightMouseUp
+            || event.modifierFlags.contains(.control)
+    }
 
     @Environment(\.colorScheme) private var scheme
     @State private var lastMouseScreenPoint: CGPoint?
@@ -1932,8 +2000,10 @@ private struct SearchRowView: View {
         case .opener(_, let f):  return L10n.t("打开「\(f.name)」", "Open “\(f.name)”")
         // 「最近使用」里和标签混排：第二行写「应用」说明是什么（写网址的是标签），不写所在目录——
         // 运行中的 App 多半都在 /Applications，那行字等于没说（用户 2026-09-29 定的）
+        // 开着的写「运行中」（行尾统一写离开多久了，「运行中」挪到这里，用户 2026-09-29 选的）
         case .app(let a) where inRecent:
-            return [L10n.t("应用", "App"), a.comment].compactMap { $0 }.joined(separator: " · ")
+            return [L10n.t("应用", "App"), appRunning ? L10n.t("运行中", "Running") : nil, a.comment]
+                .compactMap { $0 }.joined(separator: " · ")
         // 有访达注释就先写注释：搜注释命中时能看出是因为它
         case .app(let a):        return [a.comment, (a.path as NSString).deletingLastPathComponent]
                                      .compactMap { $0 }.joined(separator: " · ")
@@ -1980,11 +2050,28 @@ private struct SearchRowView: View {
                     }
                 }
                 if !compact, !subtitle.isEmpty {
-                    Text(subtitle)
+                    if inRecent, case .app(let app) = row, appRunning {
+                        // 「最近使用」里开着的 App：「应用 · 运行中 ●」，灰点「·」分隔、绿点在最后（用户 2026-09-29 定的，
+                        // 试过「应用 · ● 运行中」两个点挨着、「应用 ● 运行中」都不要）。有访达注释放中间，绿点总在行尾。
+                        // 5pt 和小字的小写高度相当；不呼吸：这张表里开着的 App 有十来个，一起呼吸太抢眼
+                        HStack(spacing: 4) {
+                            Text([L10n.t("应用", "App"), app.comment, L10n.t("运行中", "Running")]
+                                .compactMap { $0 }.joined(separator: " · "))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Circle()
+                                .fill(Color(nsColor: .systemGreen))
+                                .frame(width: 5, height: 5)
+                        }
                         .font(.system(size: 11))
                         .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    } else {
+                        Text(subtitle)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2002,11 +2089,14 @@ private struct SearchRowView: View {
                                : Color.clear)
         }
         .contentShape(Rectangle())
-        .onTapGesture(perform: onPick)
+        // 右键正路在面板层拦（见 TabSearchPanel 的鼠标监视器）；鼠标还没被行认到时右键会漏到这里，
+        // 兜一下别让它当成左键打开那一项（之前右键 = 左键，直接打开了）
+        .onTapGesture { Self.isSecondaryClick ? onSecondaryClick() : onPick() }
         .onContinuousHover { phase in
             switch phase {
             case .active:
                 hovering = true
+                onPointer(true)
                 let point = NSEvent.mouseLocation
                 if let last = lastMouseScreenPoint,
                    abs(point.x - last.x) > 1 || abs(point.y - last.y) > 1 {
@@ -2015,6 +2105,7 @@ private struct SearchRowView: View {
                 lastMouseScreenPoint = point
             case .ended:
                 hovering = false
+                onPointer(false)
                 lastMouseScreenPoint = nil
             @unknown default:
                 break
@@ -2028,7 +2119,8 @@ private struct SearchRowView: View {
             Keycap(label: "⌘\(quickKey)")
         } else if hovering, isTab, closable {
             // hover 到活标签：行尾的时间换成 ✕，点它关掉这个标签，面板不关
-            Button(action: onClose) {
+            // 右键 ✕ 不关标签（之前会直接关掉），和右键行一样进操作
+            Button(action: { Self.isSecondaryClick ? onSecondaryClick() : onClose() }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Color.primary.opacity(0.7))
@@ -2053,6 +2145,12 @@ private struct SearchRowView: View {
                         .opacity(0.85)
                         .help(BrowserSupport.displayName(browserBadge))
                 }
+                // 「最近使用」右边那列要是一条时间线：多浏览器时标签也在图标后面写时间
+                if inRecent, let ago = isCurrent ? L10n.t("当前", "Current") : recentAgo {
+                    Text(ago)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.30))
+                }
             }
         } else {
             switch row {
@@ -2071,7 +2169,7 @@ private struct SearchRowView: View {
                     Text(L10n.t("当前", "Current"))
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
-                } else if let ago = item.tab.relativeLastAccessed {
+                } else if let ago = inRecent ? recentAgo : item.tab.relativeLastAccessed {
                     Text(ago)
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
@@ -2113,7 +2211,14 @@ private struct SearchRowView: View {
                     Text(L10n.t("当前", "Current"))
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
-                } else if a.isRunning {
+                } else if inRecent {
+                    // 「最近使用」里行尾统一写离开多久了；开没开着写在第二行
+                    if let recentAgo {
+                        Text(recentAgo)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.primary.opacity(0.30))
+                    }
+                } else if appRunning {
                     RunningDot()
                 }
             case .appCommand:
@@ -2402,7 +2507,7 @@ final class TabSearchPanel {
     func show(items: [SwitcherItem], closed: [ClosedTab], bookmarks: [BookmarkInfo],
               folders: [FavoriteFolder] = [], apps: [AppEntry] = [], openers: [OpenerApp] = [],
               siteSearches: [SiteSearch], modes: [SearchMode], allEmptyContent: EmptyContent = .tabs,
-              recent: [SearchRow] = [],
+              recent: [SearchRow] = [], recentLeftAt: [String: Double] = [:],
               icons: [String: IconInfo],
               global: Bool = false, showBrowserBadges: Bool = false, searchBrowser: String? = nil,
               globalCurrent: String? = nil) {
@@ -2432,7 +2537,8 @@ final class TabSearchPanel {
         }
         model.icons = icons
         model.setItems(items, closed: closed, bookmarks: bookmarks,
-                       folders: folders, apps: apps, openers: openers, recent: recent, keepCursor: false)
+                       folders: folders, apps: apps, openers: openers, recent: recent,
+                       recentLeftAt: recentLeftAt, keepCursor: false)
         if let restore, let id = restore.cursorID,
            let index = model.rows.firstIndex(where: { $0.id == id }) {
             model.setCursor(index, source: .mouse)   // 不触发自动滚动，滚动位置下面单独还原
@@ -2459,17 +2565,20 @@ final class TabSearchPanel {
     /// `animated` 给关标签用：那一行淡出、下面的行滑上来。
     func update(items: [SwitcherItem], closed: [ClosedTab], bookmarks: [BookmarkInfo],
                 folders: [FavoriteFolder] = [], apps: [AppEntry] = [], openers: [OpenerApp] = [],
-                recent: [SearchRow] = [], icons: [String: IconInfo], animated: Bool = false) {
+                recent: [SearchRow] = [], recentLeftAt: [String: Double] = [:],
+                icons: [String: IconInfo], animated: Bool = false) {
         guard shown else { return }
         model.icons = icons
         if animated {
             withAnimation(.easeOut(duration: 0.15)) {
                 model.setItems(items, closed: closed, bookmarks: bookmarks,
-                               folders: folders, apps: apps, openers: openers, recent: recent)
+                               folders: folders, apps: apps, openers: openers, recent: recent,
+                               recentLeftAt: recentLeftAt)
             }
         } else {
             model.setItems(items, closed: closed, bookmarks: bookmarks,
-                           folders: folders, apps: apps, openers: openers, recent: recent)
+                           folders: folders, apps: apps, openers: openers, recent: recent,
+                           recentLeftAt: recentLeftAt)
         }
     }
 
@@ -2621,6 +2730,20 @@ final class TabSearchPanel {
 
         // 拖动面板：输入框左边的放大镜、输入框里文字右边的空白（Raycast 的样子）。
         // 点在文字上照常放光标、拖选；双击放给输入框（选词）。
+        // 右键 / 按住 ⌃ 点一行：选中它、进它的操作（和 ⌘↩ 一样，用户 2026-09-29 要的）。在面板层拦，
+        // 不靠 SwiftUI 的点击回调：列表里右键会不会触发点击、触发时 currentEvent 还是不是它，都靠不住。
+        // 事件吞掉，免得右键被当成左键打开那一项；操作列表里右键什么都不做（也吞掉，免得执行了操作）。
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak self] event in
+            guard let self, event.window === self.panel,
+                  event.type == .rightMouseDown || event.modifierFlags.contains(.control) else { return event }
+            guard let index = self.model.pointerIndex, self.model.rows.indices.contains(index) else { return event }
+            if self.model.actionTarget == nil {
+                self.model.setCursor(index, source: .mouse)
+                self.model.showActions()
+            }
+            return nil
+        }!)
+
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self, event.window === self.panel, event.clickCount == 1,
                   self.isDragHandle(event.locationInWindow) else { return event }

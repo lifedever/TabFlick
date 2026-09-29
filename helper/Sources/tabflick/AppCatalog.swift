@@ -13,6 +13,9 @@ struct AppEntry: Identifiable, Equatable {
     /// 你在访达「简介 → 注释」里写的字（Spotlight 的 `kMDItemFinderComment`）。名字古怪的 App
     /// 靠它起个好认的名字，搜索和显示名同等对待（用户 2026-09-28 要的）。
     var comment: String? = nil
+    /// 菜单栏小工具这类没有 Dock 图标的（Info.plist 里 `LSUIElement` / `LSBackgroundOnly`）。
+    /// 「最近使用」不列它们：Spotlight 的「上次打开」会把刚退出的小工具带进来。
+    var isAgent = false
 
     var id: String { path }
     /// 最近切到时间的记账 key：有 bundle id 用它，没有用路径。
@@ -38,26 +41,151 @@ final class AppCatalog {
     private(set) var entries: [AppEntry] = []
     private var scannedAt: Date?
     private var scanning = false
-    /// 本次运行里每个 App 最近一次被切到前台的时间（key 见 `AppEntry.usageKey`）。
+    /// 每个 App 最近一次被切到前台的时间（key 见 `AppEntry.usageKey`）。
     /// Spotlight 的 lastUsed 只在启动 App 时更新，来回切换不算，这份补上「刚刚在用」。
+    /// 普通 App 的存盘（`AppActivity`），重启后读回来；其余的只在内存里。
     private var activatedAt: [String: Date] = [:]
+    /// 每个 App 最近一次从前台切走的时间（key 同上）：「最近使用」行尾的「x 前」是离开多久了，
+    /// 不是切到它多久了（10:00 切进微信聊到 10:29，10:30 看列表该写 1 分钟前，不是 30 分钟前）。
+    private var deactivatedAt: [String: Date] = [:]
+    /// 最近一周切到过前台的普通 App（key 同上）：退出之后「最近使用」还要列它，得记住它在哪、叫什么。
+    /// 装在扫描目录以外的 App 只能靠这份。
+    private var seen: [String: AppEntry] = [:]
     private var activationObserver: NSObjectProtocol?
+    private var deactivationObserver: NSObjectProtocol?
+    private let activityFile: URL?
+    private var saveTimer: Timer?
+    private var clearObserver: NSObjectProtocol?
+    /// 写盘排队：两次写各自丢到并发队列的话，慢的那次可能后落地、把新数据盖回旧的。
+    private static let writeQueue = DispatchQueue(label: "TabFlick.app-activity", qos: .utility)
 
-    init() {
+    init(activityFile: URL? = AppCatalog.defaultActivityFile) {
+        self.activityFile = activityFile
+        let now = Date().timeIntervalSince1970
+        for record in AppActivity.decode(activityFile.flatMap { try? Data(contentsOf: $0) }, now: now) {
+            activatedAt[record.key] = Date(timeIntervalSince1970: record.at)
+            if let left = record.left { deactivatedAt[record.key] = Date(timeIntervalSince1970: left) }
+            seen[record.key] = AppEntry(name: record.name, alternateName: nil, path: record.path,
+                                        bundleID: record.bundleID)
+        }
+        let own = Bundle.main.bundleIdentifier
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   let key = app.bundleIdentifier ?? app.bundleURL?.standardizedFileURL.path else { return }
-            MainActor.assumeIsolated { self?.activatedAt[key] = Date() }
+            let now = Date()
+            // 普通 App 才记下来（菜单栏小工具弹个窗也会切到前台）；TabFlick 自己开设置窗口时也是普通 App，不算
+            let entry = app.activationPolicy == .regular && app.bundleIdentifier != own ? app.bundleURL.map { url in
+                AppEntry(name: app.localizedName ?? url.deletingPathExtension().lastPathComponent,
+                         alternateName: nil, path: url.standardizedFileURL.path, bundleID: app.bundleIdentifier)
+            } : nil
+            MainActor.assumeIsolated {
+                self?.activatedAt[key] = now
+                if let entry {
+                    self?.seen[key] = entry
+                    self?.scheduleSave()
+                }
+            }
+        }
+        observeDeactivation()
+        // 设置 → 搜索面板 →「搜索记忆」的清除：切换记录也是使用记录，一起清
+        clearObserver = NotificationCenter.default.addObserver(forName: .clearUsageHistory, object: nil, queue: .main) {
+            [weak self] _ in MainActor.assumeIsolated { self?.clearActivity() }
         }
     }
 
-    /// 这次运行里最近一次切到前台的时间（key 见 `AppEntry.usageKey`）。
+    private func clearActivity() {
+        saveTimer?.invalidate()
+        activatedAt = [:]
+        deactivatedAt = [:]
+        seen = [:]
+        guard let file = activityFile else { return }
+        Self.writeQueue.async { try? FileManager.default.removeItem(at: file) }
+        log("🧹 app activity cleared")
+    }
+
+    /// 存下来的切换记录有几条（设置页判断「清除」能不能点；读一下小文件，只在打开那一页时调）。
+    nonisolated static func storedActivityCount() -> Int {
+        AppActivity.decode(try? Data(contentsOf: defaultActivityFile), now: Date().timeIntervalSince1970).count
+    }
+
+    /// 切走只记普通 App 的，和切到前台那份存在一起。
+    private func observeDeactivation() {
+        let own = Bundle.main.bundleIdentifier
+        deactivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didDeactivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.activationPolicy == .regular, app.bundleIdentifier != own,
+                  let key = app.bundleIdentifier ?? app.bundleURL?.standardizedFileURL.path else { return }
+            let now = Date()
+            MainActor.assumeIsolated {
+                self?.deactivatedAt[key] = now
+                self?.scheduleSave()
+            }
+        }
+    }
+
+    nonisolated static var defaultActivityFile: URL {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/TabFlick", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("app-activity.json")
+    }
+
+    /// 合并 2 秒再写（来回切 App 时不必每次都写）；写在后台线程，不碰主线程。
+    private func scheduleSave() {
+        guard let file = activityFile else { return }
+        saveTimer?.invalidate()
+        let timer = Timer(timeInterval: 2, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                let records = self.seen.compactMap { key, entry -> AppActivity.Record? in
+                    guard let at = self.activatedAt[key] else { return nil }
+                    return AppActivity.Record(key: key, at: at.timeIntervalSince1970, path: entry.path,
+                                              name: entry.name, bundleID: entry.bundleID,
+                                              left: self.deactivatedAt[key]?.timeIntervalSince1970)
+                }
+                let kept = AppActivity.pruned(records, now: Date().timeIntervalSince1970)
+                // 过期的顺手从内存里也清掉，免得常开几个月越攒越多
+                let keys = Set(kept.map(\.key))
+                self.seen = self.seen.filter { keys.contains($0.key) }
+                guard let data = try? JSONEncoder().encode(kept) else { return }
+                Self.writeQueue.async { try? data.write(to: file, options: .atomic) }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        saveTimer = timer
+    }
+
+    /// 最近一次切到前台的时间（key 见 `AppEntry.usageKey`；普通 App 重启后也在）。
     func lastActivated(_ key: String) -> Date? { activatedAt[key] }
+    /// 最近一次从前台切走的时间（只有普通 App）。
+    func lastDeactivated(_ key: String) -> Date? { deactivatedAt[key] }
 
     /// 扫描目录里的那一条（带访达注释、英文原名）；装在别处的没有。
     func entry(atPath path: String) -> AppEntry? { entries.first { $0.path == path } }
+
+    /// `since` 之后用过的 App（不管还在不在运行）：切到过前台的普通 App（存盘的，重启不丢），加上
+    /// Spotlight 记的上次打开在这之后的（装上 TabFlick 之前开过的只能靠它）。按路径去重，清单里有的用清单那份。
+    func used(since: Date) -> [AppEntry] {
+        var result: [String: AppEntry] = [:]
+        // 这期间删掉的 App 不列（回车打不开）；清单里的一分钟内扫过，不用再查
+        // 切进、切走取新的：切进去连用了一天多再退出的，也算这段时间里用过
+        for (key, entry) in seen
+        where max(activatedAt[key] ?? .distantPast, deactivatedAt[key] ?? .distantPast) >= since {
+            if let listed = self.entry(atPath: entry.path) {
+                result[entry.path] = listed
+            } else if FileManager.default.fileExists(atPath: entry.path) {
+                result[entry.path] = entry
+            }
+        }
+        for entry in entries where !entry.isAgent && (entry.lastUsed ?? .distantPast) >= since {
+            result[entry.path] = entry
+        }
+        return Array(result.values)
+    }
 
     /// 面板里的默认顺序（2026-09-27 用户定的）：运行中的在前，两组里都按最近用过排
     ///（最近切到前台和 Spotlight 记的上次打开，取新的那个），都没有记录的按名字。
@@ -131,15 +259,24 @@ final class AppCatalog {
                     ?? (bundle?.infoDictionary?["CFBundleName"] as? String)
                     ?? url.deletingPathExtension().lastPathComponent
                 let meta = metadata(of: url)
+                let info = bundle?.infoDictionary ?? [:]
                 result.append(AppEntry(name: name,
                                        alternateName: raw == name ? nil : raw,
                                        path: path,
                                        bundleID: bundle?.bundleIdentifier,
                                        lastUsed: meta.lastUsed,
-                                       comment: meta.comment))
+                                       comment: meta.comment,
+                                       isAgent: Self.flag(info["LSUIElement"]) || Self.flag(info["LSBackgroundOnly"])))
             }
         }
         return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// Info.plist 里的布尔值有写成 true、1、"1"、"YES" 的。
+    private nonisolated static func flag(_ value: Any?) -> Bool {
+        if let bool = value as? Bool { return bool }
+        if let string = value as? String { return ["1", "yes", "true"].contains(string.lowercased()) }
+        return false
     }
 
     /// Spotlight 记的上次打开时间。一个 App 一次元数据读取，后台线程上跑，百来个 App 几十毫秒。
@@ -151,4 +288,9 @@ final class AppCatalog {
         return (MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date,
                 comment?.isEmpty == false ? comment : nil)
     }
+}
+
+extension Notification.Name {
+    /// 设置里清除搜索记忆时一起清掉 App 切换记录。
+    static let clearUsageHistory = Notification.Name("TabFlickClearUsageHistory")
 }

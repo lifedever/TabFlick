@@ -99,7 +99,8 @@ MainActor.assumeIsolated {
 }
 let sites = [SiteSearch(name: "GitHub", template: "https://github.com/search?q=%s"),
              SiteSearch(name: "YouTube", template: "https://www.youtube.com/results?search_query=%s")]
-let catalog = MainActor.assumeIsolated { AppCatalog() }
+// 不给文件：样例程序别读写本机真实的 App 切换记录（app-activity.json）
+let catalog = MainActor.assumeIsolated { AppCatalog(activityFile: nil) }
 
 // ── 图标：favicon 走网络，本机文件走 NSWorkspace
 var iconCache: [String: IconInfo] = [:]
@@ -153,10 +154,27 @@ MainActor.assumeIsolated {
 }
 let modes: [SearchMode] = [.all, .tabs, .actions, .history, .bookmarks, .closed, .folders, .apps]
 
+// 「全部」没输入时的「最近使用」（跨浏览器面板的默认）：标签和本机装着的几个 App 交错，行尾是离开多久了
+@MainActor func recentDemo() -> (rows: [SearchRow], leftAt: [String: Double]) {
+    let apps = ["/Applications/Visual Studio Code.app", "/Applications/Xcode.app", "/System/Applications/Notes.app",
+                "/System/Applications/Mail.app", "/System/Applications/Calendar.app"]
+        .compactMap { catalog.entry(atPath: $0) }
+    var plan: [(SearchRow, Double)] = []
+    for (i, item) in tabs.enumerated() {
+        plan.append((.tab(item), max(item.tab.lastAccessed.map { (now - $0) / 60_000 } ?? 0, 0.3)))
+        if i < 3, i < apps.count { plan.append((.app(apps[i]), [1, 4, 7][i])) }
+    }
+    plan.sort { $0.1 < $1.1 }
+    var leftAt: [String: Double] = [:]
+    for (row, minutes) in plan { leftAt[row.id] = now - minutes * 60_000 }
+    return (plan.map(\.0), leftAt)
+}
+
 @MainActor func show() {
+    let recent = recentDemo()
     panel.show(items: tabs, closed: closed, bookmarks: bookmarks, folders: folders, apps: catalog.entries, openers: openers,
-               siteSearches: sites, modes: modes, allEmptyContent: .tabs, icons: [:], global: true,
-               showBrowserBadges: false, searchBrowser: "com.google.Chrome")
+               siteSearches: sites, modes: modes, allEmptyContent: .recent, recent: recent.rows, recentLeftAt: recent.leftAt,
+               icons: [:], global: true, showBrowserBadges: false, searchBrowser: "com.google.Chrome")
     panel.setHistory(history, for: query)
 }
 @MainActor func typeText(_ text: String) {

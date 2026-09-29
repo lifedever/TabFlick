@@ -872,15 +872,18 @@ final class MRUController {
 
     /// 跨浏览器搜索：所有浏览器的活标签合成一张按最近使用排的列表（不分组——搜索要的是
     /// 「找那个标签」，分组只会把命中的拆散），条目带归属浏览器，选定后先激活它再切。
+    /// 跨浏览器面板的标签：所有连接的合成一张表，按最近用过排。和「最近使用」同一套规则
+    /// （`RecentMix`，只是不混 App）：同一个 Profile 里照扩展的 MRU、正显示的标签跟着浏览器切到前台的
+    /// 时间走——原来纯按 `lastAccessed` 排，切窗口时 MRU 变了它不变，先后会颠倒（2026-09-29 改）。
     private var globalSearchItems: [SwitcherItem] {
         var items: [SwitcherItem] = []
         for (id, client) in clients {
             let browser = effectiveBrowser(of: id)
             items += client.tabs.map { SwitcherItem(tab: $0, browser: browser, clientID: id) }
         }
-        return items.sorted { a, b in
-            let x = a.tab.lastAccessed ?? 0, y = b.tab.lastAccessed ?? 0
-            return x != y ? x > y : a.id < b.id
+        let inputs = recentTabInputs(items: items)
+        return RecentMix.order(tabs: inputs.tabs, apps: [], browserActivatedAt: inputs.activated).compactMap {
+            if case .tab(let i) = $0.ref { return items[i] } else { return nil }
         }
     }
 
@@ -1054,9 +1057,11 @@ final class MRUController {
         let items = searchIsGlobal ? globalSearchItems : searchItems
         let closed = searchIsGlobal ? globalSearchClosed : searchClosed
         let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
+        let recent: (rows: [SearchRow], leftAt: [String: Double]) =
+            searchEmptyContent == .recent ? recentSearchRows(items: items) : ([], [:])
         search.update(items: items, closed: closed, bookmarks: bookmarks,
                       folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
-                      recent: searchEmptyContent == .recent ? recentSearchRows(items: items) : [],
+                      recent: recent.rows, recentLeftAt: recent.leftAt,
                       icons: iconMap(for: items, closed: closed), animated: animated)
     }
 
@@ -1077,7 +1082,8 @@ final class MRUController {
         //（再往前的命中了也就显示 globe，不值得每次打开都发几百个请求）
         icons.prefetch(closed.prefix(60).map(\.favIconUrl)) { [weak self] in self?.refreshOverlayImages() }
         let bookmarks = global ? globalSearchBookmarks : searchBookmarks
-        let recent = searchEmptyContent == .recent ? recentSearchRows(items: items) : []
+        let recent: (rows: [SearchRow], leftAt: [String: Double]) =
+            searchEmptyContent == .recent ? recentSearchRows(items: items) : ([], [:])
         // 多浏览器时行尾用浏览器图标认归属；只有一个浏览器时和浏览器内没区别
         let browsers = Set(items.compactMap(\.browser))
         // App 清单：「全部」模式里应用排第一，所以每次打开都保证清单是新的
@@ -1091,12 +1097,12 @@ final class MRUController {
         search.show(items: items, closed: closed, bookmarks: bookmarks,
                     folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
                     siteSearches: settings.siteSearches, modes: settings.activeSearchModes,
-                    allEmptyContent: searchEmptyContent, recent: recent,
+                    allEmptyContent: searchEmptyContent, recent: recent.rows, recentLeftAt: recent.leftAt,
                     icons: iconMap(for: items, closed: closed),
                     // 多个浏览器，或同一个浏览器开了多个 Profile（多条连接）都要标归属
                     global: global, showBrowserBadges: global && (browsers.count > 1 || clients.count > 1),
                     searchBrowser: (global ? mostRecentClientID : activeClientID).map { effectiveBrowser(of: $0) },
-                    globalCurrent: global ? frontBrowserCurrentItem(in: items) ?? frontAppRow(in: recent) : nil)
+                    globalCurrent: global ? frontBrowserCurrentItem(in: items) ?? frontAppRow(in: recent.rows) : nil)
         setEventTapSearchPanelOpen(true)
         // 「全部」没输入时要列历史的话，打开就得去要一次最近访问的
         if searchEmptyContent == .history { scheduleHistoryQuery("") }
@@ -1128,53 +1134,96 @@ final class MRUController {
         searchIsGlobal ? settings.globalEmptyContent : settings.allEmptyContent
     }
 
-    /// 「最近使用」的行：所有浏览器的标签 + 运行中的普通 App（菜单栏小工具、TabFlick 自己不算），
-    /// 按最近用过排（规则在 `RecentMix`）。只在设成「最近使用」时算，打开和刷新面板时各一次。
-    private func recentSearchRows(items: [SwitcherItem]) -> [SearchRow] {
+    /// 「最近使用」里已退出的 App 列多久内用过的（用户 2026-09-29 定的：用完就 ⌘Q 的 App 也要在；
+    /// 不设窗口的话所有用过的 App 都垫在后面，等于把「应用」模式搬进来）。
+    private static let recentQuitWindow: TimeInterval = 24 * 3600
+
+    /// 「最近使用」的行：所有浏览器的标签 + 运行中的普通 App + 24 小时内用过、已退出的 App
+    /// （菜单栏小工具、TabFlick 自己不算），按最近用过排（规则在 `RecentMix`）。
+    /// 只在设成「最近使用」时算，打开和刷新面板时各一次。
+    private func recentSearchRows(items: [SwitcherItem]) -> (rows: [SearchRow], leftAt: [String: Double]) {
         let own = Bundle.main.bundleIdentifier
         var apps: [AppEntry] = []
         var appTimes: [RecentMix.App] = []
         var seen = Set<String>()
+        func add(_ entry: AppEntry, extra: [Date?]) {
+            // 同一个 App 装了两份（路径不同、bundle id 相同）只列一次，运行中的那份先来
+            guard entry.bundleID != own, !seen.contains(entry.path),
+                  !(entry.bundleID.map { seen.contains("id:" + $0) } ?? false) else { return }
+            seen.insert(entry.path)
+            if let id = entry.bundleID { seen.insert("id:" + id) }
+            var entry = entry
+            // 装上这功能之前就切过的 App 没有切换记录，退到 Spotlight 的上次打开（运行中的再退到启动时间）
+            let used = ([appCatalog.lastActivated(entry.usageKey), entry.lastUsed] + extra).compactMap { $0 }.max()
+            apps.append(entry)
+            appTimes.append(RecentMix.App(usedAt: used.map { $0.timeIntervalSince1970 * 1000 },
+                                          leftAt: appCatalog.lastDeactivated(entry.usageKey)
+                                              .map { $0.timeIntervalSince1970 * 1000 },
+                                          bundleID: entry.bundleID))
+        }
         for app in NSWorkspace.shared.runningApplications {
-            guard app.activationPolicy == .regular, app.bundleIdentifier != own,
-                  let url = app.bundleURL?.standardizedFileURL, !seen.contains(url.path) else { continue }
-            seen.insert(url.path)
+            guard app.activationPolicy == .regular, let url = app.bundleURL?.standardizedFileURL else { continue }
             // 装在扫描目录里的用清单那份（带访达注释、英文原名），装在别处的现造一个
             let entry = appCatalog.entry(atPath: url.path)
                 ?? AppEntry(name: app.localizedName ?? url.deletingPathExtension().lastPathComponent,
                             alternateName: nil, path: url.path, bundleID: app.bundleIdentifier)
-            // TabFlick 启动前就切过的 App 没有切换记录，退到 Spotlight 的上次打开、再退到启动时间
-            let used = [appCatalog.lastActivated(entry.usageKey), entry.lastUsed, app.launchDate]
-                .compactMap { $0 }.max()
-            apps.append(entry)
-            appTimes.append(RecentMix.App(usedAt: used.map { $0.timeIntervalSince1970 * 1000 },
-                                          bundleID: app.bundleIdentifier))
+            add(entry, extra: [app.launchDate])
         }
-        // 每个浏览器正显示的标签：多 Profile 时只算最近在前台的那条连接（没上报过焦点的都算）
-        var showingClients = Set<UUID>()
+        for entry in appCatalog.used(since: Date().addingTimeInterval(-Self.recentQuitWindow)) {
+            add(entry, extra: [])
+        }
+
+        let inputs = recentTabInputs(items: items)
+        let (tabs, activated, deactivated) = (inputs.tabs, inputs.activated, inputs.deactivated)
+        var rows: [SearchRow] = []
+        var leftAt: [String: Double] = [:]
+        for entry in RecentMix.order(tabs: tabs, apps: appTimes, browserActivatedAt: activated,
+                                     browserDeactivatedAt: deactivated) {
+            let row: SearchRow
+            switch entry.ref {
+            case .tab(let i): row = .tab(items[i])
+            case .app(let i): row = .app(apps[i])
+            }
+            rows.append(row)
+            if let left = entry.leftAt { leftAt[row.id] = left }
+        }
+        return (rows, leftAt)
+    }
+
+    /// 标签交给 `RecentMix` 的输入：连接编号、标签在该连接 MRU 里的位置、是不是它那个浏览器最近在前台
+    /// 的 Profile，以及各浏览器切到前台 / 切走的时间。「最近使用」和跨浏览器标签表共用。
+    private func recentTabInputs(items: [SwitcherItem])
+        -> (tabs: [RecentMix.Tab], activated: [String: Double], deactivated: [String: Double]) {
+        // 连接编号，以及每条连接里标签在 MRU 中的位置（扩展的 MRU 在切窗口时也更新，比 lastAccessed 准）
+        let clientIndex = Dictionary(uniqueKeysWithValues: clients.keys.sorted { $0.uuidString < $1.uuidString }
+            .enumerated().map { ($1, $0) })
+        var mruIndex: [UUID: [Int: Int]] = [:]
+        for (id, client) in clients {
+            mruIndex[id] = Dictionary(client.tabs.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+        }
+        // 每个浏览器最近在前台的 Profile：多条连接时取最近上报焦点的那条（没上报过的都算）
+        var frontProfiles = Set<UUID>()
         for ids in Dictionary(grouping: clients.keys, by: { effectiveBrowser(of: $0) }).values {
             let focused = ids.compactMap { id in clients[id]?.focusedAt.map { (id, $0) } }
             if ids.count > 1, let latest = focused.max(by: { $0.1 < $1.1 }) {
-                showingClients.insert(latest.0)
+                frontProfiles.insert(latest.0)
             } else {
-                showingClients.formUnion(ids)
+                frontProfiles.formUnion(ids)
             }
         }
         let tabs = items.map { item in
             RecentMix.Tab(lastAccessed: item.tab.lastAccessed, browser: item.browser,
-                          showing: showingClients.contains(item.clientID)
-                              && clients[item.clientID]?.tabs.first?.id == item.tab.id)
+                          client: clientIndex[item.clientID] ?? 0,
+                          mruIndex: mruIndex[item.clientID]?[item.tab.id] ?? Int.max,
+                          frontProfile: frontProfiles.contains(item.clientID))
         }
         var activated: [String: Double] = [:]
+        var deactivated: [String: Double] = [:]
         for browser in Set(items.compactMap(\.browser)) {
             if let at = appCatalog.lastActivated(browser) { activated[browser] = at.timeIntervalSince1970 * 1000 }
+            if let at = appCatalog.lastDeactivated(browser) { deactivated[browser] = at.timeIntervalSince1970 * 1000 }
         }
-        return RecentMix.order(tabs: tabs, apps: appTimes, browserActivatedAt: activated).map { ref in
-            switch ref {
-            case .tab(let i): return .tab(items[i])
-            case .app(let i): return .app(apps[i])
-            }
-        }
+        return (tabs, activated, deactivated)
     }
 
     /// 面板里选定了一项。面板已经关掉、键盘焦点回到了浏览器。
