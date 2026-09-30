@@ -90,14 +90,30 @@ struct TabSearchCheck {
                 print("✗ url「\(c.query)」：期望 \(c.want ?? "nil")，实际 \(got ?? "nil")")
             }
         }
-        // 完整网址才算「带协议头」；裸域名、只有协议头、中间有空格的都不算
-        let schemeCases: [(String, Bool)] = [
-            ("http://www.baidu.com", true), ("HTTPS://github.com/x", true), ("  https://a.io  ", true),
-            ("github.com", false), ("http://", false), ("https://a b.com", false), ("张雪", false),
+        // 同站判定：输入像网址时，哪些开着的标签算「这个站已经开着」
+        let siteCases: [(query: String, url: String, want: Bool)] = [
+            ("linux.do", "https://linux.do/t/topic/12345", true),
+            ("linux.do", "https://linux.do/", true),
+            ("github.co", "https://github.com/lifedever", true),            // 打到一半
+            ("www.github.com", "https://github.com/", true),                 // www. 两边都不算
+            ("github.com", "https://www.github.com/x", true),
+            ("GitHub.com", "https://github.com/", true),                     // 不分大小写
+            ("https://github.com/lifedever", "https://github.com/lifedever/TabFlick", true),
+            ("github.com/lifedever", "https://github.com/other", false),     // 带路径只认那条路径下的
+            ("gist.github.com", "https://github.com/", false),               // 子域名是另一个站
+            ("github.com", "https://gist.github.com/", false),
+            ("linux.do", "https://www.google.com/search?q=linux.do", false), // 只在参数里出现不算
+            ("zh.wikipedia.org/wiki/陈平", "https://zh.wikipedia.org/wiki/%E9%99%88%E5%B9%B3", true),
+            ("192.168.1.1:8080", "http://192.168.1.1:8080/admin", true),
+            ("192.168.1.1:8080", "http://192.168.1.1/", false),
+            ("linux", "https://linux.do/", false),                           // 不像网址，没有前缀
         ]
-        for (query, want) in schemeCases where TabSearch.hasScheme(query) != want {
-            failures += 1
-            print("✗ hasScheme「\(query)」：期望 \(want)")
+        for c in siteCases {
+            let got = TabSearch.sitePrefix(forQuery: c.query).map { TabSearch.sameSite(c.url, as: $0) } ?? false
+            if got != c.want {
+                failures += 1
+                print("✗ sameSite「\(c.query)」vs \(c.url)：期望 \(c.want)")
+            }
         }
         // Markdown 链接：方括号 / 反斜杠转义、括号和空格编码、空标题用网址
         let mdCases: [(String, String, String)] = [
@@ -219,7 +235,7 @@ struct TabSearchCheck {
             failures += 1
             print("✗ 拼音索引：\(py)")
         }
-        let total = cases.count + urlCases.count + schemeCases.count + mdCases.count + 2 + extraCases.count
+        let total = cases.count + urlCases.count + siteCases.count + mdCases.count + 2 + extraCases.count
             + exactCases.count + 1 + abbrCases.count + 1
         print(failures == 0
               ? "全部通过（\(total) 组）"

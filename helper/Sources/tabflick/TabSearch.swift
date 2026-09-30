@@ -290,12 +290,27 @@ enum TabSearch {
         return false
     }
 
-    /// 输入是带协议头的完整网址（http:// 或 https://）。「全部」里据此把「操作」整段挪到
-    /// 最前：打全了协议头，来意就是打开它。github.com 这种裸域名不算 —— 多半是在找
-    /// 已经开着的那个标签，挪上去容易开出重复标签（2026-09-27 用户定的）。
-    nonisolated static func hasScheme(_ query: String) -> Bool {
-        let lower = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return (lower.hasPrefix("http://") || lower.hasPrefix("https://")) && urlCandidate(query) != nil
+    /// 输入像网址时，拿去和标签地址比「这个站是不是已经开着」的前缀；不像网址是 nil。
+    /// 「全部」里据此决定「在新标签打开」排哪（2026-09-30 用户定的）：没开着就排最前，
+    /// 开着就让那个标签排最前、回车切过去，免得开出重复标签。
+    nonisolated static func sitePrefix(forQuery query: String) -> String? {
+        urlCandidate(query).map(siteKey)
+    }
+
+    /// 标签地址是不是输入的那个站：去掉协议头和 www. 之后以输入开头。按前缀比，
+    /// 打到一半的 `github.co` 也认得出开着的 github.com，「在新标签打开」不会在打字途中
+    /// 先闪到第一行再掉下去；输入带路径时只认那条路径下的页面。
+    nonisolated static func sameSite(_ url: String, as prefix: String) -> Bool {
+        siteKey(url).hasPrefix(prefix)
+    }
+
+    /// 比较口径：解百分号编码（标签地址里的中文是编码过的，输入的是原文）、不分大小写、
+    /// 去掉协议头和 www.。
+    private nonisolated static func siteKey(_ url: String) -> String {
+        var key = Substring((url.removingPercentEncoding ?? url).lowercased())
+        if let scheme = key.range(of: "://") { key = key[scheme.upperBound...] }
+        if key.hasPrefix("www.") { key = key.dropFirst(4) }
+        return String(key)
     }
 
     /// `[标题](网址)`。标题里的 \ [ ] 转义，网址里的括号和空格编码 —— 否则标题带方括号、

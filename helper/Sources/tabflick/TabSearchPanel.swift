@@ -20,7 +20,7 @@ struct SearchSection {
 
 /// 「全部」里一段装的是什么：决定分组头的名字，以及截断后 Tab 跳去哪个模式。
 enum SearchSectionKind: String {
-    case top, ops, apps, folders, tabs, closed, bookmarks, history, recent
+    case top, ops, apps, folders, tabs, closed, bookmarks, history, search, recent
 
     var title: String {
         switch self {
@@ -33,13 +33,14 @@ enum SearchSectionKind: String {
         case .closed:    return L10n.t("最近关闭", "Recently closed")
         case .bookmarks: return L10n.t("浏览器书签", "Browser bookmarks")
         case .history:   return L10n.t("历史记录", "History")
+        case .search:    return L10n.t("搜索", "Search")
         }
     }
 
     var mode: SearchMode? {
         switch self {
-        case .top, .recent: return nil
-        case .ops:       return .actions
+        case .top, .ops, .recent: return nil
+        case .search:    return .actions
         case .apps:      return .apps
         case .folders:   return .folders
         case .tabs:      return .tabs
@@ -117,6 +118,7 @@ enum SearchRow: Identifiable {
         case .closed(let entry): return entry.favIconUrl
         case .bookmark(let bm):  return Self.siteKey(bm.url)
         case .history(let h):    return Self.siteKey(h.url)
+        case .url(let url):      return Self.siteKey(url)
         case .action(.siteSearch(let site, _)): return "site:" + site.host
         case .folder(let f):     return "file:" + f.path
         case .opener(let o, _):  return "file:" + o.path
@@ -125,15 +127,16 @@ enum SearchRow: Identifiable {
         case .appCommand(_, let a): return a.map { "file:" + $0.path } ?? ""
         case .window(let w):     return "file:" + w.iconPath
         case .command(.primary, let target): return target.favIconUrl
-        case .url, .action, .command: return ""
+        case .action, .command: return ""
         }
     }
 
-    /// 需要向扩展要图标时用的页面地址（书签 / 历史 / 站内搜索）。
+    /// 需要向扩展要图标时用的页面地址（书签 / 历史 / 网址直达 / 站内搜索）。
     var faviconPageURL: String? {
         switch self {
         case .bookmark(let bm): return bm.url
         case .history(let h):   return h.url
+        case .url(let url):     return url
         case .action(.siteSearch(let site, _)): return "https://" + site.host + "/"
         case .command(.primary, let target): return target.faviconPageURL
         default:                return nil
@@ -979,7 +982,19 @@ final class TabSearchModel: ObservableObject {
         var appHits = appAndWindowHits(trimmed)
         var builtinHits = commandHits(trimmed)
         let liveCandidates = all.map { candidate(title: $0.tab.title, url: $0.tab.url) }
-        var liveHits = TabSearch.rank(liveCandidates, query: trimmed, boosts: boosts).map { SearchRow.tab(all[$0]) }
+        var liveOrder = TabSearch.rank(liveCandidates, query: trimmed, boosts: boosts)
+        // 输入像网址：开着的同站标签提到标签段最前（回车切过去），没有就让「在新标签打开」排最前
+        let sitePrefix = TabSearch.sitePrefix(forQuery: trimmed)
+        var siteOpen = false
+        if let sitePrefix {
+            let onSite = liveOrder.filter { TabSearch.sameSite(all[$0].tab.url, as: sitePrefix) }
+            siteOpen = !onSite.isEmpty
+            if siteOpen {
+                let first = Set(onSite)
+                liveOrder = onSite + liveOrder.filter { !first.contains($0) }
+            }
+        }
+        var liveHits = liveOrder.map { SearchRow.tab(all[$0]) }
 
         // 已关闭：按关闭时间倒序；和活标签同网址的不列（它已经开着，切过去就是）
         let liveURLs = Set(all.map(\.tab.url))
@@ -1018,9 +1033,9 @@ final class TabSearchModel: ObservableObject {
         // 标题完全命中的书签会排在一串只有网址沾边的标签后面。各段段首（段内已排好）
         // 比一次分，最高的那条比现在排最前的那条分高，就单独提到最前；同分不动。
         // 只比段首：历史段按最近访问排，拿它段里第 5 条出来会让人看不懂为什么是它。
-        // 输入完整网址时不挑（「操作」段在最前，回车就是打开它）。
+        // 输入像网址时不挑：回车落点已经定了（开着的同站标签，或「在新标签打开」）。
         var topHit: SearchRow?
-        if !TabSearch.hasScheme(trimmed) {
+        if sitePrefix == nil {
             let leaders = [appHits, liveHits, closedHits, bookmarkHits, historyHits].enumerated()
                 .compactMap { group, rows -> (group: Int, row: SearchRow, score: Int)? in
                     guard let row = rows.first, let score = score(of: row, query: trimmed) else { return nil }
@@ -1054,6 +1069,16 @@ final class TabSearchModel: ObservableObject {
                                      hidden: countKnown ? hidden : 0, moreUnknown: !countKnown && hidden > 0))
             body += shown
         }
+        // 「操作」段只有「在新标签打开」，输入像网址才有（2026-09-30 用户定的）：同站没开着 → 最前，
+        // 回车直接开（常去的站历史里一串帖子，垫底的话回车开的是某个帖子不是首页）；同站开着 →
+        // 紧跟标签段，标签在前、回车切过去不开重复的，⌘ 数字还够得着新开。
+        func placeURL() {
+            guard let url = TabSearch.urlCandidate(trimmed) else { return }
+            specs.append(SectionSpec(kind: .ops, count: 1))
+            body.append(.url(url))
+        }
+        if sitePrefix != nil && !siteOpen { placeURL() }
+
         if let topHit {
             // 被提到最前的是 App 的话，它的命令跟着过去（「amp」→ Amphetamine 和它的两条命令一起在最前）
             let attached = attach(builtinHits, to: [topHit])
@@ -1070,24 +1095,20 @@ final class TabSearchModel: ObservableObject {
             body += appRows
         }
         cut(.tabs, liveHits, Self.tabLimit)
+        if siteOpen { placeURL() }
         cut(.closed, closedHits, Self.closedLimit)
         cut(.bookmarks, bookmarkHits, Self.bookmarkLimit)
         // 历史只拿到扩展回的前 20 条，截掉的「还有几条」不是真数，只说「更多」
         cut(.history, historyHits, Self.historyLimit, countKnown: false)
+        // 「搜索」段：搜索引擎 + 站内搜索，有输入就一直在、永远垫底（2026-09-27 用户截图：搜「张雪」
+        // 只命中一条历史，想上网搜却没有入口）。输入像网址时也不跟着「在新标签打开」上去 ——
+        // 域名没必要搜（2026-09-30 用户截图）。一条都没命中时只有这一段。
+        let searches = actionRows(trimmed)
+        specs.append(SectionSpec(kind: .search, count: searches.count))
+        body += searches
 
-        // 「操作」段：像网址就先给「在新标签打开」，再是搜索引擎、站内搜索。有输入就一直在
-        //（2026-09-27 用户截图：搜「张雪」只命中一条历史，想上网搜却没有入口）。
-        // 位置：输入带协议头的完整网址时整段挪到最前（来意就是打开它，回车直接开）；
-        // 其余垫底，回车给命中的第一条，想去网上搜往下走。一条都没命中时只有这一段。
-        let urlRow = TabSearch.urlCandidate(trimmed).map { SearchRow.url($0) }
-        let ops = (urlRow.map { [$0] } ?? []) + actionRows(trimmed)
-        let opsSpec = SectionSpec(kind: .ops, count: ops.count)
-        if body.isEmpty || TabSearch.hasScheme(trimmed) {
-            layout = [opsSpec] + specs
-            return ops + body
-        }
-        layout = specs + [opsSpec]
-        return body + ops
+        layout = specs
+        return body
     }
 
     /// 有输入时命中的内置命令，按得分排。只列装了的 App 的（同一个 bundle id 装了两份只算第一份）。
@@ -1885,10 +1906,6 @@ private struct SearchRowIcon: View {
                     .font(.system(size: symbolSize, weight: .medium))
                     .foregroundStyle(command.isDestructive ? Color(nsColor: .systemRed) : Color.primary.opacity(0.7))
             }
-        case .url:
-            Image(systemName: "arrow.up.right.square")
-                .font(.system(size: symbolSize + 2, weight: .regular))
-                .foregroundStyle(.secondary)
         case .bookmark, .history:
             // 图标由 helper 按域名向扩展要（Chrome 缓存的），还没到就先用类型图标占位
             if let icon {
@@ -1935,7 +1952,8 @@ private struct SearchRowIcon: View {
                     .font(.system(size: symbolSize, weight: .medium))
                     .foregroundStyle(.secondary)
             }
-        case .tab, .closed:
+        case .tab, .closed, .url:
+            // 网址直达画要打开的那个站的图标（和书签同一条路取；用户 2026-09-30 嫌原来的箭头方块丑）
             if let icon {
                 Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
                     .frame(width: imageSide, height: imageSide)
