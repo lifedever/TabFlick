@@ -1059,10 +1059,39 @@ final class MRUController {
         let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
         let recent: (rows: [SearchRow], leftAt: [String: Double]) =
             searchEmptyContent == .recent ? recentSearchRows(items: items) : ([], [:])
+        // 在小程序里按的 ⌥Space：前台 App 是微信（小程序在系统眼里不是独立 App），窗口读回来之后才知道
+        // 最上面的是小程序，这时最前那个小程序才是「当前」
+        if searchIsGlobal, searchFrontBundle == WeChatWindows.bundleID, wechatMiniOnTop,
+           let front = wechatWindows.filter({ $0.kind == .miniProgram }).min(by: { $0.order < $1.order }) {
+            search.model.globalCurrentID = SearchRow.window(front).id
+        }
         search.update(items: items, closed: closed, bookmarks: bookmarks,
                       folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
-                      recent: recent.rows, recentLeftAt: recent.leftAt,
+                      windows: wechatWindows, recent: recent.rows, recentLeftAt: recent.leftAt,
                       icons: iconMap(for: items, closed: closed), animated: animated)
+    }
+
+    /// 微信里开着的小程序、单独弹出的聊天窗口（`WeChatWindows`），打开面板时读一次。
+    private var wechatWindows: [AppWindow] = []
+    /// 屏幕上微信最上面的是小程序（最后在用的是小程序，不是主窗口）。
+    private var wechatMiniOnTop = false
+    /// 打开面板那一刻的前台 App（在小程序里按的键要认出「当前」是哪个小程序）。
+    private var searchFrontBundle: String?
+
+    /// 读微信的窗口：跨进程，放后台线程，读完刷新面板。先清空：上一轮的可能已经关了，回车会跳个空。
+    private func refreshWeChatWindows() {
+        wechatWindows = []
+        wechatMiniOnTop = false
+        guard let target = WeChatWindows.target() else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let snapshot = WeChatWindows.read(target)
+            Task { @MainActor [weak self] in
+                guard let self, !snapshot.windows.isEmpty else { return }
+                self.wechatWindows = snapshot.windows
+                self.wechatMiniOnTop = snapshot.miniProgramOnTop
+                self.refreshSearch()
+            }
+        }
     }
 
     /// 搜索快捷键：开着就关，关着就开。cycling 中不开 —— 两个浮层叠一起没法用。
@@ -1075,6 +1104,8 @@ final class MRUController {
         }
         guard !cycling else { return }
         searchIsGlobal = global
+        searchFrontBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        refreshWeChatWindows()
         let items = global ? globalSearchItems : searchItems
         guard !items.isEmpty else { return }
         let closed = global ? globalSearchClosed : searchClosed
@@ -1097,7 +1128,8 @@ final class MRUController {
         search.show(items: items, closed: closed, bookmarks: bookmarks,
                     folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
                     siteSearches: settings.siteSearches, modes: settings.activeSearchModes,
-                    allEmptyContent: searchEmptyContent, recent: recent.rows, recentLeftAt: recent.leftAt,
+                    allEmptyContent: searchEmptyContent, windows: wechatWindows,
+                    recent: recent.rows, recentLeftAt: recent.leftAt,
                     icons: iconMap(for: items, closed: closed),
                     // 多个浏览器，或同一个浏览器开了多个 Profile（多条连接）都要标归属
                     global: global, showBrowserBadges: global && (browsers.count > 1 || clients.count > 1),
@@ -1161,22 +1193,36 @@ final class MRUController {
                                               .map { $0.timeIntervalSince1970 * 1000 },
                                           bundleID: entry.bundleID))
         }
+        // 小程序开着的话，「小程序」进程那一行不列：它的时间从不更新（点小程序切到前台的是微信），
+        // 下面换成各个小程序、跟着微信排
+        let hasMiniPrograms = wechatWindows.contains { $0.kind == .miniProgram }
         for app in NSWorkspace.shared.runningApplications {
-            guard app.activationPolicy == .regular, let url = app.bundleURL?.standardizedFileURL else { continue }
+            guard app.activationPolicy == .regular, let url = app.bundleURL?.standardizedFileURL,
+                  !(hasMiniPrograms && app.bundleIdentifier == WeChatWindows.miniProgramBundleID) else { continue }
             // 装在扫描目录里的用清单那份（带访达注释、英文原名），装在别处的现造一个
             let entry = appCatalog.entry(atPath: url.path)
                 ?? AppEntry(name: app.localizedName ?? url.deletingPathExtension().lastPathComponent,
                             alternateName: nil, path: url.path, bundleID: app.bundleIdentifier)
             add(entry, extra: [app.launchDate])
         }
-        for entry in appCatalog.used(since: Date().addingTimeInterval(-Self.recentQuitWindow)) {
+        for entry in appCatalog.used(since: Date().addingTimeInterval(-Self.recentQuitWindow))
+        where !(hasMiniPrograms && entry.bundleID == WeChatWindows.miniProgramBundleID) {
             add(entry, extra: [])
         }
 
         let inputs = recentTabInputs(items: items)
         let (tabs, activated, deactivated) = (inputs.tabs, inputs.activated, inputs.deactivated)
+        // 微信的窗口都跟着「微信」那一行排、用它的时间：小程序在系统眼里不是独立 App，点它切到前台的是
+        // 微信（见 WeChatWindows.read）；微信在前台时在窗口之间切来切去没有通知，拿不到各自的时间。
+        // 小程序之间按窗口前后（跟着点击走，实测），最上面是小程序就排在「微信」前面，聊天窗口垫后
+        let miniPrograms = wechatWindows.filter { $0.kind == .miniProgram }.sorted { $0.order < $1.order }
+        let otherWindows = wechatWindows.filter { $0.kind != .miniProgram }.sorted { $0.order < $1.order }
         var rows: [SearchRow] = []
         var leftAt: [String: Double] = [:]
+        func append(_ row: SearchRow, _ left: Double?) {
+            rows.append(row)
+            if let left { leftAt[row.id] = left }
+        }
         for entry in RecentMix.order(tabs: tabs, apps: appTimes, browserActivatedAt: activated,
                                      browserDeactivatedAt: deactivated) {
             let row: SearchRow
@@ -1184,8 +1230,14 @@ final class MRUController {
             case .tab(let i): row = .tab(items[i])
             case .app(let i): row = .app(apps[i])
             }
-            rows.append(row)
-            if let left = entry.leftAt { leftAt[row.id] = left }
+            guard case .app(let app) = row, app.bundleID == WeChatWindows.bundleID else {
+                append(row, entry.leftAt)
+                continue
+            }
+            if wechatMiniOnTop { miniPrograms.forEach { append(.window($0), entry.leftAt) } }
+            append(row, entry.leftAt)
+            if !wechatMiniOnTop { miniPrograms.forEach { append(.window($0), entry.leftAt) } }
+            otherWindows.forEach { append(.window($0), entry.leftAt) }
         }
         return (rows, leftAt)
     }
@@ -1274,6 +1326,10 @@ final class MRUController {
         case .appCommand(let command, let app):
             log("🔍 app command → \(app?.name ?? "system"): \(command.id)")
             AppCommands.run(command, appName: app?.name)
+        case .window(let window):
+            // 窗口标题是聊天名 / 小程序名，日志里只写类型，不写标题
+            log("🔍 raise window → \(window.kind.rawValue)")
+            WeChatWindows.raise(window)
         case .app(let app):
             log("🔍 launch app → \(app.name)")
             NSWorkspace.shared.openApplication(at: app.url, configuration: NSWorkspace.OpenConfiguration()) { _, error in

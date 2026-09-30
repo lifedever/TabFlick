@@ -293,5 +293,9 @@
  "In any other app": "ほかのApp",
  "Recent": "最近使った項目",
  "App": "アプリ",
- "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "同じ検索をすると、前回選んだ項目が上に来ます。「最近使った項目」はAppを切り替えた記録の順に並びます。どちらもこのMacにだけ保存され、消去すると両方消えます。"
+ "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "同じ検索をすると、前回選んだ項目が上に来ます。「最近使った項目」はAppを切り替えた記録の順に並びます。どちらもこのMacにだけ保存され、消去すると両方消えます。",
+ "Mini program": "ミニプログラム",
+ "WeChat chat": "WeChatのチャット",
+ "WeChat": "WeChat",
+ "Switch to window": "ウインドウに切り替え"
 }

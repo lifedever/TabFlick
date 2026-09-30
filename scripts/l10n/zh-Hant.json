@@ -293,5 +293,9 @@
  "In any other app": "其他 App 裡",
  "Recent": "最近使用",
  "App": "App",
- "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "同樣的輸入再搜尋時，上次選的那一項排在前面；「最近使用」按你切換 App 的記錄排。都只存在這台 Mac 上，清除時一起清掉。"
+ "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "同樣的輸入再搜尋時，上次選的那一項排在前面；「最近使用」按你切換 App 的記錄排。都只存在這台 Mac 上，清除時一起清掉。",
+ "Mini program": "小程式",
+ "WeChat chat": "微信聊天",
+ "WeChat": "微信",
+ "Switch to window": "切換到視窗"
 }

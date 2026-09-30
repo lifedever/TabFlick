@@ -186,13 +186,41 @@ struct TabSearchCheck {
             print("✗ 全名得分「\(c.title)」：期望 \(want)，实际 \(String(describing: TabSearch.score(c, query: "firefox")))")
         }
 
+        // 缩写（只给 App）：首字母是某个单词的开头、其余字母在同一个单词里按顺序出现，3 分（用户 2026-09-29：tg 搜不到 Telegram）
+        let abbr: [SearchCandidate] = [
+            SearchCandidate(title: "Telegram", url: "ru.keepcoder.Telegram", abbreviations: true),         // 0
+            SearchCandidate(title: "Things 3", url: "com.culturedcode.ThingsMac", abbreviations: true),     // 1
+            cand("Telegram Web", "https://web.telegram.org/"),                                            // 2 网页，不认缩写
+            SearchCandidate(title: "Adobe Photoshop 2026", url: "com.adobe.Photoshop", abbreviations: true), // 3
+            SearchCandidate(title: "Pages", url: "com.apple.iWork.Pages", abbreviations: true),            // 4
+        ]
+        let abbrCases: [(String, String, [Int])] = [
+            ("tg → Telegram（t…g 在 Things 里也按顺序出现）", "tg", [0, 1]),
+            ("网页标题不认缩写", "tgw", []),
+            // 2 的网址 https 里有 ps（只网址，2 分），排在缩写（3 分）后面
+            ("ps → Photoshop、Pages，缩写排在只网址命中前面", "ps", [3, 4, 2]),
+            ("首字母必须是单词开头", "hg", []),
+            ("正常前缀照旧排前面", "tel", [0, 2]),
+        ]
+        for (name, query, want) in abbrCases {
+            let got = TabSearch.rank(abbr, query: query)
+            if got != want {
+                failures += 1
+                print("✗ \(name)：期望 \(want)，实际 \(got)")
+            }
+        }
+        if TabSearch.score(abbr[0], query: "tg") != 3 {
+            failures += 1
+            print("✗ 缩写得分：期望 3，实际 \(String(describing: TabSearch.score(abbr[0], query: "tg")))")
+        }
+
         let py = Pinyin.index("掘金 - Swift 并发")
         if py.full != "juejin-swiftbingfa" || py.initials != "jj-swiftbf" {
             failures += 1
             print("✗ 拼音索引：\(py)")
         }
         let total = cases.count + urlCases.count + schemeCases.count + mdCases.count + 2 + extraCases.count
-            + exactCases.count + 1
+            + exactCases.count + 1 + abbrCases.count + 1
         print(failures == 0
               ? "全部通过（\(total) 组）"
               : "\(failures) 项失败（共 \(total) 组）")

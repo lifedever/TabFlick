@@ -293,5 +293,9 @@
  "In any other app": "다른 앱에서",
  "Recent": "최근 사용",
  "App": "앱",
- "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "같은 검색을 다시 하면 지난번에 고른 항목이 위로 옵니다. 「최근 사용」은 앱을 전환한 기록 순으로 정렬됩니다. 둘 다 이 Mac에만 저장되며 지우면 함께 지워집니다."
+ "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "같은 검색을 다시 하면 지난번에 고른 항목이 위로 옵니다. 「최근 사용」은 앱을 전환한 기록 순으로 정렬됩니다. 둘 다 이 Mac에만 저장되며 지우면 함께 지워집니다.",
+ "Mini program": "미니 프로그램",
+ "WeChat chat": "WeChat 채팅",
+ "WeChat": "WeChat",
+ "Switch to window": "창으로 전환"
 }

@@ -293,5 +293,9 @@
  "In any other app": "En otras apps",
  "Recent": "Recientes",
  "App": "App",
- "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "Si repites una búsqueda, lo que elegiste la última vez aparece primero; Recientes se ordena por las apps a las que cambias. Ambos se guardan solo en este Mac y se borran juntos."
+ "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.": "Si repites una búsqueda, lo que elegiste la última vez aparece primero; Recientes se ordena por las apps a las que cambias. Ambos se guardan solo en este Mac y se borran juntos.",
+ "Mini program": "Miniprograma",
+ "WeChat chat": "Chat de WeChat",
+ "WeChat": "WeChat",
+ "Switch to window": "Ir a la ventana"
 }

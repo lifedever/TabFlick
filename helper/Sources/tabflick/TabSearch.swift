@@ -28,9 +28,13 @@ struct SearchCandidate {
     let identity: String
     /// 「整条输入等于名字」比的是它。默认就是标题；App 的标题拼了访达注释，这里单给名字本身。
     let nameKey: [UInt8]
+    /// 认缩写：两个字母起，首字母对上某个单词的开头、其余字母在同一个单词里按顺序出现（`tg` → Telegram、
+    /// `ps` → Photoshop）。只给 App 开（用户 2026-09-29 要的）：网页标题单词多，两个字母这么认满屏都是。
+    let abbreviations: Bool
 
     init(title: String, url: String, pinyin: String = "", initials: String = "", identity: String? = nil,
-         name: String? = nil) {
+         name: String? = nil, abbreviations: Bool = false) {
+        self.abbreviations = abbreviations
         self.title = title
         self.url = url
         self.pinyin = pinyin
@@ -77,7 +81,7 @@ enum TabSearch {
     /// 空查询 = 不过滤，原顺序（MRU）返回。
     ///
     /// 得分（每个词）：标题以词开头 8、标题含词 6、拼音（全拼或首字母）/ 英文词头含词 4、
-    /// 只有网址含词 2、模糊命中 1，各词累加；整条输入等于名字（`nameKey`）再加 4 ——
+    /// 缩写（只有 App，见 `SearchCandidate.abbreviations`）3、只有网址含词 2、模糊命中 1，各词累加；整条输入等于名字（`nameKey`）再加 4 ——
     /// 打「Firefox」时 App「Firefox」要压过标题以 Firefox 开头的网页（用户 2026-09-29 定的）；
     /// 最后加记忆分（`boosts`，按 identity 查）。
     /// 同分保持原顺序 —— 原顺序就是 MRU，最近用过的排前面本身就是一种相关性。
@@ -152,6 +156,9 @@ enum TabSearch {
                       contains(candidate.initialsKey, term.bytes) || contains(candidate.pinyinKey, term.bytes)
                         || (term.bytes.count >= 2 && initialsMatch(term.bytes, candidate.wordInitialsKey)) {
                 total += 4
+            } else if candidate.abbreviations, term.latin, term.bytes.count >= 2,
+                      abbreviationMatches(term.bytes, words: words ?? { words = asciiWords(candidate.titleKey); return words! }()) {
+                total += 3
             } else if contains(candidate.urlKey, term.bytes) {
                 total += 2
             } else if allowFuzzy, term.fuzzyEligible,
@@ -202,6 +209,21 @@ enum TabSearch {
     }
 
     /// 标题里的英文单词（按非字母数字切；中文等非 ASCII 字节也算分隔）。
+    /// 缩写：首字母是某个单词的开头，其余字母在这个单词里按顺序出现（不要求挨着）。
+    private nonisolated static func abbreviationMatches(_ term: [UInt8], words: [ArraySlice<UInt8>]) -> Bool {
+        for word in words where word.first == term.first {
+            var cursor = word.index(after: word.startIndex)
+            var ok = true
+            for byte in term.dropFirst() {
+                while cursor < word.endIndex && word[cursor] != byte { cursor += 1 }
+                if cursor == word.endIndex { ok = false; break }
+                cursor += 1
+            }
+            if ok { return true }
+        }
+        return false
+    }
+
     private nonisolated static func asciiWords(_ key: [UInt8]) -> [ArraySlice<UInt8>] {
         key.split { !(($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57)) }
     }
