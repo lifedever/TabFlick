@@ -168,6 +168,22 @@ func configurePinHotkey(keyCode: Int64?, flags: CGEventFlags, handler: (() -> Vo
     gOnPinHotkey = handler
 }
 
+/// ⌘W 回到置顶地址：当前标签是置顶标签且漂离了原始地址时，⌘W 被吞掉、交给 helper 导航回去；
+/// 其余情况（普通标签、没漂离的置顶标签）一律放行给浏览器 —— Chrome 自己在置顶标签上的 ⌘W
+/// 是「再按一下关闭」两步，接管后的顺序是：先收回地址，再由 Chrome 收掉标签（2026-10-03 用户定的）。
+/// 标志由主线程按 MRU 推送 / 收藏变化算好，回调里只读布尔（热路径不查任何东西）。
+/// 吞错的代价有限：helper 复核不通过就什么都不做，最坏多按一次；漏吞的话 Chrome 只会弹它自己的提示。
+private var gPinnedDrifted = false
+private var gOnReturnToPinned: (() -> Void)?
+
+func setEventTapPinnedDrifted(_ drifted: Bool) {
+    gPinnedDrifted = drifted
+}
+
+func configureReturnToPinned(handler: (() -> Void)?) {
+    gOnReturnToPinned = handler
+}
+
 /// 标签搜索面板的快捷键（默认 ⌘E，设置里可改、可关）。
 ///
 /// 和置顶键一样只在受支持浏览器前台吞键。就绪判定（`gSearchReady`）只管
@@ -337,6 +353,14 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
 
         // 搜索面板开着：键盘归它，下面的置顶键和切换器键都不接管
         if gSearchPanelOpen { break }
+
+        // ⌘W 在漂离的置顶标签上 = 回到置顶地址（见 gPinnedDrifted）。修饰键要精确是 ⌘：
+        // ⇧⌘W 是关窗口，⌥⌘W 是关其余标签，都不碰。
+        if gPinnedDrifted, gFrontIsBrowser, code == Int64(kVK_ANSI_W),
+           flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]) == .maskCommand {
+            gOnReturnToPinned?()
+            return nil
+        }
 
         // 用户自定义的置顶快捷键。未设置时 gPinHotkeyCode 为 -1，永不命中；
         // 只在受支持浏览器前台时吞键，其余场合原样放行。

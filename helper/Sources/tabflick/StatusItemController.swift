@@ -32,6 +32,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var favoriteState: (() -> Bool?)?
     /// 点了「收藏 / 取消收藏当前标签」。
     var onToggleFavorite: (() -> Void)?
+    /// 「回到置顶地址」：当前标签是置顶标签且漂离了原始地址时才出现，紧跟在置顶项下面。
+    private let returnPinnedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    /// 当前标签的原始置顶地址；nil = 不是置顶标签或没漂离，项隐藏。
+    var pinnedHomeState: (() -> String?)?
+    var onReturnToPinned: (() -> Void)?
     /// 置顶快捷键（菜单项右侧显示用）。nil = 未设置，不显示。
     var pinHotkeyProvider: (() -> (key: String, modifiers: NSEvent.ModifierFlags)?)?
 
@@ -185,6 +190,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         favoriteItem.icon = Self.symbol("pin")
         favoriteItem.isEnabled = false   // menuNeedsUpdate 时按当前标签刷新
         menu.addItem(favoriteItem)
+
+        returnPinnedItem.target = self
+        returnPinnedItem.action = #selector(returnToPinned)
+        returnPinnedItem.title = L10n.t("回到置顶地址", "Return to Pinned URL")
+        returnPinnedItem.icon = Self.symbol("pin.circle")
+        returnPinnedItem.isHidden = true
+        menu.addItem(returnPinnedItem)
 
         // 和「置顶当前标签」共用同一个槽位：置顶只在浏览器前台出现、这条
         // 只在 Finder 前台出现，互斥，永远不会同时可见（2026-09-02 用户定的）
@@ -387,6 +399,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 返回菜单项是否可见（浏览器不在前台时整项隐藏）。
     private func refreshFavoriteItem(browserIsFront: Bool) -> Bool {
         favoriteItem.isHidden = !browserIsFront
+        let home = browserIsFront ? pinnedHomeState?() : nil
+        returnPinnedItem.isHidden = home == nil
+        returnPinnedItem.toolTip = home
         guard browserIsFront else { return false }
         if let isFavorited = favoriteState?() {
             favoriteItem.isEnabled = true
@@ -757,6 +772,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func toggleFavorite() {
         onToggleFavorite?()
+    }
+
+    @objc private func returnToPinned() {
+        onReturnToPinned?()
     }
 
     @objc private func checkForUpdates() {

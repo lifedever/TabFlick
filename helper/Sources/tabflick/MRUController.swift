@@ -530,7 +530,7 @@ final class MRUController {
     /// 低于它不影响基本功能，但有功能用不上（操作里的重新加载 / 删除历史、多 Profile 分账），
     /// 状态栏、设置页、搜索面板给不打扰的提示（用户 2026-09-27 要的）。和上面那个
     /// `requiredExtensionVersion`（协议不兼容才提，弹窗）是两回事。
-    static let latestExtensionVersion = "0.17.1"
+    static let latestExtensionVersion = "0.18.0"
 
     /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
     private static func isOlder(_ v: String, than required: String) -> Bool {
@@ -623,6 +623,7 @@ final class MRUController {
     /// 设置变化后向所有客户端各推各的 —— 收藏按浏览器过滤，
     /// 别的浏览器的置顶绝不会在这个浏览器里恢复。
     func pushSettingsToAll() {
+        refreshPinnedDriftedFlag()
         for id in clients.keys { pushSettings(to: id) }
     }
 
@@ -658,6 +659,7 @@ final class MRUController {
     /// 单独算一份。
     private func updateReadiness() {
         setEventTapReady(connected && switcherTabs.count > 1)
+        refreshPinnedDriftedFlag()
         // 搜索面板不按窗口过滤，也不要求两个以上：一个标签也搜得到
         setEventTapSearchReady(connected && !tabs.isEmpty)
         setEventTapGlobalSearchReady(connected && globalTabCount > 0)
@@ -708,6 +710,9 @@ final class MRUController {
         }
         search.commandHandler = { [weak self] command, target in
             self?.runSearchCommand(command, on: target)
+        }
+        search.model.pinnedHomeProvider = { [weak self] item in
+            self?.pinnedHomeURL(tabID: item.tab.id, clientID: item.clientID)
         }
         search.model.badgeProvider = { [weak self] row in
             guard let self else { return (nil, nil) }
@@ -1367,6 +1372,9 @@ final class MRUController {
             log("🔍 reload → \(item.tab.title.prefix(50)) (tabId \(item.tab.id))")
             server.send(["type": "reload", "tabId": item.tab.id], to: item.clientID)
             Toast.show(L10n.t("已重新加载", "Reloaded"), detail: target.displayTitle)
+        case .returnToPinned:
+            guard case .tab(let item) = target else { return }
+            returnToPinnedURL(tabID: item.tab.id, clientID: item.clientID)
         case .closeTab:
             guard case .tab(let item) = target else { return }
             closeFromSearch(itemID: item.id)
@@ -1458,13 +1466,16 @@ final class MRUController {
         }
     }
 
-    /// 「重新加载」「从历史记录中删除」是扩展 0.17.0 加的命令。老扩展收到只会忽略 ——
-    /// 照发不误再报「已重新加载」、把历史从列表里摘掉，就是在说假话。不支持时如实说。
-    private static let panelCommandsExtensionVersion = "0.17.0"
+    /// 「重新加载」「从历史记录中删除」是扩展 0.17.0 加的命令，「回到置顶地址」（navigate）
+    /// 是 0.18.0 加的。老扩展收到只会忽略 —— 照发不误再报「已重新加载」、把历史从列表里
+    /// 摘掉，就是在说假话。不支持时如实说。
+    nonisolated private static let panelCommandsExtensionVersion = "0.17.0"
+    nonisolated private static let navigateExtensionVersion = "0.18.0"
 
-    private func supportsPanelCommands(_ clientID: UUID) -> Bool {
+    private func supportsPanelCommands(_ clientID: UUID,
+                                       since minimum: String = MRUController.panelCommandsExtensionVersion) -> Bool {
         if let version = clients[clientID]?.extVersion,
-           !Self.isOlder(version, than: Self.panelCommandsExtensionVersion) { return true }
+           !Self.isOlder(version, than: minimum) { return true }
         Toast.show(L10n.t("扩展版本太旧，做不了这个操作", "The extension is too old for this"),
                    detail: L10n.t("下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
                                   "Download the latest extension zip, replace the folder, then reload it in chrome://extensions."),
@@ -1643,6 +1654,7 @@ final class MRUController {
             guard let favId = root["id"] as? String,
                   let tabId = (root["tabId"] as? NSNumber)?.intValue else { return }
             favoriteTabBindings[favId] = tabId
+            refreshPinnedDriftedFlag()
 
         case "requestSettings":
             // 扩展（重）连上了，向我们要一份当前配置（按它的浏览器 + Profile 过滤收藏）。
@@ -2170,6 +2182,72 @@ final class MRUController {
             URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
                 || URL(string: fav.url)?.host == host
         }
+    }
+
+    /// 某个标签对应的收藏的**原始**置顶地址；标签没漂离（还在那个地址上）或不是置顶标签时 nil。
+    /// 收藏的恢复语义是「最后访问」（标签位），所以漂走了不会自己回去 —— 这条给用户一个主动回去的
+    /// 动作。判定和 `currentTabFavorited` 同一套：绑定优先，再按域名兜底（漂到别的站之后只有绑定
+    /// 认得出来；按域名兜底是给绑定还没建起来的那一小段时间）。
+    func pinnedHomeURL(tabID: Int, clientID: UUID) -> String? {
+        guard let scope = favoriteScope(of: clientID),
+              let tab = clients[clientID]?.tabs.first(where: { $0.id == tabID }) else { return nil }
+        let mine = settings.favorites.filter(scope.contains)
+        // 域名兜底只认浏览器自己标了 pinned 的标签：普通标签开着收藏的站、绑定又恰好还没建起来时，
+        // 不能给它一条「回到置顶地址」—— 回车会把一个普通标签导到别处
+        let fav = mine.first { favoriteTabBindings[$0.id] == tabID }
+            ?? (tab.pinned == true ? URL(string: tab.url)?.host : nil).flatMap { host in
+                mine.first { fav in
+                    favoriteTabBindings[fav.id] == nil
+                        && (URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
+                            || URL(string: fav.url)?.host == host)
+                }
+            }
+        guard let fav, fav.url.hasPrefix("http"),
+              Self.samePage(fav.url, tab.url) == false else { return nil }
+        return fav.url
+    }
+
+    /// 当前标签（活动浏览器的 MRU 首项）的原始置顶地址，状态栏菜单用。
+    var currentTabPinnedHome: String? {
+        guard let tab = tabs.first, let clientID = activeClientID else { return nil }
+        return pinnedHomeURL(tabID: tab.id, clientID: clientID)
+    }
+
+    /// 「还在置顶地址上」的判定：忽略尾部斜杠和 # 片段。站内翻页、改了查询串都算漂离 ——
+    /// 回去就是回到收藏时那个页面，宽一点的等价只会让「回到置顶地址」在该出现时不出现。
+    nonisolated static func samePage(_ a: String, _ b: String) -> Bool {
+        func trim(_ s: String) -> Substring {
+            var t = s[...]
+            if let hash = t.firstIndex(of: "#") { t = t[..<hash] }
+            while t.hasSuffix("/") { t = t.dropLast() }
+            return t
+        }
+        return trim(a) == trim(b)
+    }
+
+    /// 回到置顶地址：让扩展把这个标签导航回收藏记的原始地址。老扩展没有 navigate 命令，照
+    /// `supportsPanelCommands` 那条如实说「太旧」。
+    func returnToPinnedURL(tabID: Int, clientID: UUID) {
+        guard let url = pinnedHomeURL(tabID: tabID, clientID: clientID) else { return }
+        guard supportsPanelCommands(clientID, since: Self.navigateExtensionVersion) else { return }
+        log("📌 return to pinned → \(url.prefix(80)) (tabId \(tabID))")
+        server.send(["type": "navigate", "tabId": tabID, "url": url], to: clientID)
+        // 地址变了扩展要过 ~100ms 才推回来，这期间再按 ⌘W 该归 Chrome（想关标签的人第二下就是关），
+        // 先把标志放下，推送到了再按真实数据算
+        setEventTapPinnedDrifted(false)
+        Toast.show(L10n.t("已回到置顶地址", "Returned to the pinned URL"), detail: url)
+    }
+
+    /// ⌘W 接管的依据：当前标签是不是漂离的置顶标签。MRU 推送（地址变了扩展会推）、收藏变化、
+    /// 绑定建立时各算一次，event tap 只读结果。
+    private func refreshPinnedDriftedFlag() {
+        setEventTapPinnedDrifted(currentTabPinnedHome != nil)
+    }
+
+    /// 状态栏「回到置顶地址」：对当前标签做。
+    func returnCurrentTabToPinnedURL() {
+        guard let tab = tabs.first, let clientID = activeClientID else { return }
+        returnToPinnedURL(tabID: tab.id, clientID: clientID)
     }
 
     /// 收藏被移除后撤销对应域名的置顶。取消收藏 = 恢复普通标签。

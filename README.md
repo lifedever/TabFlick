@@ -44,7 +44,7 @@ One box for open tabs, recently closed tabs, bookmarks, history, favorite folder
 - **Pinyin works.** Chinese titles match full pinyin and initials.
 - **Nothing found? Search the web** with the browser's own default engine, or with site search such as GitHub and YouTube (templates are editable).
 - **From any app.** ⌥Space opens the panel outside the browser and searches every connected browser's tabs. With nothing typed it lists recent browser tabs and running apps together, most recent first; Enter goes back to what you were doing before.
-- **⌘↩ for actions.** Copy the URL, title or a Markdown link, reload, close the tab, delete from history, open a folder with another app or copy its path. The footer shows what Enter will do.
+- **⌘↩ for actions.** Copy the URL, title or a Markdown link, reload, return a pinned tab to its pinned URL, close the tab, delete from history, open a folder with another app or copy its path. The footer shows what Enter will do.
 - **Built-in commands.** Type "lock" to lock the screen; with Amphetamine installed, type "amp" or "end" to start or end a session. The first time you run an Amphetamine command, macOS asks whether TabFlick may control it.
 - **Learns as you go.** Search the same thing again and what you picked last time comes first; the closest match gets its own top row. Word initials (`pr` finds Pull Request) and one-letter typos still match.
 - **Duplicate tabs are marked**, with an action to close the others.
@@ -52,7 +52,7 @@ One box for open tabs, recently closed tabs, bookmarks, history, favorite folder
 
 ## Also included
 
-- **Pins that stick** — pinned tabs come back after a restart, on the last page you visited.
+- **Pins that stick** — pinned tabs come back after a restart, on the last page you visited. Typed a different address into one? ⌘W takes it back to its pinned URL (press again and Chrome closes it as usual); the same action is in the menu bar and under ⌘↩.
 - **Idle tab cleanup** — close tabs unused for 12 h, 24 h or 7 days; pinned, audible and grouped tabs stay. Off by default.
 - **Menu bar tab list** — every tab by window, plus recently closed ones.
 - **Favorite folders** — keep your usual folders in the menu bar and open them in any app.

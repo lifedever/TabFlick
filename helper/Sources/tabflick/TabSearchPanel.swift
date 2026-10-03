@@ -300,6 +300,8 @@ enum RowCommand: String {
     /// 回车那个默认动作（切换 / 打开 / 重新打开）
     case primary
     case reloadTab
+    /// 置顶标签被导到别处后，回到收藏记的原始地址（只在漂离时出现）
+    case returnToPinned
     case copyURL, copyTitle, copyMarkdown, copyPath
     case revealInFinder
     /// 访达的「显示简介」窗口（App 的二级菜单，用户 2026-09-28 要的）
@@ -328,6 +330,7 @@ enum RowCommand: String {
         switch self {
         case .primary:        return target.enterTitle(defaultOpener: nil)
         case .reloadTab:      return L10n.t("重新加载", "Reload")
+        case .returnToPinned: return L10n.t("回到置顶地址", "Return to pinned URL")
         case .copyURL:        return L10n.t("拷贝网址", "Copy URL")
         case .copyTitle:      return L10n.t("拷贝标题", "Copy title")
         case .copyMarkdown:   return L10n.t("拷贝 Markdown 链接", "Copy Markdown link")
@@ -355,6 +358,7 @@ enum RowCommand: String {
             default:      return "plus.square.on.square"
             }
         case .reloadTab:      return "arrow.clockwise"
+        case .returnToPinned: return "pin"
         // 拷贝类共用一个图标、靠字区分（Raycast / Alfred 都这样）：四个各画各的图，
         // 列表里就是四种形状抢眼，反而看不出它们是一类
         case .copyURL, .copyTitle, .copyMarkdown, .copyPath: return "doc.on.doc"
@@ -510,6 +514,8 @@ final class TabSearchModel: ObservableObject {
     var onExtensionUpdateTap: (() -> Void)?
     /// 某一行属于哪个浏览器、哪个 Profile（Profile 名只在需要区分时有值），MRUController 提供。
     var badgeProvider: ((SearchRow) -> (browser: String?, profile: String?))?
+    /// 这个标签是置顶标签且漂离了原始地址时，给出那个地址（MRUController 提供）；否则 nil。
+    var pinnedHomeProvider: ((SwitcherItem) -> String?)?
 
     private var lastContentHeight: CGFloat = -1
     var onContentHeightChange: ((CGFloat) -> Void)?
@@ -771,7 +777,9 @@ final class TabSearchModel: ObservableObject {
         case .tab:
             // 只剩一个标签不给关：浏览器窗口会跟着没（同悬停 ✕）
             let dupes: [RowCommand] = { if case .tab(let item) = target, duplicateCount(of: item) > 1 { return [.closeDuplicates] } else { return [] } }()
-            commands = [.primary, .reloadTab] + copies + dupes + (canCloseTabs ? [.closeTab] : [])
+            // 置顶标签漂离了原始地址才给「回到置顶地址」
+            let home: [RowCommand] = { if case .tab(let item) = target, pinnedHomeProvider?(item) != nil { return [.returnToPinned] } else { return [] } }()
+            commands = [.primary, .reloadTab] + home + copies + dupes + (canCloseTabs ? [.closeTab] : [])
         case .closed:
             commands = [.primary] + copies + [.removeClosed]
         case .bookmark:

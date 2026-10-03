@@ -278,6 +278,16 @@ MainActor.assumeIsolated {
         statusItem.onToggleFavorite = {
             MainActor.assumeIsolated { controller.toggleFavoriteCurrentTab() }
         }
+        statusItem.pinnedHomeState = {
+            MainActor.assumeIsolated { controller.currentTabPinnedHome }
+        }
+        statusItem.onReturnToPinned = {
+            MainActor.assumeIsolated { controller.returnCurrentTabToPinnedURL() }
+        }
+        // ⌘W 在漂离的置顶标签上 = 回到置顶地址（吞不吞由 event tap 里的标志定）
+        configureReturnToPinned {
+            MainActor.assumeIsolated { controller.returnCurrentTabToPinnedURL() }
+        }
 
         // 置顶快捷键：设置变化时重挂 event tap 匹配；菜单项右侧原生显示
         statusItem.pinHotkeyProvider = {

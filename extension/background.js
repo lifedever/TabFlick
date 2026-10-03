@@ -816,6 +816,17 @@ async function handleHelperMessage(raw) {
         }
       }
       break;
+    case "navigate":
+      // 「回到置顶地址」：置顶标签在地址栏里被导到别处后，回到收藏记的原始地址。
+      // 只认 http(s)，别的协议（chrome:// / javascript:）一律不导
+      if (typeof msg.tabId === "number" && typeof msg.url === "string" && /^https?:\/\//.test(msg.url)) {
+        try {
+          await chrome.tabs.update(msg.tabId, { url: msg.url });
+        } catch (e) {
+          send({ type: "log", message: `navigate failed: ${e}` });
+        }
+      }
+      break;
     case "deleteHistory":
       // ⌘E 面板「操作」里的从历史记录中删除：删掉这个网址的全部访问记录
       //（chrome.history.deleteUrl 的语义，和地址栏里 ⇧⌦ 删建议是一回事）
