@@ -530,7 +530,7 @@ final class MRUController {
     /// 低于它不影响基本功能，但有功能用不上（操作里的重新加载 / 删除历史、多 Profile 分账），
     /// 状态栏、设置页、搜索面板给不打扰的提示（用户 2026-09-27 要的）。和上面那个
     /// `requiredExtensionVersion`（协议不兼容才提，弹窗）是两回事。
-    static let latestExtensionVersion = "0.18.0"
+    static let latestExtensionVersion = "0.19.1"
 
     /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
     private static func isOlder(_ v: String, than required: String) -> Bool {
