@@ -2174,14 +2174,8 @@ final class MRUController {
     /// 置顶标签可能已漂到别的域名，光看域名会误判成「未收藏」。
     /// 只查活动浏览器自己的账本。
     var currentTabFavorited: Bool? {
-        guard let tab = tabs.first, let scope = activeClientID.flatMap(favoriteScope(of:)) else { return nil }
-        let mine = settings.favorites.filter(scope.contains)
-        if mine.contains(where: { favoriteTabBindings[$0.id] == tab.id }) { return true }
-        guard let host = URL(string: tab.url)?.host else { return nil }
-        return mine.contains { fav in
-            URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
-                || URL(string: fav.url)?.host == host
-        }
+        guard let tab = tabs.first, let clientID = activeClientID, favoriteScope(of: clientID) != nil else { return nil }
+        return favorite(of: tab, clientID: clientID) != nil
     }
 
     /// 某个标签对应的收藏的**原始**置顶地址；标签没漂离（还在那个地址上）或不是置顶标签时 nil。
@@ -2189,22 +2183,62 @@ final class MRUController {
     /// 动作。判定和 `currentTabFavorited` 同一套：绑定优先，再按域名兜底（漂到别的站之后只有绑定
     /// 认得出来；按域名兜底是给绑定还没建起来的那一小段时间）。
     func pinnedHomeURL(tabID: Int, clientID: UUID) -> String? {
-        guard let scope = favoriteScope(of: clientID),
-              let tab = clients[clientID]?.tabs.first(where: { $0.id == tabID }) else { return nil }
+        pinnedHomeFavorite(tabID: tabID, clientID: clientID)?.url
+    }
+
+    /// 这个标签对应的、且它已经漂离的收藏。「在家」= 和原始地址同页（`samePage`），或者和上次
+    /// 回去之后站点自己落到的地址同页（`favoriteHomeAlias`，见 `noteLanding`）。
+    private func pinnedHomeFavorite(tabID: Int, clientID: UUID) -> FavoriteTab? {
+        guard let tab = clients[clientID]?.tabs.first(where: { $0.id == tabID }),
+              let fav = favorite(of: tab, clientID: clientID), fav.url.hasPrefix("http") else { return nil }
+        if Self.samePage(fav.url, tab.url) { return nil }
+        if let alias = favoriteHomeAlias[fav.id], Self.samePage(alias, tab.url) { return nil }
+        return fav
+    }
+
+    /// 某个标签对应哪条收藏：绑定优先；没绑定时只给**浏览器自己标了 pinned** 的标签按域名认一条
+    /// 还没绑定的收藏（重启后 favoriteBound 没到的那一小段）。普通标签一律不认 —— 2026-10-03 用户报的：
+    /// 置顶标签关掉后收藏还在，重开一个同域名的普通标签，菜单按域名把它当成那条收藏写「取消置顶」。
+    private func favorite(of tab: TabInfo, clientID: UUID) -> FavoriteTab? {
+        guard let scope = favoriteScope(of: clientID) else { return nil }
         let mine = settings.favorites.filter(scope.contains)
-        // 域名兜底只认浏览器自己标了 pinned 的标签：普通标签开着收藏的站、绑定又恰好还没建起来时，
-        // 不能给它一条「回到置顶地址」—— 回车会把一个普通标签导到别处
-        let fav = mine.first { favoriteTabBindings[$0.id] == tabID }
-            ?? (tab.pinned == true ? URL(string: tab.url)?.host : nil).flatMap { host in
-                mine.first { fav in
-                    favoriteTabBindings[fav.id] == nil
-                        && (URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
-                            || URL(string: fav.url)?.host == host)
-                }
-            }
-        guard let fav, fav.url.hasPrefix("http"),
-              Self.samePage(fav.url, tab.url) == false else { return nil }
-        return fav.url
+        if let bound = mine.first(where: { favoriteTabBindings[$0.id] == tab.id }) { return bound }
+        guard tab.pinned == true, let host = URL(string: tab.url)?.host else { return nil }
+        return orphanFavorite(host: host, among: mine)
+    }
+
+    /// 没有活标签的收藏里，域名对得上的那条（按最后访问地址或原始地址）。
+    private func orphanFavorite(host: String, among mine: [FavoriteTab]) -> FavoriteTab? {
+        mine.first { fav in
+            favoriteTabBindings[fav.id] == nil
+                && (URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host == host
+                    || URL(string: fav.url)?.host == host)
+        }
+    }
+
+    /// 「回到置顶地址」之后站点自己落到的地址（favorite.id → url）。只在内存里，重启清零。
+    /// 起因：云效的置顶地址是 `…/current?appId=X`，页面加载完自己改写成 `…?appId=X&appId=X`，
+    /// 严格比对永远「漂离」，⌘W 连按三次都在回去（2026-10-03 日志）。查询串的差异 `samePage`
+    /// 已经不看了，这份别名兜的是路径、域名都变的那种（登录跳转、站点规范化地址）。
+    private var favoriteHomeAlias: [String: String] = [:]
+    /// 正在回家的收藏（favorite.id → 发出 navigate 的时刻）。这段时间内标签落到的地址记为别名。
+    private var favoriteReturning: [String: CFAbsoluteTime] = [:]
+    private static let landingWindow: CFAbsoluteTime = 6
+
+    /// MRU 推送时调用：回家途中的收藏，把标签此刻的地址记成别名；超过时限就收摊。
+    private func noteLanding(favID: String, tab: TabInfo) {
+        guard let since = favoriteReturning[favID] else { return }
+        if CFAbsoluteTimeGetCurrent() - since > Self.landingWindow {
+            favoriteReturning.removeValue(forKey: favID)
+            return
+        }
+        guard tab.url.hasPrefix("http"),
+              let fav = settings.favorites.first(where: { $0.id == favID }),
+              !Self.samePage(fav.url, tab.url) else { return }
+        if favoriteHomeAlias[favID] != tab.url {
+            favoriteHomeAlias[favID] = tab.url
+            log("📌 pinned home alias ← \(tab.url.prefix(80))")
+        }
     }
 
     /// 当前标签（活动浏览器的 MRU 首项）的原始置顶地址，状态栏菜单用。
@@ -2213,12 +2247,14 @@ final class MRUController {
         return pinnedHomeURL(tabID: tab.id, clientID: clientID)
     }
 
-    /// 「还在置顶地址上」的判定：忽略尾部斜杠和 # 片段。站内翻页、改了查询串都算漂离 ——
-    /// 回去就是回到收藏时那个页面，宽一点的等价只会让「回到置顶地址」在该出现时不出现。
+    /// 「还在置顶地址上」的判定：只比协议 + 域名 + 路径，查询串、# 片段、尾部斜杠都不看。
+    /// 站点把噪音放在查询串里（重复的参数、跟踪参数、页码），把身份放在路径里：V2EX 首页 → 帖子
+    /// 是漂离，`?tab=all` → `?tab=hot` 不是。代价是 `watch?v=A` → `watch?v=B` 这种全靠查询串
+    /// 区分页面的站认不出漂离，接受。
     nonisolated static func samePage(_ a: String, _ b: String) -> Bool {
         func trim(_ s: String) -> Substring {
             var t = s[...]
-            if let hash = t.firstIndex(of: "#") { t = t[..<hash] }
+            if let cut = t.firstIndex(where: { $0 == "?" || $0 == "#" }) { t = t[..<cut] }
             while t.hasSuffix("/") { t = t.dropLast() }
             return t
         }
@@ -2228,9 +2264,12 @@ final class MRUController {
     /// 回到置顶地址：让扩展把这个标签导航回收藏记的原始地址。老扩展没有 navigate 命令，照
     /// `supportsPanelCommands` 那条如实说「太旧」。
     func returnToPinnedURL(tabID: Int, clientID: UUID) {
-        guard let url = pinnedHomeURL(tabID: tabID, clientID: clientID) else { return }
+        guard let fav = pinnedHomeFavorite(tabID: tabID, clientID: clientID) else { return }
         guard supportsPanelCommands(clientID, since: Self.navigateExtensionVersion) else { return }
+        let url = fav.url
         log("📌 return to pinned → \(url.prefix(80)) (tabId \(tabID))")
+        favoriteReturning[fav.id] = CFAbsoluteTimeGetCurrent()
+        favoriteHomeAlias.removeValue(forKey: fav.id)
         server.send(["type": "navigate", "tabId": tabID, "url": url], to: clientID)
         // 地址变了扩展要过 ~100ms 才推回来，这期间再按 ⌘W 该归 Chrome（想关标签的人第二下就是关），
         // 先把标志放下，推送到了再按真实数据算
@@ -2278,22 +2317,26 @@ final class MRUController {
 
     /// 收藏 / 取消收藏当前标签（活动浏览器的账本）。
     func toggleFavoriteCurrentTab() {
-        guard let current = tabs.first, let scope = activeClientID.flatMap(favoriteScope(of:)) else { return }
+        guard let current = tabs.first, let clientID = activeClientID,
+              let scope = favoriteScope(of: clientID) else { return }
         let browser = scope.browser
         let mine = settings.favorites.filter(scope.contains)
 
-        // 取消：绑定命中优先（漂移后域名对不上，绑定还在）
-        if let bound = mine.first(where: { favoriteTabBindings[$0.id] == current.id }),
-           let index = settings.favorites.firstIndex(where: { $0.id == bound.id }) {
+        // 取消：和菜单文案同一个判定（`favorite(of:)`），菜单写「取消置顶」点下去删的就是这条
+        if let fav = favorite(of: current, clientID: clientID),
+           let index = settings.favorites.firstIndex(where: { $0.id == fav.id }) {
             log("☆ unfavorite: \(settings.favorites[index].title.prefix(50))")
             settings.favorites.remove(at: index)
             return
         }
         guard let host = URL(string: current.url)?.host else { return }
-        if let match = mine.first(where: { URL(string: $0.url)?.host == host }),
-           let index = settings.favorites.firstIndex(where: { $0.id == match.id }) {
-            log("☆ unfavorite: \(settings.favorites[index].title.prefix(50))")
-            settings.favorites.remove(at: index)
+        if let orphan = orphanFavorite(host: host, among: mine) {
+            // 同域名的收藏还在、只是它的标签关掉了：让这条收藏认领当前标签，别再建一条 ——
+            // 建新的那条 + 旧的被 ensure 补回来 = 两个同站置顶
+            log("★ favorite adopts tab: \(orphan.title.prefix(50)) ← \(current.title.prefix(50))")
+            favoriteTabBindings[orphan.id] = current.id
+            settings.favoriteCurrentUrls[orphan.id] = current.url
+            pushSettingsToAll()   // favoriteCurrentUrls 不触发 onChange，手动推；扩展精确匹配到它就补置顶
         } else {
             log("★ favorite: \(current.title.prefix(50)) (\(host)) [\(browser)]")
             let fav = FavoriteTab(url: current.url, title: current.title,
@@ -2320,6 +2363,7 @@ final class MRUController {
             if tab.url.hasPrefix("http"), settings.favoriteCurrentUrls[favId] != tab.url {
                 settings.favoriteCurrentUrls[favId] = tab.url
             }
+            noteLanding(favID: favId, tab: tab)
         }
     }
 
