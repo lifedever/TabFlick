@@ -119,11 +119,13 @@ async function pushMRU() {
       // 标签」严重得多。扩展默认根本拿不到无痕标签，但用户可以在
       // chrome://extensions 打开「在无痕模式下启用」—— 那时这就是唯一防线。
       incognito: t.incognito === true,
+      // 关闭时判「关掉的是不是置顶标签」只能靠这份副本（onRemoved 什么都不给）
+      pinned: t.pinned === true,
     };
     nextMeta[t.id] = entry;
     const prev = tabMeta[t.id];
     if (!prev || prev.url !== entry.url || prev.title !== entry.title
-        || prev.favIconUrl !== entry.favIconUrl) {
+        || prev.favIconUrl !== entry.favIconUrl || prev.pinned !== entry.pinned) {
       metaDirty = true;
     }
   }
@@ -577,11 +579,21 @@ async function recordClosed(tabId, removeInfo) {
   if (meta.incognito) return;                    // 无痕永不落盘
   if (!meta.url.startsWith("http")) return;      // chrome:// / 扩展页找回没意义
 
+  const reason = marked?.reason ?? (removeInfo?.isWindowClosing ? "window" : "manual");
+
+  // 用户自己关掉一个置顶标签（⌘W 两下、点 ✕、面板里的「关闭」）= 取消置顶（2026-10-03 用户定的：
+  // 关掉就是不要了，收藏留着的话下次核对又把它开回来）。关窗口、浏览器退出不算 —— 那是会话
+  // 结束，置顶要跟着会话恢复回来；自动清理从不碰置顶；unpin 原因的关闭是收藏已经没了。
+  // 发在 forgetTab 之前：helper 按 tabId 的绑定认收藏，绑定要等它收到这条之后才随 MRU 推送解除。
+  if (meta.pinned && (reason === "manual" || reason === "switcher")) {
+    send({ type: "unpinned", host: hostOf(meta.url) ?? "", tabId, closed: true });
+  }
+
   closedBuffer.push({
     url: meta.url,
     title: meta.title ?? "",
     favIconUrl: meta.favIconUrl ?? "",
-    reason: marked?.reason ?? (removeInfo?.isWindowClosing ? "window" : "manual"),
+    reason,
     closedAt: Date.now(),
   });
 
@@ -964,7 +976,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // 置顶状态变化也要刷新推送 —— 切换器卡片的星标跟着它走
   if (changeInfo.pinned !== undefined) schedulePush();
 
-  // 用户主动取消置顶（⌘W 关闭走的是 onRemoved，不会触发这里）。
+  // 用户主动取消置顶（⌘W 关闭走的是 onRemoved，在 recordClosed 里另报）。
   // 是否命中收藏由 helper 判定（绑定优先、域名兜底）—— 收藏的事实源
   // 在 app，SW 重启后本地副本可能还是空的。我们自己发的 unpin 命令也会
   // 走到这里，但那时收藏已被移除，helper 查无此项、不会成环。

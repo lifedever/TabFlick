@@ -251,6 +251,43 @@ const tab = (id, url, extra = {}) => ({
           `reason=${archived[0]?.reason}`);
   }
 
+  // ── 关掉置顶标签 = 取消置顶 ──────────────────────────────────────────
+  {
+    console.log("手动关掉置顶标签要上报 unpinned（关掉就等于取消置顶）");
+    const ctx = loadExtension({ tabs: [tab(1, "https://pin.example/home", { pinned: true }), tab(2, "https://b.com/")] });
+    await ctx.run("pushMRU()");
+    await ctx.fireRemoved(1);
+    await settle();
+
+    const unpinned = ctx.sent.filter((m) => m.type === "unpinned");
+    check("报了一条 unpinned", unpinned.length === 1, `sent=${JSON.stringify(unpinned)}`);
+    check("带 tabId（helper 按绑定认）", unpinned[0]?.tabId === 1, `tabId=${unpinned[0]?.tabId}`);
+    check("带域名", unpinned[0]?.host === "pin.example", `host=${unpinned[0]?.host}`);
+    check("标为关闭", unpinned[0]?.closed === true);
+    check("存档照记", ctx.archived().length === 1);
+  }
+
+  {
+    console.log("关窗口带走的置顶标签不算取消置顶（会话恢复要把它带回来）");
+    const ctx = loadExtension({ tabs: [tab(1, "https://pin.example/home", { pinned: true })] });
+    await ctx.run("pushMRU()");
+    await ctx.fireRemoved(1, { isWindowClosing: true });
+    await settle();
+
+    check("没有 unpinned", ctx.sent.filter((m) => m.type === "unpinned").length === 0,
+          `sent=${JSON.stringify(ctx.sent.filter((m) => m.type === "unpinned"))}`);
+  }
+
+  {
+    console.log("关掉普通标签不报 unpinned");
+    const ctx = loadExtension({ tabs: [tab(1, "https://a.com/"), tab(2, "https://b.com/")] });
+    await ctx.run("pushMRU()");
+    await ctx.fireRemoved(1);
+    await settle();
+
+    check("没有 unpinned", ctx.sent.filter((m) => m.type === "unpinned").length === 0);
+  }
+
   {
     console.log("关窗口连带的标记为 window");
     const ctx = loadExtension({ tabs: [tab(1, "https://w.example/")] });

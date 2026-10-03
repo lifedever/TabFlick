@@ -52,7 +52,7 @@ One box for open tabs, recently closed tabs, bookmarks, history, favorite folder
 
 ## Also included
 
-- **Pins that stick** — pinned tabs come back after a restart, on the last page you visited. Typed a different address into one? ⌘W takes it back to its pinned URL (press again and Chrome closes it as usual); the same action is in the menu bar and under ⌘↩.
+- **Pins that stick** — pinned tabs come back after a restart, on the last page you visited. Typed a different address into one? ⌘W takes it back to its pinned URL (press again and Chrome closes it as usual); the same action is in the menu bar and under ⌘↩. Closing a pinned tab yourself unpins it for good.
 - **Idle tab cleanup** — close tabs unused for 12 h, 24 h or 7 days; pinned, audible and grouped tabs stay. Off by default.
 - **Menu bar tab list** — every tab by window, plus recently closed ones.
 - **Favorite folders** — keep your usual folders in the menu bar and open them in any app.

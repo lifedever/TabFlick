@@ -1624,11 +1624,13 @@ final class MRUController {
             settings.favorites.append(fav)
 
         case "unpinned":
-            // 用户在浏览器里主动取消了某个标签的置顶（⌘W 关闭不会来这条）。
-            // 收藏的语义就是「常驻置顶」，置顶被主动撤掉 = 用户不想要了，
-            // 收藏一并移除。绑定命中优先 —— 漂移后按域名已经判不准了。
+            // 用户在浏览器里主动取消了某个标签的置顶，或者自己把置顶标签关掉了（扩展 0.18.0 起
+            // 带 closed:true；2026-10-03 用户定的「关掉就等于取消置顶」）。收藏的语义就是
+            // 「常驻置顶」，置顶被主动撤掉 = 用户不想要了，收藏一并移除。绑定命中优先 ——
+            // 漂移后按域名已经判不准了。
             let tabId = (root["tabId"] as? NSNumber)?.intValue
             let host = root["host"] as? String
+            let closed = root["closed"] as? Bool ?? false
             guard let scope = favoriteScope(of: clientID) else { return }
             let index = settings.favorites.firstIndex { fav in
                 guard scope.contains(fav) else { return false }   // 只动自己浏览器 + Profile 的账
@@ -1638,7 +1640,11 @@ final class MRUController {
                     || URL(string: fav.url)?.host == host
             }
             if let index {
-                log("☆ browser unpin → unfavorite: \(settings.favorites[index].title.prefix(50))")
+                let fav = settings.favorites[index]
+                log("☆ browser \(closed ? "close" : "unpin") → unfavorite: \(fav.title.prefix(50))")
+                // 浏览器自己已经撤掉了置顶（或整个标签都没了），不用再发 unpin：按域名发回去会把
+                // 同一个站**另一个**置顶标签也撤了
+                browserHandledUnpins.insert(fav.id)
                 settings.favorites.remove(at: index)
             }
 
@@ -2292,9 +2298,13 @@ final class MRUController {
     /// 收藏被移除后撤销对应域名的置顶。取消收藏 = 恢复普通标签。
     /// unpin 只发给该收藏归属浏览器的连接 —— 发错浏览器会把人家
     /// 同域名的置顶也撤了。域名按「最后访问」取（可能已漂移）。
+    /// 浏览器那边已经撤掉置顶 / 关掉标签的收藏（`unpinned` 上报来的）：移除时不再向它发 unpin。
+    private var browserHandledUnpins: Set<String> = []
+
     func unpinRemovedFavorites(_ removed: [FavoriteTab]) {
         for fav in removed {
             favoriteTabBindings.removeValue(forKey: fav.id)
+            if browserHandledUnpins.remove(fav.id) != nil { continue }
             guard let host = URL(string: settings.favoriteCurrentUrls[fav.id] ?? fav.url)?.host
                     ?? URL(string: fav.url)?.host else { continue }
             // 只发给收藏所属的那个 Profile：发给同浏览器的别的 Profile 会把人家同域名的置顶也撤了
