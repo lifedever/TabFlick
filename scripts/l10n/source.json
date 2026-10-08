@@ -97,7 +97,7 @@
   "zh": "搜索",
   "refs": [
    "AppSettings.swift:53",
-   "SettingsWindow.swift:1133",
+   "SettingsWindow.swift:1145",
    "TabSearchPanel.swift:36"
   ]
  },
@@ -130,7 +130,7 @@
   "zh": "文件夹",
   "refs": [
    "AppSettings.swift:57",
-   "SettingsWindow.swift:1135",
+   "SettingsWindow.swift:1147",
    "TabSearchPanel.swift:31"
   ]
  },
@@ -321,14 +321,14 @@
   "key": "Accessibility permission is required.\n\nOpen: System Settings → Privacy & Security → Accessibility\nEnable TabFlick (or the terminal app running it), then start again.",
   "zh": "需要「辅助功能」权限。\n\n前往：系统设置 → 隐私与安全性 → 辅助功能，\n打开 TabFlick（或运行它的终端应用），然后重新启动。",
   "refs": [
-   "EventTap.swift:390"
+   "EventTap.swift:414"
   ]
  },
  {
   "key": "CGEvent.tapCreate failed.\n\nBesides Accessibility, macOS sometimes also requires:\n  System Settings → Privacy & Security → Input Monitoring\nAfter changing either, fully quit and reopen the app —\nmacOS only reads these permissions at process launch.",
   "zh": "CGEvent.tapCreate 失败。\n\n除了「辅助功能」，macOS 有时还要求：\n  系统设置 → 隐私与安全性 → 输入监控\n改完任一项后必须完全退出应用再打开 —— 权限只在进程启动时读取。",
   "refs": [
-   "EventTap.swift:405"
+   "EventTap.swift:429"
   ]
  },
  {
@@ -384,35 +384,35 @@
   "key": "Couldn't open {0}",
   "zh": "打不开 {0}",
   "refs": [
-   "MRUController.swift:1341"
+   "MRUController.swift:1351"
   ]
  },
  {
   "key": "URL copied",
   "zh": "已拷贝网址",
   "refs": [
-   "MRUController.swift:1362"
+   "MRUController.swift:1372"
   ]
  },
  {
   "key": "Title copied",
   "zh": "已拷贝标题",
   "refs": [
-   "MRUController.swift:1363"
+   "MRUController.swift:1373"
   ]
  },
  {
   "key": "Markdown link copied",
   "zh": "已拷贝 Markdown 链接",
   "refs": [
-   "MRUController.swift:1364"
+   "MRUController.swift:1374"
   ]
  },
  {
   "key": "Path copied",
   "zh": "已拷贝路径",
   "refs": [
-   "MRUController.swift:1365",
+   "MRUController.swift:1375",
    "StatusItemController.swift:679"
   ]
  },
@@ -420,50 +420,71 @@
   "key": "Reloaded",
   "zh": "已重新加载",
   "refs": [
-   "MRUController.swift:1372"
+   "MRUController.swift:1382"
   ]
  },
  {
   "key": "Couldn't open Get Info",
   "zh": "打不开简介",
   "refs": [
-   "MRUController.swift:1459"
+   "MRUController.swift:1469"
   ]
  },
  {
   "key": "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.",
   "zh": "系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「访达」。",
   "refs": [
-   "MRUController.swift:1460"
+   "MRUController.swift:1470"
   ]
  },
  {
   "key": "The extension is too old for this",
   "zh": "扩展版本太旧，做不了这个操作",
   "refs": [
-   "MRUController.swift:1477"
+   "MRUController.swift:1487"
   ]
  },
  {
   "key": "Download the latest extension zip, replace the folder, then reload it in chrome://extensions.",
   "zh": "下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
   "refs": [
-   "MRUController.swift:1478",
+   "MRUController.swift:1488",
    "TabSearchPanel.swift:1740"
+  ]
+ },
+ {
+  "key": "Window reopened",
+  "zh": "已恢复窗口",
+  "refs": [
+   "MRUController.swift:1720"
+  ]
+ },
+ {
+  "key": "Tab reopened",
+  "zh": "已恢复标签",
+  "refs": [
+   "MRUController.swift:1720"
+  ]
+ },
+ {
+  "key": "Nothing to reopen",
+  "zh": "没有可恢复的标签",
+  "refs": [
+   "MRUController.swift:1724"
   ]
  },
  {
   "key": "Profile {0}",
   "zh": "个人资料 {0}",
   "refs": [
-   "MRUController.swift:1923"
+   "MRUController.swift:1974"
   ]
  },
  {
   "key": "Returned to the pinned URL",
   "zh": "已回到置顶地址",
   "refs": [
-   "MRUController.swift:2230"
+   "MRUController.swift:2325"
   ]
  },
  {
@@ -597,8 +618,8 @@
    "UpdateChecker.swift:376",
    "UpdateChecker.swift:386",
    "main.swift:244",
-   "main.swift:445",
-   "main.swift:470"
+   "main.swift:449",
+   "main.swift:474"
   ]
  },
  {
@@ -663,7 +684,7 @@
   "zh": "添加 App…",
   "refs": [
    "SettingsWindow.swift:113",
-   "SettingsWindow.swift:698"
+   "SettingsWindow.swift:710"
   ]
  },
  {
@@ -721,7 +742,7 @@
   "refs": [
    "SettingsWindow.swift:211",
    "SettingsWindow.swift:260",
-   "SettingsWindow.swift:455"
+   "SettingsWindow.swift:467"
   ]
  },
  {
@@ -859,8 +880,8 @@
   ]
  },
  {
-  "key": "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed.",
-  "zh": "和浏览器双向同步：置顶即收藏，取消置顶即移除，⌘W 关掉不算。重启浏览器会自动恢复，停在你最后看的那一页。",
+  "key": "Syncs both ways: pinning adds; unpinning or closing the tab removes, closing the whole window doesn't. Restored on restart, at the page you last viewed.",
+  "zh": "和浏览器双向同步：置顶即收藏，取消置顶或关掉标签即移除，关整个窗口不算。重启浏览器会自动恢复，停在你最后看的那一页。",
   "refs": [
    "SettingsWindow.swift:402"
   ]
@@ -894,80 +915,94 @@
   ]
  },
  {
+  "key": "⌘Z reopens the tab you just closed",
+  "zh": "⌘Z 恢复刚关闭的标签",
+  "refs": [
+   "SettingsWindow.swift:429"
+  ]
+ },
+ {
+  "key": "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.",
+  "zh": "不在输入框里时，⌘Z 恢复最近关掉的标签或窗口，连按继续往前。自动清理关掉的不算。新标签页和 chrome:// 页面上不起作用。",
+  "refs": [
+   "SettingsWindow.swift:433"
+  ]
+ },
+ {
   "key": "Closing tabs",
   "zh": "关闭标签",
   "refs": [
-   "SettingsWindow.swift:428"
+   "SettingsWindow.swift:440"
   ]
  },
  {
   "key": "Auto-clean unused tabs",
   "zh": "自动清理未使用的标签",
   "refs": [
-   "SettingsWindow.swift:432"
+   "SettingsWindow.swift:444"
   ]
  },
  {
   "key": "Closes tabs you haven't used in that long. Pinned, audible, grouped, and current tabs stay.",
   "zh": "超时没用过的标签会被关掉。置顶、正在放声音、在标签组里、以及各窗口当前那个都不动。",
   "refs": [
-   "SettingsWindow.swift:439"
+   "SettingsWindow.swift:451"
   ]
  },
  {
   "key": "Tab lifetime",
   "zh": "标签存活时间",
   "refs": [
-   "SettingsWindow.swift:446"
+   "SettingsWindow.swift:458"
   ]
  },
  {
   "key": "Pin / unpin current tab",
   "zh": "置顶 / 取消置顶当前标签",
   "refs": [
-   "SettingsWindow.swift:450"
+   "SettingsWindow.swift:462"
   ]
  },
  {
   "key": "Remove and unpin",
   "zh": "移除并取消置顶",
   "refs": [
-   "SettingsWindow.swift:496"
+   "SettingsWindow.swift:508"
   ]
  },
  {
   "key": "Nothing yet. Use “Add Folder…” in the menu bar, or open a folder in Finder and use “Add Current Finder Folder”.",
   "zh": "还没有收藏。从状态栏菜单点「添加文件夹…」，或在 Finder 打开目录后点「收藏当前 Finder 目录」。",
   "refs": [
-   "SettingsWindow.swift:563"
+   "SettingsWindow.swift:575"
   ]
  },
  {
   "key": "Shown in the menu",
   "zh": "状态栏平铺数量",
   "refs": [
-   "SettingsWindow.swift:595"
+   "SettingsWindow.swift:607"
   ]
  },
  {
   "key": "{0}",
   "zh": "{0} 个",
   "refs": [
-   "SettingsWindow.swift:599"
+   "SettingsWindow.swift:611"
   ]
  },
  {
   "key": "The menu lists the {0} most recently opened; the rest live under More.",
   "zh": "状态栏菜单按最近打开排序，平铺前 {0} 个，其余收在「更多」里。",
   "refs": [
-   "SettingsWindow.swift:603"
+   "SettingsWindow.swift:615"
   ]
  },
  {
   "key": "Favorite Folders",
   "zh": "收藏的文件夹",
   "refs": [
-   "SettingsWindow.swift:611",
+   "SettingsWindow.swift:623",
    "StatusItemController.swift:542"
   ]
  },
@@ -975,29 +1010,29 @@
   "key": "Favorite Folders · {0}",
   "zh": "收藏的文件夹 · {0} 个",
   "refs": [
-   "SettingsWindow.swift:612"
+   "SettingsWindow.swift:624"
   ]
  },
  {
   "key": "Remove",
   "zh": "取消收藏",
   "refs": [
-   "SettingsWindow.swift:645"
+   "SettingsWindow.swift:657"
   ]
  },
  {
   "key": "Removing an app takes it out of the Open With menu; use “Add App…” to bring any back — or to add editors and terminals the system misses.",
   "zh": "移除即从「打开方式」菜单消失，随时用「添加 App…」加回；系统没枚举到的终端 / 编辑器也从这里补。",
   "refs": [
-   "SettingsWindow.swift:702"
+   "SettingsWindow.swift:714"
   ]
  },
  {
   "key": "Open With",
   "zh": "打开方式",
   "refs": [
-   "SettingsWindow.swift:709",
-   "SettingsWindow.swift:1136",
+   "SettingsWindow.swift:721",
+   "SettingsWindow.swift:1148",
    "StatusItemController.swift:607"
   ]
  },
@@ -1005,255 +1040,255 @@
   "key": "Remove from Open With",
   "zh": "从打开方式中移除",
   "refs": [
-   "SettingsWindow.swift:734"
+   "SettingsWindow.swift:746"
   ]
  },
  {
   "key": "Enable the search panel",
   "zh": "启用搜索面板",
   "refs": [
-   "SettingsWindow.swift:764"
+   "SettingsWindow.swift:776"
   ]
  },
  {
   "key": "Type a title, URL or pinyin to find tabs, bookmarks, history, folders and apps. Tab changes scope, ⌘↩ shows actions for the selected item, and ⌘1–{0} picks a row.",
   "zh": "输标题、网址或拼音，找浏览器标签、书签、历史记录、文件夹和应用。Tab 换范围，⌘↩ 展开对这一项的操作，按住 ⌘ 时用 1–{0} 直接选。",
   "refs": [
-   "SettingsWindow.swift:768"
+   "SettingsWindow.swift:780"
   ]
  },
  {
   "key": "Search panel",
   "zh": "搜索面板",
   "refs": [
-   "SettingsWindow.swift:775"
+   "SettingsWindow.swift:787"
   ]
  },
  {
   "key": "In a browser",
   "zh": "浏览器里",
   "refs": [
-   "SettingsWindow.swift:779",
-   "SettingsWindow.swift:789"
+   "SettingsWindow.swift:791",
+   "SettingsWindow.swift:801"
   ]
  },
  {
   "key": "In any other app (all browsers)",
   "zh": "别的 App 里（搜所有浏览器）",
   "refs": [
-   "SettingsWindow.swift:781"
+   "SettingsWindow.swift:793"
   ]
  },
  {
   "key": "In any other app",
   "zh": "别的 App 里",
   "refs": [
-   "SettingsWindow.swift:792"
+   "SettingsWindow.swift:804"
   ]
  },
  {
   "key": "“All” shows when empty",
   "zh": "「全部」没输入时显示",
   "refs": [
-   "SettingsWindow.swift:796"
+   "SettingsWindow.swift:808"
   ]
  },
  {
   "key": "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it.",
   "zh": "勾上的进循环。面板打开时是第一个，按 Tab 依次往下切，⇧Tab 往回。「文件夹」是状态栏收藏的那些，回车用上次的方式打开，⌘↩ 换一个；「应用」默认关，装了 Raycast 的用不上。",
   "refs": [
-   "SettingsWindow.swift:824"
+   "SettingsWindow.swift:836"
   ]
  },
  {
   "key": "Tab order",
   "zh": "Tab 顺序",
   "refs": [
-   "SettingsWindow.swift:829"
+   "SettingsWindow.swift:841"
   ]
  },
  {
   "key": "Add site…",
   "zh": "添加站点…",
   "refs": [
-   "SettingsWindow.swift:837"
+   "SettingsWindow.swift:849"
   ]
  },
  {
   "key": "The “Search X” rows shown under Search mode after the search engine. %s in the URL is replaced with the query.",
   "zh": "「搜索」模式里列在搜索引擎后面的「在 X 搜索」。网址里的 %s 换成关键词。",
   "refs": [
-   "SettingsWindow.swift:840"
+   "SettingsWindow.swift:852"
   ]
  },
  {
   "key": "Site search",
   "zh": "站内搜索",
   "refs": [
-   "SettingsWindow.swift:845"
+   "SettingsWindow.swift:857"
   ]
  },
  {
   "key": "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together.",
   "zh": "同样的输入再搜时，上次选的那条排在前面；「最近使用」按你切换 App 的记录排。都只存在这台 Mac 上，清除时一起清掉。",
   "refs": [
-   "SettingsWindow.swift:851"
+   "SettingsWindow.swift:863"
   ]
  },
  {
   "key": "Clear",
   "zh": "清除",
   "refs": [
-   "SettingsWindow.swift:856",
-   "SettingsWindow.swift:943"
+   "SettingsWindow.swift:868",
+   "SettingsWindow.swift:955"
   ]
  },
  {
   "key": "Search memory",
   "zh": "搜索记忆",
   "refs": [
-   "SettingsWindow.swift:865"
+   "SettingsWindow.swift:877"
   ]
  },
  {
   "key": "Name",
   "zh": "名字",
   "refs": [
-   "SettingsWindow.swift:880"
+   "SettingsWindow.swift:892"
   ]
  },
  {
   "key": "Delete",
   "zh": "删除",
   "refs": [
-   "SettingsWindow.swift:891"
+   "SettingsWindow.swift:903"
   ]
  },
  {
   "key": "Press shortcut…",
   "zh": "按下快捷键…",
   "refs": [
-   "SettingsWindow.swift:921"
+   "SettingsWindow.swift:933"
   ]
  },
  {
   "key": "Record",
   "zh": "录制",
   "refs": [
-   "SettingsWindow.swift:922"
+   "SettingsWindow.swift:934"
   ]
  },
  {
   "key": "Reset to default",
   "zh": "恢复默认",
   "refs": [
-   "SettingsWindow.swift:944"
+   "SettingsWindow.swift:956"
   ]
  },
  {
   "key": "Version {0}",
   "zh": "版本 {0}",
   "refs": [
-   "SettingsWindow.swift:997"
+   "SettingsWindow.swift:1009"
   ]
  },
  {
   "key": "What's New",
   "zh": "本版更新内容",
   "refs": [
-   "SettingsWindow.swift:1002"
+   "SettingsWindow.swift:1014"
   ]
  },
  {
   "key": "MRU tab switching, plus tab management and pins that persist.",
   "zh": "按最近使用顺序切换标签，外加标签管理和置顶常驻。",
   "refs": [
-   "SettingsWindow.swift:1009"
+   "SettingsWindow.swift:1021"
   ]
  },
  {
   "key": "Checking…",
   "zh": "检查中…",
   "refs": [
-   "SettingsWindow.swift:1022"
+   "SettingsWindow.swift:1034"
   ]
  },
  {
   "key": "Downloading…",
   "zh": "下载中…",
   "refs": [
-   "SettingsWindow.swift:1024"
+   "SettingsWindow.swift:1036"
   ]
  },
  {
   "key": "Check for Updates",
   "zh": "检查更新",
   "refs": [
-   "SettingsWindow.swift:1026"
+   "SettingsWindow.swift:1038"
   ]
  },
  {
   "key": "Sponsor",
   "zh": "赞助开发",
   "refs": [
-   "SettingsWindow.swift:1034"
+   "SettingsWindow.swift:1046"
   ]
  },
  {
   "key": "Website",
   "zh": "官网",
   "refs": [
-   "SettingsWindow.swift:1039"
+   "SettingsWindow.swift:1051"
   ]
  },
  {
   "key": "Report an Issue",
   "zh": "反馈问题",
   "refs": [
-   "SettingsWindow.swift:1043"
+   "SettingsWindow.swift:1055"
   ]
  },
  {
   "key": "Settings",
   "zh": "设置",
   "refs": [
-   "SettingsWindow.swift:1125",
-   "SettingsWindow.swift:1198"
+   "SettingsWindow.swift:1137",
+   "SettingsWindow.swift:1210"
   ]
  },
  {
   "key": "General",
   "zh": "通用",
   "refs": [
-   "SettingsWindow.swift:1131"
+   "SettingsWindow.swift:1143"
   ]
  },
  {
   "key": "Switcher",
   "zh": "切换器",
   "refs": [
-   "SettingsWindow.swift:1132"
+   "SettingsWindow.swift:1144"
   ]
  },
  {
   "key": "Tabs",
   "zh": "标签管理",
   "refs": [
-   "SettingsWindow.swift:1134"
+   "SettingsWindow.swift:1146"
   ]
  },
  {
   "key": "Browsers",
   "zh": "浏览器",
   "refs": [
-   "SettingsWindow.swift:1137"
+   "SettingsWindow.swift:1149"
   ]
  },
  {
   "key": "About",
   "zh": "关于",
   "refs": [
-   "SettingsWindow.swift:1138"
+   "SettingsWindow.swift:1150"
   ]
  },
  {
@@ -1267,14 +1302,14 @@
   "key": "Use at least one of ⌘ / ⌃ / ⌥. Esc cancels. Works only while a browser is frontmost — watch out for ⌘T and ⌘D.",
   "zh": "至少带一个 ⌘ / ⌃ / ⌥。Esc 取消录制。只在浏览器前台生效，别撞上 ⌘T、⌘D。",
   "refs": [
-   "SettingsWindow.swift:452"
+   "SettingsWindow.swift:464"
   ]
  },
  {
   "key": "Use at least one of ⌘ / ⌃ / ⌥. Esc cancels. The in-browser key overrides the page's own; the other one works in every app.",
   "zh": "至少带一个 ⌘ / ⌃ / ⌥。Esc 取消录制。浏览器里那个会盖住网页自己的同名快捷键；别的 App 里那个在所有 App 里都生效。",
   "refs": [
-   "SettingsWindow.swift:783"
+   "SettingsWindow.swift:795"
   ]
  },
  {
@@ -1795,7 +1830,7 @@
   "zh": "扩展需要更新",
   "refs": [
    "TabSearchPanel.swift:1732",
-   "main.swift:364"
+   "main.swift:368"
   ]
  },
  {
@@ -1953,7 +1988,7 @@
    "UpdateChecker.swift:364",
    "UpdateChecker.swift:400",
    "main.swift:230",
-   "main.swift:370"
+   "main.swift:374"
   ]
  },
  {
@@ -2109,63 +2144,63 @@
   "key": "Extension v{0} is installed, but this app version needs extension v{1} or newer (the protocol changed; older extensions lose features).\n\nDownload the new extension package, replace your folder, then reload it in chrome://extensions.",
   "zh": "当前扩展 v{0}，本版应用需要 v{1} 或更新的扩展（协议有变化，旧扩展部分功能会失效）。\n\n请下载新的扩展包替换原文件夹后，在 chrome://extensions 重新加载。",
   "refs": [
-   "main.swift:365"
+   "main.swift:369"
   ]
  },
  {
   "key": "Open Upgrade Guide",
   "zh": "查看升级说明",
   "refs": [
-   "main.swift:369"
+   "main.swift:373"
   ]
  },
  {
   "key": "TabFlick could not start",
   "zh": "TabFlick 无法启动",
   "refs": [
-   "main.swift:401"
+   "main.swift:405"
   ]
  },
  {
   "key": "Port {0} is already in use. Another copy of TabFlick may already be running — check the menu bar.",
   "zh": "端口 {0} 已被占用。可能已经有一个 TabFlick 在运行了 —— 看看菜单栏。",
   "refs": [
-   "main.swift:402"
+   "main.swift:406"
   ]
  },
  {
   "key": "TabFlick stopped intercepting the shortcut",
   "zh": "TabFlick 已停止拦截快捷键",
   "refs": [
-   "main.swift:427"
+   "main.swift:431"
   ]
  },
  {
   "key": "The keyboard hook was repeatedly disabled by the system, so TabFlick turned it off rather than risk interfering with your typing. ⌃⇥ now falls back to Chrome's built-in switching.\n\nRestarting TabFlick restores it. If this keeps happening, please report it on GitHub.",
   "zh": "键盘钩子被系统反复禁用，为避免影响你正常打字，TabFlick 已主动停用它。\n⌃⇥ 现在回落到 Chrome 自带的切换方式。\n\n重启 TabFlick 可以恢复。反复出现的话去 GitHub 反馈。",
   "refs": [
-   "main.swift:429"
+   "main.swift:433"
   ]
  },
  {
   "key": "Accessibility permission was removed",
   "zh": "辅助功能权限已被移除",
   "refs": [
-   "main.swift:456"
+   "main.swift:460"
   ]
  },
  {
   "key": "TabFlick disabled its keyboard hook immediately, so your typing is unaffected. ⌃⇥ falls back to Chrome's built-in switching.\n\nAfter granting the permission again, quit and reopen TabFlick — macOS only reads this permission when a process starts.",
   "zh": "TabFlick 已经停用键盘钩子，不影响你正常打字。⌃⇥ 回落到 Chrome 自带的切换方式。\n\n重新授予权限后，需要退出并重新打开 TabFlick 才会生效 —— macOS 只在进程启动时读取这项权限。",
   "refs": [
-   "main.swift:458"
+   "main.swift:462"
   ]
  },
  {
   "key": "TabFlick could not install its keyboard hook",
   "zh": "TabFlick 无法安装键盘钩子",
   "refs": [
-   "main.swift:480"
+   "main.swift:484"
   ]
  }
 ]

@@ -156,13 +156,16 @@ async function handleFaviconQuery(items) {
   }
 }
 
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.target !== "offscreen") return;
 
   if (message.type === "ws-send") {
     if (ws?.readyState === WebSocket.OPEN) ws.send(message.data);
   } else if (message.type === "favicon-query") {
     handleFaviconQuery(message.items);
+  } else if (message.type === "ws-state") {
+    // SW 刚被唤醒、还不知道连没连着时直接问（⌘Z 恢复标签要先确认 TabFlick 在运行）
+    sendResponse({ open: ws?.readyState === WebSocket.OPEN });
   } else if (message.type === "ws-poke") {
     // SW 想确认连接还在
     if (ws?.readyState === WebSocket.OPEN) {

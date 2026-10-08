@@ -92,7 +92,7 @@
  "Not connected": "未連線",
  "Connected": "已連線",
  "Nothing pinned yet. Pin any tab in your browser.": "還沒有固定分頁。在瀏覽器裡固定任一分頁。",
- "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed.": "與瀏覽器雙向同步：固定即加入，取消固定即移除，⌘W 關掉不算。重新啟動後會自動還原，停在你最後看的那一頁。",
+ "Syncs both ways: pinning adds; unpinning or closing the tab removes, closing the whole window doesn't. Restored on restart, at the page you last viewed.": "與瀏覽器雙向同步：固定即加入，取消固定或關掉分頁即移除，關掉整個視窗不算。重新啟動後會自動還原，停在你最後看的那一頁。",
  "Pinned tabs": "固定分頁",
  "Pinned tabs · {0}": "固定分頁 · {0} 個",
  "Show close button on hover in the switcher": "切換器中懸停時顯示關閉按鈕",
@@ -300,5 +300,10 @@
  "Mini program": "小程式",
  "WeChat chat": "微信聊天",
  "WeChat": "微信",
- "Switch to window": "切換到視窗"
+ "Switch to window": "切換到視窗",
+ "⌘Z reopens the tab you just closed": "⌘Z 恢復剛關閉的分頁",
+ "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "不在文字欄位裡時，⌘Z 會恢復最近關閉的分頁或視窗，連按可繼續往前。自動清理關閉的不算。在新分頁和 chrome:// 頁面上無效。",
+ "Tab reopened": "已恢復分頁",
+ "Window reopened": "已恢復視窗",
+ "Nothing to reopen": "沒有可恢復的分頁"
 }

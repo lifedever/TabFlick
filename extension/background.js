@@ -355,6 +355,7 @@ async function ensureFavorites() {
         try {
           if (remaining > 1) {
             markClosing([t.id], "unpin");
+            await noteAutoClosed([t]);
             await chrome.tabs.remove(t.id);
             remaining -= 1;
             send({ type: "log", message: `pending unpin: closed ${h}` });
@@ -526,6 +527,8 @@ async function sweepExpiredTabs() {
     // 标记必须先于 remove：onRemoved 是同步触发的，晚一步这批就会被
     // 记成「手动关闭」—— 而「程序替我关的」恰恰是最需要能找回的那类。
     markClosing(victims.map((t) => t.id), "lifetime");
+    // ⌘Z 要跳过这批（见 noteAutoClosed），同样必须登记在 remove 之前
+    await noteAutoClosed(victims);
     await chrome.tabs.remove(victims.map((t) => t.id));
   } catch (e) {
     send({ type: "log", message: `lifetime sweep failed: ${e}` });
@@ -631,6 +634,154 @@ async function reopenTab(url, active) {
   } catch (e) {
     send({ type: "log", message: `reopen failed (${url}): ${e}` });
   }
+}
+
+// ── ⌘Z 恢复刚关闭的标签（Arc 的做法） ──────────────────────────────────
+//
+// 按键由每个网页里的 undo-close.js 判（焦点不在输入框、网页没占用 ⌘Z），这里只管
+// 恢复哪一个：Chrome 自己的最近关闭记录，和 ⇧⌘T 同一份 —— 带前进后退记录、回原窗口
+// 原位置，最近关的是整个窗口就恢复窗口，连按往前。唯一的区别是跳过我们自动关掉的
+//（存活时间清理、离线删掉的置顶）：不跳的话清理刚关了 47 个，⌘Z 恢复的是其中一个。
+//
+// Chrome 的记录里分不出谁关的，所以自动关之前先登一笔（网址 + 时间），挑的时候按
+// 「同网址、时间对得上」认出来跳过。这份账放 storage.session：SW 回收不丢，浏览器
+// 重启连同 Chrome 的最近关闭一起清空。
+
+const UNDO_CLOSE_SETTING = "undoCloseTab";   // storage.local，helper 推来的开关
+const AUTO_CLOSED_KEY = "autoClosed";        // storage.session，[{url, at}]
+/// Chrome 记的关闭时间（秒）和我们登记的时间差在这之内算同一次关闭
+const AUTO_CLOSED_MATCH_MS = 30_000;
+const AUTO_CLOSED_KEEP_MS = 6 * 3600 * 1000;
+const AUTO_CLOSED_LIMIT = 500;
+
+/// 读改写要串行：清理和离线取消置顶可能前后脚登记，并发会互相覆盖
+let autoClosedQueue = Promise.resolve();
+
+/// 登记一批即将被我们自动关掉的标签。必须在 tabs.remove 之前 await 完。
+function noteAutoClosed(tabs) {
+  const urls = tabs.map((t) => t.url).filter((u) => typeof u === "string" && u);
+  if (urls.length === 0) return Promise.resolve();
+  autoClosedQueue = autoClosedQueue
+    .then(async () => {
+      const now = Date.now();
+      const { [AUTO_CLOSED_KEY]: stored = [] } = await chrome.storage.session.get(AUTO_CLOSED_KEY);
+      const kept = stored.filter((e) => now - e.at < AUTO_CLOSED_KEEP_MS);
+      for (const url of urls) kept.push({ url, at: now });
+      await chrome.storage.session.set({ [AUTO_CLOSED_KEY]: kept.slice(-AUTO_CLOSED_LIMIT) });
+    })
+    .catch((e) => send({ type: "log", message: `note auto-closed failed: ${e}` }));
+  return autoClosedQueue;
+}
+
+/// 从 Chrome 的最近关闭记录（新的在前）里挑出 ⌘Z 该恢复的那条（标签或窗口），没有返回 null。
+/// 登记过的一笔只抵一条记录：同一个网址可能被清理关过好几个。
+function pickUndoTarget(recent, autoClosed) {
+  const pending = autoClosed.slice();
+  for (const entry of recent) {
+    if (entry.tab) {
+      const closedAt = (entry.lastModified ?? 0) * 1000;
+      const i = pending.findIndex(
+        (e) => e.url === entry.tab.url && Math.abs(e.at - closedAt) <= AUTO_CLOSED_MATCH_MS,
+      );
+      if (i !== -1) {
+        pending.splice(i, 1);
+        continue;
+      }
+      return entry.tab.sessionId ? entry : null;
+    }
+    if (entry.window) return entry.window.sessionId ? entry : null;
+    // 别的类型（比如关掉的标签组）恢复不了：停在这里，不越过它去恢复更早的
+    return null;
+  }
+  return null;
+}
+
+/// TabFlick 退出后 ⌘Z 回到浏览器原样（和「没连着 helper 就不清理标签」同一个口径）。
+/// SW 刚被这次按键唤醒时 connected 还没回来，直接问持有连接的 offscreen 页。
+async function helperConnected() {
+  if (connected) return true;
+  try {
+    const state = await chrome.runtime.sendMessage({ target: "offscreen", type: "ws-state" });
+    return state?.open === true;
+  } catch {
+    return false;
+  }
+}
+
+async function undoCloseTab(senderTab) {
+  if (!chrome.sessions || senderTab?.incognito) return;
+  const { [UNDO_CLOSE_SETTING]: enabled } = await chrome.storage.local.get(UNDO_CLOSE_SETTING);
+  if (enabled === false) return;   // 没收到过配置（老版 helper）按默认开
+  if (!(await helperConnected())) return;
+
+  const [recent, { [AUTO_CLOSED_KEY]: autoClosed = [] }] = await Promise.all([
+    chrome.sessions.getRecentlyClosed(),
+    chrome.storage.session.get(AUTO_CLOSED_KEY),
+  ]);
+  const target = pickUndoTarget(recent, autoClosed);
+  // 两种结果都报给 helper 弹 toast：标签自己会出现，但「没东西可恢复」和「按了没反应」
+  // 在屏幕上看起来一样
+  if (!target) {
+    reportToHelper({ type: "undoClosed", restored: false });
+    return;
+  }
+  const restored = await chrome.sessions.restore((target.tab ?? target.window).sessionId);
+  reportToHelper({ type: "undoClosed", restored: true, kind: target.window ? "window" : "tab", title: undoTitle(target) });
+  reportRestoredPins(restored);
+}
+
+/// 恢复回来的固定标签报给 helper，把置顶记回来。自己关掉置顶标签时置顶记录当场删了
+///（见 recordClosed），Chrome 恢复出来的标签却还是固定的 —— 不报的话两边对不上，要等下一次
+/// 核对才收编回来，而且收编是按当前网址新建，原来的置顶地址就丢了。helper 那边认得出是刚关掉的
+/// 那条（ClosedPinStash），原样放回；窗口里的置顶记录本来就没删，会认领原来那条，不会重复。
+/// 恢复是 Chrome 直接建的标签，不经过 onUpdated(pinned:true)，所以只能在这里报。
+function reportRestoredPins(restored) {
+  const tabs = restored?.tab ? [restored.tab] : restored?.window?.tabs ?? [];
+  for (const t of tabs) {
+    const url = t?.url || t?.pendingUrl || "";
+    if (t?.pinned && typeof t.id === "number" && url.startsWith("http")) {
+      reportToHelper({ type: "pinnedTab", tabId: t.id, url, title: t.title ?? "", favIconUrl: t.favIconUrl ?? "" });
+    }
+  }
+}
+
+/// toast 上写的名字：标签取它的标题，窗口取它当时正在看的那个标签
+function undoTitle(entry) {
+  const tab = entry.tab ?? entry.window?.tabs?.find((t) => t.active) ?? entry.window?.tabs?.[0];
+  return (tab?.title || tab?.url || "").slice(0, 200);
+}
+
+/// 不走 send：SW 刚被这次按键唤醒时 connected 可能还没回来，send 会直接丢掉。
+/// 走到这里时 helperConnected 已经确认连着，offscreen 那边连接没开会自己丢。
+function reportToHelper(obj) {
+  chrome.runtime
+    .sendMessage({ target: "offscreen", type: "ws-send", data: JSON.stringify(obj) })
+    .catch(() => {});
+}
+
+/// 连按 ⌘Z 时一个一个来：并发的话几次都读到同一份记录，恢复的是同一条，只成功一次
+let undoQueue = Promise.resolve();
+
+function requestUndoClose(senderTab) {
+  undoQueue = undoQueue
+    .then(() => undoCloseTab(senderTab))
+    .catch((e) => send({ type: "log", message: `undo close failed: ${e}` }));
+}
+
+/// 声明的网页脚本只在页面加载时注入，装扩展 / 更新扩展之前就开着的标签没有它 ——
+/// 不补的话更新完得把网页刷新一遍才能用。休眠的标签跳过，它们被唤醒时会重新加载。
+async function injectUndoClose() {
+  if (!chrome.scripting) return;
+  const tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
+  await Promise.all(
+    tabs
+      .filter((t) => !t.discarded && !t.incognito)
+      .map((t) =>
+        chrome.scripting
+          .executeScript({ target: { tabId: t.id }, files: ["undo-close.js"] })
+          .catch(() => {}),
+      ),
+  );
 }
 
 // ── 执行切换 ────────────────────────────────────────────────────────────
@@ -872,6 +1023,13 @@ async function handleHelperMessage(raw) {
       if (typeof msg.tabLifetimeHours === "number") {
         settings.tabLifetimeHours = msg.tabLifetimeHours;
       }
+      // ⌘Z 的开关存 storage.local 而不是内存：按键常常正是把 SW 唤醒的那个事件，
+      // 那时 helper 的配置还没重新推过来。不 await：写失败也别挡住下面的置顶核对
+      if (typeof msg.undoCloseTab === "boolean") {
+        chrome.storage.local
+          .set({ [UNDO_CLOSE_SETTING]: msg.undoCloseTab })
+          .catch((e) => send({ type: "log", message: `save undoCloseTab failed: ${e}` }));
+      }
       // 必须先于 favorites 落位：ensureFavorites 会用到它
       if (Array.isArray(msg.pendingUnpinHosts)) {
         pendingUnpinHosts = msg.pendingUnpinHosts;
@@ -905,8 +1063,15 @@ function profileKey() {
   return profileKeyPromise;
 }
 
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.target !== "sw") return;
+
+  // 网页里的脚本（undo-close.js）只许发这一种。网页环境不可信，别让它走到下面
+  // 转发 helper 消息的那些分支
+  if (sender?.tab) {
+    if (message.type === "undoCloseTab") requestUndoClose(sender.tab);
+    return;
+  }
 
   switch (message.type) {
     case "ws-open":
@@ -1038,9 +1203,13 @@ chrome.runtime.onStartup.addListener(() => {
   connect();
   ensureAlarms();
 });
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   connect();
   ensureAlarms();
+  // 浏览器自己升级也会触发 onInstalled，那次不用补（标签都是重新加载的）
+  if (details?.reason === "install" || details?.reason === "update") {
+    injectUndoClose().catch((e) => send({ type: "log", message: `inject undo-close failed: ${e}` }));
+  }
 });
 
 // 兜底：helper 重启或连接意外断掉时，最多 30s 内恢复。

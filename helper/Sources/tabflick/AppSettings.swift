@@ -358,6 +358,7 @@ final class AppSettings: ObservableObject {
         static let updateCheckFrequency = "updateCheckFrequency"
         static let allowTabClose = "allowTabClose"
         static let tabLifetime = "tabLifetime"
+        static let undoCloseTab = "undoCloseTab"
         static let favorites = "favoriteTabs"
         static let favoriteCurrentUrls = "favoriteCurrentUrls"
         static let pinHotkey = "pinHotkey"
@@ -698,6 +699,17 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 焦点不在输入框时 ⌘Z 恢复刚关闭的标签（Arc 的做法）。默认开：这种时候浏览器本来
+    /// 不拿 ⌘Z 做任何事，打开不会占掉已有行为。判键和恢复都在扩展里（undo-close.js），
+    /// 这里只是开关，走 onChange 推送。
+    @Published var undoCloseTab: Bool {
+        didSet {
+            guard oldValue != undoCloseTab else { return }
+            UserDefaults.standard.set(undoCloseTab, forKey: Key.undoCloseTab)
+            onChange?()
+        }
+    }
+
     /// 状态栏菜单里平铺的收藏文件夹数量，超出的收进「更多 ▸」。
     /// 纯 helper 侧展示配置，菜单每次打开时现读，不需要推给扩展。
     @Published var inlineFolderLimit: Int {
@@ -735,6 +747,7 @@ final class AppSettings: ObservableObject {
         switcherLayout = SwitcherLayout(rawValue: defaults.string(forKey: Key.switcherLayout) ?? "") ?? .strip
         allowTabClose = defaults.bool(forKey: Key.allowTabClose)   // 未设置时即默认 false
         tabLifetime = TabLifetime(rawValue: defaults.string(forKey: Key.tabLifetime) ?? "") ?? .forever
+        undoCloseTab = defaults.object(forKey: Key.undoCloseTab) == nil ? true : defaults.bool(forKey: Key.undoCloseTab)
         favorites = defaults.data(forKey: Key.favorites)
             .flatMap { try? JSONDecoder().decode([FavoriteTab].self, from: $0) } ?? []
         pinHotkey = defaults.data(forKey: Key.pinHotkey)
@@ -806,6 +819,7 @@ final class AppSettings: ObservableObject {
             "type": "settings",
             "scopeToWindow": scopeToWindow,
             "tabLifetimeHours": tabLifetime.hours,
+            "undoCloseTab": undoCloseTab,
         ]
         if let scope {
             // 离线期间攒下的取消置顶，由扩展在核对前补做

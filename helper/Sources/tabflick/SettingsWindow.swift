@@ -400,8 +400,8 @@ private struct TabManagementPane: View {
                 }
 
                 Text(L10n.t(
-                    "和浏览器双向同步：置顶即收藏，取消置顶即移除，⌘W 关掉不算。重启浏览器会自动恢复，停在你最后看的那一页。",
-                    "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed."
+                    "和浏览器双向同步：置顶即收藏，取消置顶或关掉标签即移除，关整个窗口不算。重启浏览器会自动恢复，停在你最后看的那一页。",
+                    "Syncs both ways: pinning adds; unpinning or closing the tab removes, closing the whole window doesn't. Restored on restart, at the page you last viewed."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -421,6 +421,18 @@ private struct TabManagementPane: View {
                 Text(L10n.t(
                     "只剩两个标签时不显示。全局切换器没有这个按钮。",
                     "Hidden when only two tabs are left. Not available in the global switcher."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+                Toggle(isOn: $settings.undoCloseTab) {
+                    Text(L10n.t("⌘Z 恢复刚关闭的标签", "⌘Z reopens the tab you just closed"))
+                }
+                .toggleStyle(.switch)
+
+                Text(L10n.t(
+                    "不在输入框里时，⌘Z 恢复最近关掉的标签或窗口，连按继续往前。自动清理关掉的不算。新标签页和 chrome:// 页面上不起作用。",
+                    "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)

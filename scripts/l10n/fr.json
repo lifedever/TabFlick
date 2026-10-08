@@ -92,7 +92,7 @@
  "Not connected": "Non connecté",
  "Connected": "Connecté",
  "Nothing pinned yet. Pin any tab in your browser.": "Aucun onglet épinglé. Épinglez un onglet dans votre navigateur.",
- "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed.": "Synchronisé dans les deux sens : épingler ajoute, désépingler retire, ⌘W ne retire rien. Restaurés au redémarrage, sur la dernière page consultée.",
+ "Syncs both ways: pinning adds; unpinning or closing the tab removes, closing the whole window doesn't. Restored on restart, at the page you last viewed.": "Synchronisé dans les deux sens : épingler ajoute ; désépingler ou fermer l’onglet retire, fermer toute la fenêtre ne retire rien. Restaurés au redémarrage, sur la dernière page consultée.",
  "Pinned tabs": "Onglets épinglés",
  "Pinned tabs · {0}": "Onglets épinglés · {0}",
  "Show close button on hover in the switcher": "Afficher le bouton Fermer au survol dans le sélecteur",
@@ -300,5 +300,10 @@
  "Mini program": "Mini-programme",
  "WeChat chat": "Discussion WeChat",
  "WeChat": "WeChat",
- "Switch to window": "Aller à la fenêtre"
+ "Switch to window": "Aller à la fenêtre",
+ "⌘Z reopens the tab you just closed": "Rouvrir le dernier onglet fermé avec ⌘Z",
+ "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "Hors des champs de texte, ⌘Z rouvre le dernier onglet ou la dernière fenêtre fermés ; appuyez de nouveau pour remonter plus loin. Les onglets fermés par le nettoyage automatique sont ignorés. Ne fonctionne pas sur la page Nouvel onglet ni sur les pages chrome://.",
+ "Tab reopened": "Onglet rouvert",
+ "Window reopened": "Fenêtre rouverte",
+ "Nothing to reopen": "Rien à rouvrir"
 }

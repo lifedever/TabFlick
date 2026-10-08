@@ -391,6 +391,14 @@ final class MRUController {
     /// tabId 随浏览器会话失效，绑定死了就等下一次 favoriteBound 重建。
     private var favoriteTabBindings: [String: Int] = [:]
 
+    /// 自己关掉置顶标签时删掉的置顶记录。⌘Z / ⇧⌘T 把标签恢复回来、扩展报上 pinnedTab 时
+    /// 原样放回去（原来的置顶地址、在列表里的位置都还在），见 ClosedPinStash。
+    private var closedPins = ClosedPinStash<FavoriteTab>()
+
+    private static func pinOwner(_ scope: FavoriteScope) -> String {
+        "\(scope.browser)|\(scope.profile ?? "")"
+    }
+
     /// 切换器实际使用的列表：「只切换当前窗口」开着就按 currentWindowId
     /// 过滤。过滤结果为空（窗口 id 对不上的异常情况）时退回全量，
     /// 宁可范围变大也不能让切换器凭空失灵。
@@ -530,7 +538,7 @@ final class MRUController {
     /// 低于它不影响基本功能，但有功能用不上（操作里的重新加载 / 删除历史、多 Profile 分账），
     /// 状态栏、设置页、搜索面板给不打扰的提示（用户 2026-09-27 要的）。和上面那个
     /// `requiredExtensionVersion`（协议不兼容才提，弹窗）是两回事。
-    static let latestExtensionVersion = "0.19.1"
+    static let latestExtensionVersion = "0.20.0"
 
     /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
     private static func isOlder(_ v: String, than required: String) -> Bool {
@@ -1613,6 +1621,17 @@ final class MRUController {
                 favoriteTabBindings[orphan.id] = tabId
                 return
             }
+            // 自己关掉的置顶标签被恢复回来（⌘Z / ⇧⌘T）：放回关掉时删的那条，别按当前网址新建 ——
+            // 新建的置顶地址是标签漂移后的地方，「回到置顶地址」就回不去了。排在认领空记录之后：
+            // 同网址还有一条空着的话先认它，反过来会多出一条、ensure 再给它补开一个标签
+            if let entry = closedPins.take(url: url, owner: Self.pinOwner(scope)) {
+                let fav = entry.pin
+                log("★ reopened pin → favorite back: \(fav.title.prefix(50))")
+                settings.favoriteCurrentUrls[fav.id] = url
+                favoriteTabBindings[fav.id] = tabId
+                settings.favorites.insert(fav, at: min(entry.index, settings.favorites.count))
+                return
+            }
             // 多 Profile：升级前的收藏里有这个置顶 → 归这个 Profile（它真开着），不新建
             if adoptLegacyFavorite(scope: scope, url: url, host: host, tabId: tabId) != nil { return }
             let title = root["title"] as? String ?? ""
@@ -1645,6 +1664,13 @@ final class MRUController {
                 // 浏览器自己已经撤掉了置顶（或整个标签都没了），不用再发 unpin：按域名发回去会把
                 // 同一个站**另一个**置顶标签也撤了
                 browserHandledUnpins.insert(fav.id)
+                // 关掉的（不是取消固定的）留一份：用户 ⌘Z 恢复回来时原样放回去。
+                // 必须在 remove 之前取「最后访问」：favorites 的 didSet 会把它一起清掉
+                if closed {
+                    closedPins.remember(fav, index: index,
+                                        urls: [fav.url, settings.favoriteCurrentUrls[fav.id] ?? ""],
+                                        owner: Self.pinOwner(scope))
+                }
                 settings.favorites.remove(at: index)
             }
 
@@ -1681,6 +1707,22 @@ final class MRUController {
             recordExtensionVersion(clientID, root["extVersion"] as? String ?? "0.1.0")
             if reportedKey != nil { profileIdentityChanged(clientID) }
             pushSettings(to: clientID)
+
+        case "undoClosed":
+            // ⌘Z 恢复刚关闭的标签的结果（扩展的 undo-close.js → background.js）。标签自己会冒出来，
+            // 但「没东西可恢复」和「按了没反应」在屏幕上一样，所以两种都给 toast。
+            // 标题是外部输入：只当文字显示，截断防超长
+            if root["restored"] as? Bool == true {
+                let isWindow = root["kind"] as? String == "window"
+                let title = String((root["title"] as? String ?? "").prefix(200))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                log("↩︎ undo close → \(isWindow ? "window" : "tab")")
+                Toast.show(isWindow ? L10n.t("已恢复窗口", "Window reopened") : L10n.t("已恢复标签", "Tab reopened"),
+                           detail: title.isEmpty ? nil : title)
+            } else {
+                log("↩︎ undo close: nothing to restore")
+                Toast.show(L10n.t("没有可恢复的标签", "Nothing to reopen"), kind: .info)
+            }
 
         case "openSettings":
             // 用户点了浏览器工具栏的 TabFlick 图标

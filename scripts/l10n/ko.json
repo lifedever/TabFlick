@@ -92,7 +92,7 @@
  "Not connected": "연결되지 않음",
  "Connected": "연결됨",
  "Nothing pinned yet. Pin any tab in your browser.": "아직 고정된 탭이 없습니다. 브라우저에서 원하는 탭을 고정하세요.",
- "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed.": "브라우저와 양방향으로 동기화됩니다. 고정하면 추가되고 고정 해제하면 제거되며, ⌘W로 닫는 것은 해당되지 않습니다. 재시작하면 마지막으로 본 페이지로 복원됩니다.",
+ "Syncs both ways: pinning adds; unpinning or closing the tab removes, closing the whole window doesn't. Restored on restart, at the page you last viewed.": "브라우저와 양방향으로 동기화됩니다. 고정하면 추가되고, 고정 해제하거나 탭을 닫으면 제거됩니다. 창 전체를 닫는 것은 해당되지 않습니다. 재시작하면 마지막으로 본 페이지로 복원됩니다.",
  "Pinned tabs": "고정된 탭",
  "Pinned tabs · {0}": "고정된 탭 · {0}개",
  "Show close button on hover in the switcher": "전환기에서 포인터를 올리면 닫기 버튼 표시",
@@ -300,5 +300,10 @@
  "Mini program": "미니 프로그램",
  "WeChat chat": "WeChat 채팅",
  "WeChat": "WeChat",
- "Switch to window": "창으로 전환"
+ "Switch to window": "창으로 전환",
+ "⌘Z reopens the tab you just closed": "⌘Z로 방금 닫은 탭 다시 열기",
+ "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "텍스트 입력란 밖에서 ⌘Z를 누르면 마지막으로 닫은 탭이나 창을 다시 엽니다. 계속 누르면 그 이전 것을 엽니다. 자동 정리로 닫힌 탭은 건너뜁니다. 새 탭 페이지와 chrome:// 페이지에서는 작동하지 않습니다.",
+ "Tab reopened": "탭을 다시 열었습니다",
+ "Window reopened": "창을 다시 열었습니다",
+ "Nothing to reopen": "다시 열 탭이 없습니다"
 }

@@ -92,7 +92,7 @@
  "Not connected": "未接続",
  "Connected": "接続済み",
  "Nothing pinned yet. Pin any tab in your browser.": "固定タブはまだありません。ブラウザで任意のタブを固定してください。",
- "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed.": "ブラウザと双方向に同期します。固定すると追加、固定を解除すると削除され、⌘Wで閉じても削除されません。ブラウザを再起動すると、最後に見ていたページで復元されます。",
+ "Syncs both ways: pinning adds; unpinning or closing the tab removes, closing the whole window doesn't. Restored on restart, at the page you last viewed.": "ブラウザと双方向に同期します。固定すると追加、固定を解除するかタブを閉じると削除されます。ウインドウごと閉じた場合は削除されません。ブラウザを再起動すると、最後に見ていたページで復元されます。",
  "Pinned tabs": "固定タブ",
  "Pinned tabs · {0}": "固定タブ · {0}",
  "Show close button on hover in the switcher": "スイッチャーでポインタを重ねると閉じるボタンを表示",
@@ -300,5 +300,10 @@
  "Mini program": "ミニプログラム",
  "WeChat chat": "WeChatのチャット",
  "WeChat": "WeChat",
- "Switch to window": "ウインドウに切り替え"
+ "Switch to window": "ウインドウに切り替え",
+ "⌘Z reopens the tab you just closed": "⌘Z で閉じたタブを開き直す",
+ "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "テキスト入力欄の外で ⌘Z を押すと、最後に閉じたタブまたはウインドウを開き直します。続けて押すとさらに前に戻ります。自動で閉じたタブは対象外です。新しいタブ ページと chrome:// のページでは使えません。",
+ "Tab reopened": "タブを開き直しました",
+ "Window reopened": "ウインドウを開き直しました",
+ "Nothing to reopen": "開き直せるタブはありません"
 }

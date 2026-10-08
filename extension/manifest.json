@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabFlick Bridge",
-  "version": "0.19.1",
+  "version": "0.20.0",
   "description": "把标签页的 MRU 顺序桥接给 TabFlick helper，并执行切换指令。",
   "permissions": [
     "tabs",
@@ -11,7 +11,9 @@
     "bookmarks",
     "search",
     "history",
-    "favicon"
+    "favicon",
+    "sessions",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -20,6 +22,19 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "undo-close.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
   "action": {
     "default_title": "TabFlick — click for settings",
     "default_icon": {

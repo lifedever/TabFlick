@@ -92,7 +92,7 @@
  "Not connected": "Nicht verbunden",
  "Connected": "Verbunden",
  "Nothing pinned yet. Pin any tab in your browser.": "Noch nichts angepinnt. Einen beliebigen Tab im Browser anpinnen.",
- "Syncs both ways: pinning adds, unpinning removes, ⌘W doesn't. Restored on restart, at the page you last viewed.": "Synchronisiert in beide Richtungen: Anpinnen fügt hinzu, Loslösen entfernt, ⌘W nicht. Wird beim Neustart wiederhergestellt – mit der zuletzt angesehenen Seite.",
+ "Syncs both ways: pinning adds; unpinning or closing the tab removes, closing the whole window doesn't. Restored on restart, at the page you last viewed.": "Synchronisiert in beide Richtungen: Anpinnen fügt hinzu; Loslösen oder Schließen des Tabs entfernt, das ganze Fenster zu schließen nicht. Wird beim Neustart wiederhergestellt – mit der zuletzt angesehenen Seite.",
  "Pinned tabs": "Angepinnte Tabs",
  "Pinned tabs · {0}": "Angepinnte Tabs · {0}",
  "Show close button on hover in the switcher": "Schließen-Taste im Umschalter beim Überfahren zeigen",
@@ -300,5 +300,10 @@
  "Mini program": "Mini-Programm",
  "WeChat chat": "WeChat-Chat",
  "WeChat": "WeChat",
- "Switch to window": "Zum Fenster wechseln"
+ "Switch to window": "Zum Fenster wechseln",
+ "⌘Z reopens the tab you just closed": "Zuletzt geschlossenen Tab mit ⌘Z wieder öffnen",
+ "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "Außerhalb von Textfeldern öffnet ⌘Z den zuletzt geschlossenen Tab oder das zuletzt geschlossene Fenster wieder; weiteres Drücken geht weiter zurück. Vom automatischen Schließen betroffene Tabs werden übersprungen. Funktioniert nicht auf der Seite „Neuer Tab“ und auf chrome://-Seiten.",
+ "Tab reopened": "Tab wieder geöffnet",
+ "Window reopened": "Fenster wieder geöffnet",
+ "Nothing to reopen": "Nichts zum Wiederöffnen"
 }
