@@ -62,6 +62,9 @@ private let urlCases: [URLCase] = [
     URLCase(query: "  example.com/path?x=1 ", want: "https://example.com/path?x=1"),
     URLCase(query: "http://a.bc", want: "http://a.bc"),
     URLCase(query: "https://github.com/lifedever", want: "https://github.com/lifedever"),
+    // 协议头转小写，路径照原样（扩展只认小写协议头）
+    URLCase(query: "HTTPS://github.com/LifeDever", want: "https://github.com/LifeDever"),
+    URLCase(query: "Http://a.bc", want: "http://a.bc"),
     URLCase(query: "192.168.1.1", want: "https://192.168.1.1"),
     URLCase(query: "v2ex", want: nil),
     URLCase(query: "hello world.com", want: nil),

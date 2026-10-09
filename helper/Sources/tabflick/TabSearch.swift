@@ -337,7 +337,11 @@ enum TabSearch {
         guard !text.isEmpty, !text.contains(where: { $0.isWhitespace }) else { return nil }
         let lower = text.lowercased()
         if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
-            return text.count > 8 ? text : nil
+            guard text.count > 8 else { return nil }
+            // 协议头转小写：扩展只认小写的 http(s)://，`HTTPS://…` 原样发过去会被静默丢掉。
+            // 后面的部分不动（路径区分大小写）
+            let scheme = lower.hasPrefix("https://") ? 8 : 7
+            return String(lower.prefix(scheme)) + text.dropFirst(scheme)
         }
         let host = text.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         let labels = host.split(separator: ".", omittingEmptySubsequences: false)
