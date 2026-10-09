@@ -188,6 +188,7 @@
  "Loading apps": "アプリを読み込み中",
  "No matching apps": "一致するアプリはありません",
  "Open in new tab": "新しいタブで開く",
+ "Open in current tab": "現在のタブで開く",
  "Open “{0}”": "「{0}」を開く",
  "Close tab": "タブを閉じる",
  "Current": "現在",

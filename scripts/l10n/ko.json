@@ -188,6 +188,7 @@
  "Loading apps": "앱 목록 불러오는 중",
  "No matching apps": "일치하는 앱 없음",
  "Open in new tab": "새 탭에서 열기",
+ "Open in current tab": "현재 탭에서 열기",
  "Open “{0}”": "“{0}” 열기",
  "Close tab": "탭 닫기",
  "Current": "현재",

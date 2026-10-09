@@ -188,6 +188,7 @@
  "Loading apps": "Chargement des apps",
  "No matching apps": "Aucune app correspondante",
  "Open in new tab": "Ouvrir dans un nouvel onglet",
+ "Open in current tab": "Ouvrir dans l'onglet actif",
  "Open “{0}”": "Ouvrir « {0} »",
  "Close tab": "Fermer l'onglet",
  "Current": "Actif",

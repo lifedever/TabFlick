@@ -188,6 +188,7 @@
  "Loading apps": "Cargando apps",
  "No matching apps": "Ninguna app coincide",
  "Open in new tab": "Abrir en una pestaña nueva",
+ "Open in current tab": "Abrir en la pestaña actual",
  "Open “{0}”": "Abrir “{0}”",
  "Close tab": "Cerrar pestaña",
  "Current": "Actual",

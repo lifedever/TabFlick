@@ -188,6 +188,7 @@
  "Loading apps": "正在讀取 App 列表",
  "No matching apps": "沒有符合的 App",
  "Open in new tab": "在新分頁打開",
+ "Open in current tab": "在目前分頁打開",
  "Open “{0}”": "打開「{0}」",
  "Close tab": "關閉分頁",
  "Current": "目前",

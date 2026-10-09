@@ -69,8 +69,8 @@ enum SearchRow: Identifiable {
     case tab(SwitcherItem)
     /// 已关闭的标签（找回，新标签打开）
     case closed(ClosedTab)
-    /// 查询本身像个网址（新标签打开）
-    case url(String)
+    /// 查询本身像个网址：into 为 nil 新标签打开，否则在那个标签（当前标签）里打开
+    case url(String, into: SwitcherItem?)
     /// 书签（新标签打开）
     case bookmark(BookmarkInfo)
     /// 浏览器历史（新标签打开）
@@ -95,7 +95,7 @@ enum SearchRow: Identifiable {
         switch self {
         case .tab(let item):     return item.id
         case .closed(let entry): return "closed#\(entry.id)"
-        case .url(let url):      return "url#\(url)"
+        case .url(let url, let into): return (into == nil ? "url#" : "url-here#") + url
         case .bookmark(let bm):  return "bm#\(bm.path)#\(bm.url)"
         case .history(let h):    return "history#\(h.url)"
         case .action(let a):     return "action#\(a.id)"
@@ -118,7 +118,7 @@ enum SearchRow: Identifiable {
         case .closed(let entry): return entry.favIconUrl
         case .bookmark(let bm):  return Self.siteKey(bm.url)
         case .history(let h):    return Self.siteKey(h.url)
-        case .url(let url):      return Self.siteKey(url)
+        case .url(let url, _):   return Self.siteKey(url)
         case .action(.siteSearch(let site, _)): return "site:" + site.host
         case .folder(let f):     return "file:" + f.path
         case .opener(let o, _):  return "file:" + o.path
@@ -136,7 +136,7 @@ enum SearchRow: Identifiable {
         switch self {
         case .bookmark(let bm): return bm.url
         case .history(let h):   return h.url
-        case .url(let url):     return url
+        case .url(let url, _):  return url
         case .action(.siteSearch(let site, _)): return "https://" + site.host + "/"
         case .command(.primary, let target): return target.faviconPageURL
         default:                return nil
@@ -153,7 +153,8 @@ enum SearchRow: Identifiable {
         switch self {
         case .tab(let item):     return item.tab.title.isEmpty ? item.tab.url : Self.decodeEntities(item.tab.title)
         case .closed(let entry): return entry.title.isEmpty ? entry.url : Self.decodeEntities(entry.title)
-        case .url:               return L10n.t("在新标签打开", "Open in new tab")
+        case .url(_, nil):       return L10n.t("在新标签打开", "Open in new tab")
+        case .url:               return L10n.t("在当前标签打开", "Open in current tab")
         case .bookmark(let bm):  return bm.title.isEmpty ? bm.url : Self.decodeEntities(bm.title)
         case .history(let h):    return h.title.isEmpty ? h.url : Self.decodeEntities(h.title)
         case .action(let a):     return a.title
@@ -182,7 +183,8 @@ enum SearchRow: Identifiable {
         switch self {
         case .tab:               return L10n.t("切换到标签", "Switch to tab")
         case .closed:            return L10n.t("重新打开", "Reopen")
-        case .url, .bookmark, .history: return L10n.t("在新标签打开", "Open in new tab")
+        case .url(_, nil), .bookmark, .history: return L10n.t("在新标签打开", "Open in new tab")
+        case .url:               return L10n.t("在当前标签打开", "Open in current tab")
         case .action(let a):     return a.title   // 「搜索“xx”」；不借模式名那个「搜索」的键，西法德译的是名词
         case .folder:            return defaultOpener.map { L10n.t("用 \($0.name) 打开", "Open with \($0.name)") }
                                      ?? L10n.t("打开", "Open")
@@ -202,7 +204,7 @@ enum SearchRow: Identifiable {
         case .closed(let entry): return entry.url
         case .bookmark(let bm):  return bm.url
         case .history(let h):    return h.url
-        case .url(let url):      return url
+        case .url(let url, _):   return url
         case .folder(let f):     return f.path
         case .opener(_, let f):  return f.path
         case .app(let a):        return a.path
@@ -221,7 +223,7 @@ enum SearchRow: Identifiable {
         case .closed(let entry): return entry.url
         case .bookmark(let bm):  return bm.url
         case .history(let h):    return h.url
-        case .url(let url):      return url
+        case .url(let url, _):   return url
         default:                 return nil
         }
     }
@@ -377,7 +379,8 @@ enum RowCommand: String {
 enum SearchPick {
     case tab(SwitcherItem)
     case closed(ClosedTab)
-    case url(String)
+    /// into 为 nil 新标签打开，否则在那个标签里打开
+    case url(String, into: SwitcherItem?)
     case bookmark(BookmarkInfo)
     case history(HistoryInfo)
     case action(SearchAction)
@@ -1077,13 +1080,19 @@ final class TabSearchModel: ObservableObject {
                                      hidden: countKnown ? hidden : 0, moreUnknown: !countKnown && hidden > 0))
             body += shown
         }
-        // 「操作」段只有「在新标签打开」，输入像网址才有（2026-09-30 用户定的）：同站没开着 → 最前，
+        // 「操作」段是「在新标签打开」（+「在当前标签打开」），输入像网址才有（2026-09-30 用户定的）：同站没开着 → 最前，
         // 回车直接开（常去的站历史里一串帖子，垫底的话回车开的是某个帖子不是首页）；同站开着 →
         // 紧跟标签段，标签在前、回车切过去不开重复的，⌘ 数字还够得着新开。
+        // 有当前标签时下面再跟一行「在当前标签打开」（2026-10-09 用户要的）；回车默认仍是新标签。
+        // 别的 App 前台按 ⌥Space 没有当前标签，就没有这一行。
         func placeURL() {
             guard let url = TabSearch.urlCandidate(trimmed) else { return }
-            specs.append(SectionSpec(kind: .ops, count: 1))
-            body.append(.url(url))
+            var rows: [SearchRow] = [.url(url, into: nil)]
+            if let currentID, let current = all.first(where: { $0.id == currentID }) {
+                rows.append(.url(url, into: current))
+            }
+            specs.append(SectionSpec(kind: .ops, count: rows.count))
+            body += rows
         }
         if sitePrefix != nil && !siteOpen { placeURL() }
 
@@ -2080,7 +2089,7 @@ private struct SearchRowView: View {
         switch row {
         case .tab(let item):     return Self.host(of: item.tab.url)
         case .closed(let entry): return Self.host(of: entry.url)
-        case .url(let url):      return url
+        case .url(let url, _):   return url
         case .bookmark(let bm):  return bm.path.isEmpty ? bm.url : "\(bm.path) · \(bm.url)"
         case .history(let h):    return Self.host(of: h.url)
         case .action(let a):     return a.subtitle
@@ -2557,7 +2566,7 @@ final class TabSearchPanel {
             switch row {
             case .tab(let item):     pick?(.tab(item))
             case .closed(let entry): pick?(.closed(entry))
-            case .url(let url):      pick?(.url(url))
+            case .url(let url, let into): pick?(.url(url, into: into))
             case .bookmark(let bm):  pick?(.bookmark(bm))
             case .history(let h):    pick?(.history(h))
             case .action(let a):     pick?(.action(a))

@@ -1310,10 +1310,16 @@ final class MRUController {
         case .closed(let entry):
             log("🔍 reopen closed → \(entry.displayTitle.prefix(50))")
             reopenClosedTab(id: entry.id)   // 自己会激活浏览器、按记录的 Profile 找连接
-        case .url(let url):
+        case .url(let url, nil):
             guard let clientID = target(fallbackClient) else { return }
             log("🔍 open url → \(url.prefix(80))")
             server.send(["type": "reopen", "url": url], to: clientID)
+        case .url(let url, let current?):
+            // 在当前标签打开：走「回到置顶地址」那条 navigate（扩展 0.18.0 起）
+            guard supportsPanelCommands(current.clientID, since: Self.navigateExtensionVersion),
+                  let clientID = target(current.clientID) else { return }
+            log("🔍 open url here → \(url.prefix(80)) (tabId \(current.tab.id))")
+            server.send(["type": "navigate", "tabId": current.tab.id, "url": url], to: clientID)
         case .bookmark(let bookmark):
             guard let clientID = target(bookmark.clientID ?? fallbackClient) else { return }
             log("🔍 open bookmark → \(bookmark.title.prefix(50))")
