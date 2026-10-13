@@ -2357,31 +2357,89 @@ private struct SearchRowView: View {
 /// 运行中的 App 行尾：呼吸的绿点 + 「运行中」（用户 2026-09-27 定的；只放点不放字被否了，
 /// 光一个点看不出是什么意思）。系统开了「减少动态效果」就是静止的点。
 ///
-/// 动画交给 Core Animation 的 repeatForever，不用 TimelineView —— 后者每帧重算一遍视图，
-/// 几个运行中的 App 就是几份每秒 60 次的 SwiftUI 更新。代价是各行 onAppear 的时刻不同、
-/// 呼吸会错拍，所以起步前先等到时钟对齐一个整周期，几颗点同起同落。
+/// 呼吸是图层上的 `CABasicAnimation`（`BreathingDotView`），**别换回 SwiftUI 的
+/// `.animation(.repeatForever)` 或 TimelineView**：那两种都由 SwiftUI 在主线程逐帧重排重画
+/// 整个 hosting view（连行里的 App 图标一起重新栅格化），而面板常驻、关掉只是 orderOut，
+/// 藏起来照样每秒 60 帧。2026-10-13 实测：关面板时列表里留着几个运行中的 App，空闲 CPU
+/// 一直 40%+，直到下次打开换了内容才停。图层动画在渲染服务里跑，显示和藏起来主线程都是 0。
 private struct RunningDot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var dim = false
-    private static let halfCycle: TimeInterval = 1.2
 
     var body: some View {
         HStack(spacing: 5) {
-            Circle()
-                .fill(Color(nsColor: .systemGreen))
+            BreathingDot(animated: !reduceMotion)
                 .frame(width: 7, height: 7)
-                .opacity(dim ? 0.3 : 1)
-                .scaleEffect(dim ? 0.8 : 1)
-                .animation(.easeInOut(duration: Self.halfCycle).repeatForever(autoreverses: true), value: dim)
             Text(L10n.t("运行中", "Running"))
                 .font(.system(size: 10))
                 .foregroundStyle(Color.primary.opacity(0.30))
         }
-        .onAppear {
-                guard !reduceMotion else { return }
-                let cycle = Self.halfCycle * 2
-                let wait = cycle - Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle)
-                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { dim = true }
+    }
+}
+
+private struct BreathingDot: NSViewRepresentable {
+    let animated: Bool
+    func makeNSView(context: Context) -> BreathingDotView { BreathingDotView(animated: animated) }
+    func updateNSView(_ view: BreathingDotView, context: Context) { view.animated = animated }
+}
+
+/// 起点对齐到绝对时钟的整周期（`beginTime` 取过去的某个周期起点），各行出现的时刻
+/// 不同也同起同落。
+private final class BreathingDotView: NSView {
+    private static let halfCycle: CFTimeInterval = 1.2
+    var animated: Bool { didSet { if animated != oldValue { restartAnimation() } } }
+    private let dot = CALayer()
+
+    init(animated: Bool) {
+        self.animated = animated
+        super.init(frame: NSRect(x: 0, y: 0, width: 7, height: 7))
+        wantsLayer = true
+        // 子图层默认带隐式动画，改尺寸 / 换深浅色时别让它自己补间
+        dot.actions = ["bounds": NSNull(), "position": NSNull(),
+                       "backgroundColor": NSNull(), "cornerRadius": NSNull()]
+        layer?.addSublayer(dot)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layout() {
+        super.layout()
+        dot.frame = bounds
+        dot.cornerRadius = bounds.height / 2
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateColor()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateColor()
+        restartAnimation()
+    }
+
+    private func updateColor() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            dot.backgroundColor = NSColor.systemGreen.cgColor
+        }
+    }
+
+    private func restartAnimation() {
+        dot.removeAllAnimations()
+        guard animated, window != nil else { return }
+        let cycle = Self.halfCycle * 2
+        let now = CACurrentMediaTime()
+        let begin = dot.convertTime(now - now.truncatingRemainder(dividingBy: cycle), from: nil)
+        for (keyPath, to) in [("opacity", 0.3), ("transform.scale", 0.8)] {
+            let anim = CABasicAnimation(keyPath: keyPath)
+            anim.fromValue = 1.0
+            anim.toValue = to
+            anim.duration = Self.halfCycle
+            anim.autoreverses = true
+            anim.repeatCount = .infinity
+            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            anim.beginTime = begin
+            dot.add(anim, forKey: "breathe." + keyPath)
         }
     }
 }
