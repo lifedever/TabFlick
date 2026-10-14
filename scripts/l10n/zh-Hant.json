@@ -306,5 +306,18 @@
  "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "不在文字欄位裡時，⌘Z 會恢復最近關閉的分頁或視窗，連按可繼續往前。自動清理關閉的不算。在新分頁和 chrome:// 頁面上無效。",
  "Tab reopened": "已恢復分頁",
  "Window reopened": "已恢復視窗",
- "Nothing to reopen": "沒有可恢復的分頁"
+ "Nothing to reopen": "沒有可恢復的分頁",
+ "Center": "置中",
+ "Maximize": "最大化",
+ "Left Half": "左半螢幕",
+ "Right Half": "右半螢幕",
+ "Restore": "回復原位",
+ "Move to Next Display": "移到下一台顯示器",
+ "Toggle Full Screen": "切換全螢幕",
+ "No window to move": "沒有可調整的視窗",
+ "Full-screen windows can't be moved": "全螢幕的視窗無法調整",
+ "This window hasn't been moved": "這個視窗沒調整過",
+ "Only one display is connected": "只接了一台顯示器",
+ "This window can't go full screen": "這個視窗無法全螢幕",
+ "Couldn't move the window": "無法調整視窗"
 }

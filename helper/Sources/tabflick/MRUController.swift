@@ -1134,6 +1134,7 @@ final class MRUController {
         //（后台线程扫、一分钟内不重扫，扫完刷新面板）
         appCatalog.refreshIfStale { [weak self] in self?.refreshSearch() }
         search.model.showBrowserIcons = global && Set(clients.keys.map { effectiveBrowser(of: $0) }).count > 1
+        search.model.windowTarget = WindowTarget.front()
         // ⌘E 只看前台这个 Profile 的扩展；⌥Space 用到所有连接，任何一个要更新都提示
         search.model.extensionOutdated = global
             ? clients.keys.contains(where: extensionNeedsUpdate)

@@ -11,14 +11,17 @@ import Carbon.HIToolbox
 ///
 /// 加一个 App = 在 `all` 里加几条。没有脚本接口（`sdef <App路径>` 查不到命令）的 App 做不了。
 ///
-/// 系统命令（`bundleID` 为 nil，现在只有锁屏，用户 2026-09-28 点名要的）不挂在任何 App 下面：
-/// 一级命中时单独列在「应用」段末尾，画 SF Symbol、副标题写「macOS」，二级里没有。
+/// 系统命令（`bundleID` 为 nil：锁屏，用户 2026-09-28 点名要的；窗口命令，见 `WindowCommands`）不挂在任何
+/// App 下面：一级命中时单独列在「应用」段末尾，画 SF Symbol、副标题写「macOS」（窗口命令写「窗口 · App 名」），
+/// 二级里没有。
 struct AppCommand: Identifiable {
     enum Action {
         /// AppleScript 源码，一行一个元素（逐行交给 osascript 的 -e）；脚本的返回值 → 回响
         case appleScript([String], report: @MainActor (_ output: String) -> (text: String, kind: Toast.Kind))
         /// 在本进程里直接做（系统命令）
         case native(@MainActor () -> Void)
+        /// 调整前台 App 的窗口（`WindowCommands`）
+        case window(WindowAction, WindowTarget)
     }
 
     let id: String
@@ -30,6 +33,8 @@ struct AppCommand: Identifiable {
     let keywords: [String]
     /// 系统命令的图标（App 的命令画那个 App 的图标，不用它）。
     var symbol = "command"
+    /// 行的第二行。nil = 写命令的主人（App 名，系统命令写 macOS）；窗口命令写要动的是谁的窗口。
+    var subtitle: String? = nil
     let action: Action
 }
 
@@ -108,6 +113,9 @@ enum AppCommands {
         switch command.action {
         case .native(let perform):
             perform()
+            return
+        case .window(let action, let target):
+            WindowMover.perform(action, on: target)
             return
         case .appleScript(let source, let reporter):
             script = source

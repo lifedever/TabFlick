@@ -306,5 +306,18 @@
  "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "텍스트 입력란 밖에서 ⌘Z를 누르면 마지막으로 닫은 탭이나 창을 다시 엽니다. 계속 누르면 그 이전 것을 엽니다. 자동 정리로 닫힌 탭은 건너뜁니다. 새 탭 페이지와 chrome:// 페이지에서는 작동하지 않습니다.",
  "Tab reopened": "탭을 다시 열었습니다",
  "Window reopened": "창을 다시 열었습니다",
- "Nothing to reopen": "다시 열 탭이 없습니다"
+ "Nothing to reopen": "다시 열 탭이 없습니다",
+ "Center": "가운데로",
+ "Maximize": "최대화",
+ "Left Half": "왼쪽 절반",
+ "Right Half": "오른쪽 절반",
+ "Restore": "원래 위치로",
+ "Move to Next Display": "다음 디스플레이로 이동",
+ "Toggle Full Screen": "전체 화면 전환",
+ "No window to move": "이동할 윈도우가 없습니다",
+ "Full-screen windows can't be moved": "전체 화면 윈도우는 이동할 수 없습니다",
+ "This window hasn't been moved": "이 윈도우는 이동한 적이 없습니다",
+ "Only one display is connected": "디스플레이가 하나만 연결되어 있습니다",
+ "This window can't go full screen": "이 윈도우는 전체 화면으로 전환할 수 없습니다",
+ "Couldn't move the window": "윈도우를 이동할 수 없음"
 }

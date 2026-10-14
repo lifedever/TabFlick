@@ -511,6 +511,8 @@ final class TabSearchModel: ObservableObject {
     /// 只在真有多个浏览器时画，回答「在哪个浏览器」；Profile 名只在同一个浏览器开了多个
     /// Profile 时写，回答「在哪个 Profile」。每种行（标签、最近关闭、书签、历史）都一样。
     var showBrowserIcons = false
+    /// 打开面板时的前台 App：窗口命令（居中、左半屏……）动的是它的焦点窗口。前台是 TabFlick 自己时 nil。
+    var windowTarget: WindowTarget?
     /// 要用到的扩展该更新了（MRUController 打开面板时算好）：底栏左边给一个提示胶囊。
     @Published var extensionOutdated = false
     /// 点了那个提示胶囊。
@@ -1142,8 +1144,8 @@ final class TabSearchModel: ObservableObject {
             seen.insert(id)
             pairs += owned.map { ($0, app) }
         }
-        // 系统命令不看装没装
-        pairs += commands.filter { $0.bundleID == nil }.map { ($0, nil) }
+        // 系统命令不看装没装；窗口命令看打开面板时前台是谁
+        pairs += (commands.filter { $0.bundleID == nil } + WindowCommands.commands(for: windowTarget)).map { ($0, nil) }
         let candidates = pairs.map { commandCandidate($0.command, $0.app) }
         return TabSearch.rank(candidates, query: trimmed, boosts: boosts).map { SearchRow.appCommand(pairs[$0].command, pairs[$0].app) }
     }
@@ -2106,7 +2108,7 @@ private struct SearchRowView: View {
                                      .compactMap { $0 }.joined(separator: " · ")
         // 副标题写命令的主人：App 的写 App 名，系统命令写 macOS（品牌名不翻译；别用 L10n.t("系统", "System")，
         // 英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）
-        case .appCommand(_, let a): return a?.name ?? "macOS"
+        case .appCommand(let c, let a): return c.subtitle ?? a?.name ?? "macOS"
         case .window(let w):     return w.subtitle
         case .command:           return ""
         }

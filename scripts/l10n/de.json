@@ -306,5 +306,18 @@
  "Outside text fields, ⌘Z brings back the last closed tab or window; keep pressing to go further back. Tabs closed by auto-clean are skipped. Doesn't work on the New Tab page or chrome:// pages.": "Außerhalb von Textfeldern öffnet ⌘Z den zuletzt geschlossenen Tab oder das zuletzt geschlossene Fenster wieder; weiteres Drücken geht weiter zurück. Vom automatischen Schließen betroffene Tabs werden übersprungen. Funktioniert nicht auf der Seite „Neuer Tab“ und auf chrome://-Seiten.",
  "Tab reopened": "Tab wieder geöffnet",
  "Window reopened": "Fenster wieder geöffnet",
- "Nothing to reopen": "Nichts zum Wiederöffnen"
+ "Nothing to reopen": "Nichts zum Wiederöffnen",
+ "Center": "Zentrieren",
+ "Maximize": "Maximieren",
+ "Left Half": "Linke Hälfte",
+ "Right Half": "Rechte Hälfte",
+ "Restore": "Wiederherstellen",
+ "Move to Next Display": "Auf nächsten Bildschirm bewegen",
+ "Toggle Full Screen": "Vollbild ein/aus",
+ "No window to move": "Kein Fenster zum Bewegen",
+ "Full-screen windows can't be moved": "Fenster im Vollbild können nicht bewegt werden",
+ "This window hasn't been moved": "Dieses Fenster wurde nicht bewegt",
+ "Only one display is connected": "Nur ein Bildschirm angeschlossen",
+ "This window can't go full screen": "Dieses Fenster unterstützt kein Vollbild",
+ "Couldn't move the window": "Fenster konnte nicht bewegt werden"
 }
