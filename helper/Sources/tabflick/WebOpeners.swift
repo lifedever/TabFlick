@@ -72,13 +72,20 @@ enum WebOpeners {
     }
 
     /// Launch Services 的 http(s) 处理程序 → 能列出来的浏览器（纯函数，`checks/web-openers-check.swift`）。
-    /// 同一个 bundle id 装了几份只留第一份（Launch Services 把正经装的排在前面）。
     nonisolated static func select(_ apps: [(path: String, bundleID: String?)], html: Set<String>,
                                    excluding selfID: String?) -> [(path: String, bundleID: String)] {
+        installed(apps.filter { html.contains($0.path) }, excluding: selfID)
+    }
+
+    /// Launch Services 给的处理程序里去掉不该列的：没有 bundle id 的、TabFlick 自己、`/Library/` 下的副本
+    ///（Playwright 缓存的 Chromium、夸克自更新留的那份）、装在别的 App 包里的。同一个 bundle id
+    /// 装了几份只留第一份（Launch Services 把正经装的排在前面）。「打开方式…」列文件的 App 也用它。
+    nonisolated static func installed(_ apps: [(path: String, bundleID: String?)],
+                                      excluding selfID: String?) -> [(path: String, bundleID: String)] {
         var seen = Set<String>()
         var result: [(path: String, bundleID: String)] = []
         for app in apps {
-            guard let id = app.bundleID, id != selfID, html.contains(app.path),
+            guard let id = app.bundleID, id != selfID,
                   !app.path.contains("/Library/"),
                   !(app.path as NSString).deletingLastPathComponent.contains(".app"),
                   seen.insert(id).inserted else { continue }

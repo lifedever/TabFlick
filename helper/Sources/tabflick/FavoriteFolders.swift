@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import Foundation
 
@@ -24,6 +25,26 @@ struct FavoriteFolder: Codable, Equatable {
     /// 排序键：打开过按打开时间，没打开过按收藏时间 —— 刚收藏的东西
     /// 就是正在忙的东西，理应先占平铺区。
     var lastUsedAt: Double { openedAt ?? addedAt }
+}
+
+/// 访达里选中的项目：搜索面板「打开方式…」命令的对象（2026-10-17 加，照 Raycast 的 Open With）。
+struct FileSelection: Equatable {
+    let paths: [String]
+    /// 行上 / 输入框占位里的名字：一项写它的名字，几项写「N 个项目」。
+    let name: String
+
+    init(paths: [String]) {
+        self.paths = paths
+        if paths.count == 1 {
+            var name = FileManager.default.displayName(atPath: paths[0])
+            if name.isEmpty { name = paths[0] }
+            self.name = name
+        } else {
+            name = L10n.t("\(paths.count) 个项目", "\(paths.count) items")
+        }
+    }
+
+    var id: String { paths.joined(separator: "\n") }
 }
 
 /// 收藏的文件夹（状态栏「收藏的文件夹」一节的数据源）。
@@ -363,11 +384,18 @@ enum OpenerCatalog {
     }
 
     /// 用某个 App 打开一个目录，并给 toast 回响。状态栏菜单和搜索面板共用这一份。
-    /// toast 等真打开了再报：冷启动的 App 要一两秒，提前说「已打开」是撒谎。
     static func open(folder path: String, with opener: OpenerApp) {
-        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        open(paths: [path], with: opener)
+    }
+
+    /// 用某个 App 打开几个文件 / 目录（搜索面板「打开方式…」打开访达里选中的项目也走这里）。
+    /// toast 等真打开了再报：冷启动的 App 要一两秒，提前说「已打开」是撒谎。
+    static func open(paths: [String], with opener: OpenerApp) {
+        guard let first = paths.first else { return }
+        let urls = paths.map { URL(fileURLWithPath: $0) }
         let appName = opener.name
-        let folderName = folder.lastPathComponent
+        let firstName = urls[0].lastPathComponent
+        let count = paths.count
         let report: (Error?) -> Void = { error in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -377,30 +405,66 @@ enum OpenerCatalog {
                         // 让它走副标题那行，标题只说成没成
                         Toast.show(L10n.t("打开失败", "Failed to open"),
                                    detail: error.localizedDescription, kind: .failure)
+                    } else if count == 1 {
+                        Toast.show(L10n.t("已在 \(appName) 打开「\(firstName)」",
+                                          "Opened “\(firstName)” in \(appName)"),
+                                   detail: first)
                     } else {
-                        Toast.show(L10n.t("已在 \(appName) 打开「\(folderName)」",
-                                          "Opened “\(folderName)” in \(appName)"),
-                                   detail: path)
+                        Toast.show(L10n.t("已在 \(appName) 打开 \(count) 个项目",
+                                          "Opened \(count) items in \(appName)"),
+                                   detail: urls.map(\.lastPathComponent).joined(separator: L10n.listSeparator))
                     }
                 }
             }
         }
         switch opener.launch {
         case .document:
-            NSWorkspace.shared.open([folder], withApplicationAt: opener.url,
+            NSWorkspace.shared.open(urls, withApplicationAt: opener.url,
                                     configuration: NSWorkspace.OpenConfiguration()) { _, error in
                 report(error)
             }
         case .claudeCode:
-            guard let link = OpenerCatalog.claudeCodeURL(folder: path) else {
-                log("⚠️  claude code deep link failed to build for \(path)")
-                return
-            }
-            NSWorkspace.shared.open(link, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                report(error)
+            // Claude Code 只出现在目录的打开方式里；deep link 一次带一个目录，几个就开几次
+            for (index, path) in paths.enumerated() {
+                guard let link = OpenerCatalog.claudeCodeURL(folder: path) else {
+                    log("⚠️  claude code deep link failed to build for \(path)")
+                    continue
+                }
+                NSWorkspace.shared.open(link, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                    if index == 0 { report(error) }
+                }
             }
         }
-        log("📁 open \(path) with \(opener.id)")
+        log("📁 open \(count == 1 ? first : "\(count) items") with \(opener.id)")
+    }
+
+    /// 「打开方式…」打开文件时列哪些 App：Launch Services 推荐的（默认那个在最前），
+    /// 选了几个就取都能打开的；滤掉缓存里的副本、装在别的 App 包里的。走 Launch Services，放后台线程调。
+    nonisolated static func fileHandlers(for paths: [String]) -> [URL] {
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        guard let first = urls.first else { return [] }
+        var list = NSWorkspace.shared.urlsForApplications(toOpen: first).map(\.standardizedFileURL)
+        if let preferred = NSWorkspace.shared.urlForApplication(toOpen: first)?.standardizedFileURL {
+            list = [preferred] + list.filter { $0 != preferred }
+        }
+        for url in urls.dropFirst() {
+            let allowed = Set(NSWorkspace.shared.urlsForApplications(toOpen: url).map(\.standardizedFileURL))
+            list = list.filter { allowed.contains($0) }
+        }
+        let kept = WebOpeners.installed(list.map { ($0.path, Bundle(url: $0)?.bundleIdentifier) },
+                                        excluding: Bundle.main.bundleIdentifier)
+        return kept.map { URL(fileURLWithPath: $0.path, isDirectory: true) }
+    }
+
+    /// 「打开方式…」的列表。全是普通目录：和收藏的文件夹同一份打开方式（终端、Claude Code、
+    /// 设置里手动加的都在）；有文件（含 .app、.xcodeproj 这类包）：`fileHandlers` 的结果。
+    /// 两种都按「打开方式」的最近点击排（同一本账，不分文件和目录）。
+    static func selectionOpeners(handlers: [URL]?, store: FavoriteFolderStore) -> [OpenerApp] {
+        guard let handlers else { return menuOpeners(store: store) }
+        let apps = handlers.map { OpenerApp(name: appDisplayName($0), url: $0) }
+        let byKey = Dictionary(apps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return FavoriteFolderStore.openerOrder(apps.map(\.id), lastUsed: store.openerLastUsed)
+            .compactMap { byKey[$0] }
     }
 
     /// 菜单里的最终列表：滤掉被关掉的，点过的按最近点击排前。
@@ -435,6 +499,57 @@ enum FinderFront {
         case notAuthorized
         /// Finder 没有窗口，或前窗口不是普通目录（废纸篓、AirDrop 等）。
         case noFolder
+    }
+
+    /// 访达里选中的项目（「打开方式…」命令的对象）。什么都没选时取「新建东西会放在哪」：
+    /// 前窗口看着的目录，桌面在前时是桌面。同步执行，放后台线程调；目录去掉末尾的「/」。
+    nonisolated static func readSelection() -> Result<[String], FetchError> {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        proc.arguments = [
+            "-e", "tell application \"Finder\"",
+            "-e", "set picked to selection as alias list",
+            "-e", "if picked is {} then set picked to {insertion location as alias}",
+            "-e", "set out to \"\"",
+            "-e", "repeat with anItem in picked",
+            "-e", "set out to out & POSIX path of anItem & linefeed",
+            "-e", "end repeat",
+            "-e", "return out",
+            "-e", "end tell",
+        ]
+        let out = Pipe(), err = Pipe()
+        proc.standardOutput = out
+        proc.standardError = err
+        do {
+            try proc.run()
+        } catch {
+            log("⚠️  osascript launch failed: \(error)")
+            return .failure(.noFolder)
+        }
+        // 兜底：访达卡死时别让子进程一直挂着。放宽到一分钟 —— 第一次用时用户可能正对着授权框想
+        let watchdog = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: watchdog)
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        watchdog.cancel()
+        let paths = (String(data: data, encoding: .utf8) ?? "")
+            .split(separator: "\n").map { URL(fileURLWithPath: String($0)).standardizedFileURL.path }
+        guard proc.terminationStatus != 0 || paths.isEmpty else { return .success(paths) }
+        let stderr = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        log("⚠️  Finder selection fetch failed: \(stderr)")
+        return .failure(stderr.contains("-1743") ? .notAuthorized : .noFolder)
+    }
+
+    /// 已经允许 TabFlick 控制访达了没有。不弹授权框（还没问过也算没有）；要问一次 tccd，放后台线程调。
+    nonisolated static func automationGranted() -> Bool {
+        var target = AEAddressDesc()
+        let id = "com.apple.finder"
+        let created = id.withCString { AECreateDesc(DescType(typeApplicationBundleID), $0, id.utf8.count, &target) }
+        guard created == noErr else { return false }
+        defer { AEDisposeDesc(&target) }
+        return AEDeterminePermissionToAutomateTarget(&target, AEEventClass(typeWildCard),
+                                                     AEEventID(typeWildCard), false) == noErr
     }
 
     /// 回调回到主线程。

@@ -754,6 +754,7 @@ final class MRUController {
         }
         search.model.onMissingIcons = { [weak self] pairs in self?.requestFavicons(pairs) }
         search.openSettingsHandler = { [weak self] in self?.openSettings?() }
+        search.openWithHandler = { [weak self] in self?.beginOpenWith() }
         search.modeHandler = { [weak self] mode in
             // 切到历史记录模式（或设成列历史的「全部」）时没输入也要拉一次最近访问的
             guard let self else { return }
@@ -876,6 +877,12 @@ final class MRUController {
     var openerProvider: (() -> [OpenerApp])?
     /// 用某个 App 打开文件夹（落库 + toast 由 main.swift 那边做）。
     var openFolderHandler: ((FavoriteFolder, OpenerApp) -> Void)?
+    /// 「打开方式…」：用某个 App 打开访达里选中的项目（main.swift 接进来，记打开方式的最近使用）。
+    var openSelectionHandler: ((FileSelection, OpenerApp) -> Void)?
+    /// 「打开方式…」列哪些 App：handlers 为 nil（全是目录）用收藏文件夹那份打开方式，否则按它排（main.swift 接）。
+    var selectionOpenerProvider: (([URL]?) -> [OpenerApp])?
+    /// 访达里选中的项目（面板在访达前台打开时预读）。
+    private let finderSelection = FinderSelectionLoader()
     /// 取消收藏一个文件夹（落库 + toast 和状态栏那条是同一段，main.swift 接进来）。
     var unfavoriteFolderHandler: ((FavoriteFolder) -> Void)?
     private let appCatalog = AppCatalog()
@@ -1138,6 +1145,15 @@ final class MRUController {
         WebOpeners.refreshIfStale()
         search.model.showBrowserIcons = global && Set(clients.keys.map { effectiveBrowser(of: $0) }).count > 1
         search.model.windowTarget = WindowTarget.front()
+        // 「打开方式…」只在访达前台时列；已经允许控制访达就先把选中项读好，副标题写上名字
+        let finderFront = searchFrontBundle == "com.apple.finder"
+        search.model.finderFront = finderFront
+        search.model.finderSelection = nil
+        finderSelection.reset(finderFront: finderFront) { [weak self] selection in
+            guard let self, self.search.isVisible else { return }
+            self.search.model.finderSelection = selection
+            self.refreshSearch()
+        }
         // ⌘E 只看前台这个 Profile 的扩展；⌥Space 用到所有连接，任何一个要更新都提示
         search.model.extensionOutdated = global
             ? clients.keys.contains(where: extensionNeedsUpdate)
@@ -1348,6 +1364,9 @@ final class MRUController {
             openFolderHandler?(folder, chosen)
         case .openWith(let url, let opener):
             open(url, with: opener)
+        case .openSelection(let selection, let opener):
+            log("🔍 open \(selection.paths.count) Finder item(s) with \(opener.id)")
+            openSelectionHandler?(selection, opener)
         case .appCommand(let command, let app):
             log("🔍 app command → \(app?.name ?? "system"): \(command.id)")
             AppCommands.run(command, appName: app?.name)
@@ -1364,6 +1383,26 @@ final class MRUController {
                                    detail: error.localizedDescription, kind: .failure)
                     }
                 }
+            }
+        }
+    }
+
+    /// 选了「打开方式…」：读访达选中项（多半打开面板时已经读好了），列表换成能打开它的 App。
+    private func beginOpenWith() {
+        finderSelection.get { [weak self] result in
+            guard let self, self.search.isVisible else { return }
+            switch result {
+            case .success(let loaded):
+                let openers = self.selectionOpenerProvider?(loaded.handlers) ?? []
+                log("🔍 open with: \(loaded.selection.paths.count) item(s), \(openers.count) app(s)")
+                self.search.showOpenWith(loaded.selection, openers: openers)
+            case .failure(.notAuthorized):
+                Toast.show(L10n.t("读不到访达里选中的项目", "Couldn't read the Finder selection"),
+                           detail: L10n.t("系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「访达」。",
+                                          "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation."),
+                           kind: .failure)
+            case .failure(.noFolder):
+                Toast.show(L10n.t("读不到访达里选中的项目", "Couldn't read the Finder selection"), kind: .failure)
             }
         }
     }

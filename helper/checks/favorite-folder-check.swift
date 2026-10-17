@@ -1,8 +1,9 @@
 // FavoriteFolderStore 纯函数的规则校验。
 //
 // 跑法（在 helper/ 下）：
-//   swiftc -parse-as-library Sources/tabflick/FavoriteFolders.swift \
-//          Sources/tabflick/L10n.swift Sources/tabflick/Log.swift \
+//   swiftc -parse-as-library Sources/tabflick/FavoriteFolders.swift Sources/tabflick/WebOpeners.swift \
+//          Sources/tabflick/L10n.swift Sources/tabflick/L10nTables.swift Sources/tabflick/Log.swift \
+//          Sources/tabflick/Toast.swift Sources/tabflick/WindowShadow.swift \
 //          checks/favorite-folder-check.swift -o /tmp/foldercheck && /tmp/foldercheck
 //
 // 为什么单独校验：路径标准化 + 去重写错都是**静默**的 —— 同一目录收藏出

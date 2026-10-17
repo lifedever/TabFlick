@@ -22,6 +22,8 @@ struct AppCommand: Identifiable {
         case native(@MainActor () -> Void)
         /// 调整前台 App 的窗口（`WindowCommands`）
         case window(WindowAction, WindowTarget)
+        /// 「打开方式…」：面板不关，列表换成能打开访达里选中项目的 App（`OpenWithCommand`）
+        case openWith
     }
 
     let id: String
@@ -117,6 +119,8 @@ enum AppCommands {
         case .window(let action, let target):
             WindowMover.perform(action, on: target)
             return
+        case .openWith:
+            return   // 面板自己接（选中它不关面板），走不到这里
         case .appleScript(let source, let reporter):
             script = source
             report = reporter
@@ -163,5 +167,21 @@ enum AppCommands {
                 }
             }
         }
+    }
+}
+
+/// 「打开方式…」（2026-10-17，照 Raycast 的 Open With）：访达在前台时打开面板，打「open」「打开方式」
+/// 命中它，回车列出能打开访达里选中项目的 App，挑一个打开。系统命令，和锁屏、窗口命令一样列在「应用」段末尾；
+/// 选中它面板不关，列表换成那些 App（同 ⌘↩ 的二级，Esc 退回）。
+enum OpenWithCommand {
+    /// selection 是打开面板时预读到的选中项：副标题写它的名字，回车前就看得到要开的是什么。
+    /// 没预读到（还没允许控制访达、或者还没读回来）只写「访达」。
+    @MainActor static func command(selection: FileSelection?) -> AppCommand {
+        AppCommand(id: "system.openWith", bundleID: nil,
+                   title: L10n.t("打开方式…", "Open With…"),
+                   keywords: ["Open With", "打开方式"],
+                   symbol: "arrow.up.forward.app",
+                   subtitle: ([L10n.t("访达", "Finder")] + [selection?.name].compactMap { $0 }).joined(separator: " · "),
+                   action: .openWith)
     }
 }

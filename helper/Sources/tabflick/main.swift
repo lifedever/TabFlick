@@ -188,6 +188,13 @@ MainActor.assumeIsolated {
             folders.touch(path: folder.path)
             folders.touchOpener(appPath: opener.id)
         }
+        controller.openSelectionHandler = { selection, opener in
+            OpenerCatalog.open(paths: selection.paths, with: opener)
+            folders.touchOpener(appPath: opener.id)
+        }
+        controller.selectionOpenerProvider = { handlers in
+            OpenerCatalog.selectionOpeners(handlers: handlers, store: folders)
+        }
         // 收藏一个目录并给回响。「收藏当前 Finder 目录」和「添加文件夹…」
         // 两个入口只差「路径从哪来」，落库和 toast 是同一段。
         // 返回是否进了收藏（重复收藏也算：它被浮到了最前）。

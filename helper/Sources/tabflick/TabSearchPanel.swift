@@ -87,6 +87,10 @@ enum SearchRow: Identifiable {
     indirect case command(RowCommand, SearchRow)
     /// ⌘↩ 展开的「用 X 打开」：网页类的 target 换个浏览器打开
     indirect case openWith(WebOpener, SearchRow)
+    /// 访达里选中的项目：「打开方式…」命令展开后的对象（只当二级的 target，不进主列表）
+    case selection(FileSelection)
+    /// 能打开访达选中项目的一个 App（「打开方式…」展开后的列表）
+    case selectionOpener(OpenerApp, FileSelection)
     /// 内置命令（`AppCommands`）：有输入且命中时跟在它的 App 下面，App 的 ⌘↩ 里也有。
     /// App 为 nil 是系统命令（锁屏），一级里单独列在「应用」段末尾
     case appCommand(AppCommand, AppEntry?)
@@ -108,6 +112,8 @@ enum SearchRow: Identifiable {
         // 而 String(reflecting:) 会回头调 description —— 无限递归，打开面板画第一行操作就栈溢出崩溃
         case .command(let c, let target): return "cmd#\(c.rawValue)#\(target.id)"
         case .openWith(let o, let target): return "openwith#\(o.bundleID)#\(target.id)"
+        case .selection(let s):  return "selection#\(s.id)"
+        case .selectionOpener(let o, let s): return "selopener#\(o.id)#\(s.id)"
         case .appCommand(let c, _): return "appcmd#\(c.id)"
         case .window(let w):     return w.id
         }
@@ -126,6 +132,8 @@ enum SearchRow: Identifiable {
         case .folder(let f):     return "file:" + f.path
         case .opener(let o, _):  return "file:" + o.path
         case .openWith(let o, _): return "file:" + o.path
+        case .selection(let s):  return s.paths.first.map { "file:" + $0 } ?? ""
+        case .selectionOpener(let o, _): return "file:" + o.path
         case .app(let a):        return "file:" + a.path
         // 命令用它那个 App 的图标（Raycast 的做法）：一眼看出是谁的命令
         case .appCommand(_, let a): return a.map { "file:" + $0.path } ?? ""
@@ -167,6 +175,8 @@ enum SearchRow: Identifiable {
         case .app(let a):        return a.name
         case .command(let c, let target): return c.title(for: target)
         case .openWith(let o, _): return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
+        case .selection(let s):  return s.name
+        case .selectionOpener(let o, _): return o.name
         case .appCommand(let c, _): return c.title
         case .window(let w):     return w.title
         }
@@ -197,6 +207,8 @@ enum SearchRow: Identifiable {
         case .app:               return L10n.t("打开应用", "Open application")
         case .command(let c, let target): return c.title(for: target)
         case .openWith(let o, _): return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
+        case .selectionOpener(let o, _): return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
+        case .selection:         return L10n.t("打开", "Open")
         case .appCommand(let c, _): return c.title
         case .window:            return L10n.t("切换到窗口", "Switch to window")
         }
@@ -219,7 +231,7 @@ enum SearchRow: Identifiable {
         case .window(let w):     return w.id
         // 换个浏览器打开也是「这个输入要的就是这一页」
         case .command(.primary, let target), .openWith(_, let target): return target.memoryIdentity
-        case .action, .command:  return nil
+        case .action, .command, .selection, .selectionOpener: return nil
         }
     }
 
@@ -239,6 +251,7 @@ enum SearchRow: Identifiable {
         switch self {
         case .folder(let f): return f.path
         case .app(let a):    return a.path
+        case .selection(let s): return s.paths.first
         default:             return nil
         }
     }
@@ -395,6 +408,8 @@ enum SearchPick {
     case folder(FavoriteFolder, OpenerApp?)
     /// 用另一个浏览器打开这个网址
     case openWith(String, WebOpener)
+    /// 用某个 App 打开访达里选中的项目
+    case openSelection(FileSelection, OpenerApp)
     case app(AppEntry)
     case appCommand(AppCommand, AppEntry?)
     case window(AppWindow)
@@ -522,6 +537,12 @@ final class TabSearchModel: ObservableObject {
     var showBrowserIcons = false
     /// 打开面板时的前台 App：窗口命令（居中、左半屏……）动的是它的焦点窗口。前台是 TabFlick 自己时 nil。
     var windowTarget: WindowTarget?
+    /// 打开面板那一刻前台是访达：「打开方式…」命令只在这时列（Raycast 也要求访达在前台）。
+    var finderFront = false
+    /// 打开面板时预读到的访达选中项（「打开方式…」的副标题写它的名字）。
+    var finderSelection: FileSelection?
+    /// 「打开方式…」展开后列的 App（`showOpenWith` 时传进来）。
+    private var selectionOpeners: [OpenerApp] = []
     /// 要用到的扩展该更新了（MRUController 打开面板时算好）：底栏左边给一个提示胶囊。
     @Published var extensionOutdated = false
     /// 点了那个提示胶囊。
@@ -545,6 +566,8 @@ final class TabSearchModel: ObservableObject {
     func reloadIcons() {
         var keys = rows.map(\.favIconUrl)
         if let opener = openers.first { keys.append("file:" + opener.path) }
+        // 底栏左边画二级的对象：「打开方式…」的对象（访达选中项）不在任何一行里，单独要
+        if let target = actionTarget { keys.append(target.favIconUrl) }
         if let provider = iconProvider { icons = provider(keys) }
         let missing = rows.compactMap { row -> (key: String, url: String)? in
             guard let url = row.faviconPageURL, !row.favIconUrl.isEmpty,
@@ -760,6 +783,19 @@ final class TabSearchModel: ObservableObject {
         return true
     }
 
+    /// 「打开方式…」命令：列表换成能打开访达选中项目的 App。和 ⌘↩ 同一个子状态：打字过滤、
+    /// Esc / ⌫ 退回原列表并恢复输入。读选中项是异步的，回来时用户已经进了别的二级就不管了。
+    func showOpenWith(_ selection: FileSelection, openers: [OpenerApp]) {
+        guard actionTarget == nil else { return }
+        selectionOpeners = openers
+        savedQuery = query
+        savedCursorID = selectedRow?.id
+        savedCursorIndex = cursor
+        actionTarget = .selection(selection)
+        setQueryQuietly("")
+        refilter(keepCursorOn: nil)
+    }
+
     /// 退回原列表：输入和游标都恢复。执行完「关闭 / 移除」这类操作也走这里 ——
     /// 先退回（游标回到那一行），数据随后刷新时那一行没了，游标落在同一位置的下一行。
     func leaveActions() {
@@ -818,7 +854,9 @@ final class TabSearchModel: ObservableObject {
             return [.command(.primary, target)] + builtins
                 + ([.getInfo, .revealInFinder, .copyPath] + (isRunning(app) ? [.quitApp] : [])).map { .command($0, target) }
         // 窗口行没有二级：它本身就是「跳过去」这一个动作，App 的「退出」放这里会把整个微信退掉
-        case .url, .action, .opener, .command, .openWith, .appCommand, .window:
+        case .selection(let selection):
+            return selectionOpeners.map { .selectionOpener($0, selection) }
+        case .url, .action, .opener, .command, .openWith, .selectionOpener, .appCommand, .window:
             return []
         }
         return head.map { .command($0, target) } + openWithRows(for: target) + tail.map { .command($0, target) }
@@ -1172,7 +1210,8 @@ final class TabSearchModel: ObservableObject {
             pairs += owned.map { ($0, app) }
         }
         // 系统命令不看装没装；窗口命令看打开面板时前台是谁
-        pairs += (commands.filter { $0.bundleID == nil } + WindowCommands.commands(for: windowTarget)).map { ($0, nil) }
+        pairs += (commands.filter { $0.bundleID == nil } + WindowCommands.commands(for: windowTarget)
+                  + (finderFront ? [OpenWithCommand.command(selection: finderSelection)] : [])).map { ($0, nil) }
         let candidates = pairs.map { commandCandidate($0.command, $0.app) }
         return TabSearch.rank(candidates, query: trimmed, boosts: boosts).map { SearchRow.appCommand(pairs[$0].command, pairs[$0].app) }
     }
@@ -1724,6 +1763,7 @@ private struct TabSearchView: View {
         if let target = model.actionTarget {
             let name = target.displayTitle
             let short = name.count > 30 ? String(name.prefix(29)) + "…" : name
+            if case .selection = target { return L10n.t("「\(short)」的打开方式", "Open “\(short)” with…") }
             return L10n.t("「\(short)」的操作", "Actions for “\(short)”")
         }
         switch model.mode {
@@ -1741,6 +1781,10 @@ private struct TabSearchView: View {
     /// 列表空着时那句话，按模式说清「为什么空」。
     private var emptyText: String {
         let noQuery = model.query.trimmingCharacters(in: .whitespaces).isEmpty
+        if case .selection = model.actionTarget {
+            return noQuery ? L10n.t("没有能打开它的应用", "No app can open it")
+                           : L10n.t("没有匹配的应用", "No matching apps")
+        }
         if model.actionTarget != nil { return L10n.t("没有匹配的操作", "No matching actions") }
         switch model.mode {
         case .all, .tabs: return model.all.isEmpty ? L10n.t("还没有浏览器标签", "No browser tabs yet") : L10n.t("没有匹配的浏览器标签", "No matching browser tabs")
@@ -1967,14 +2011,25 @@ private struct SearchRowIcon: View {
             Image(systemName: command.symbol)
                 .font(.system(size: symbolSize, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.7))
-        case .folder, .opener, .openWith, .app, .appCommand, .window:
+        case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window:
             // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标
             if let icon {
-                let isApp: Bool = { if case .folder = row { return false } else { return true } }()
+                let isApp: Bool = {
+                    switch row {
+                    case .folder, .selection: return false
+                    default: return true
+                    }
+                }()
                 Image(nsImage: icon.image).resizable().interpolation(.high).scaledToFit()
                     .frame(width: isApp ? appSide : imageSide + 2, height: isApp ? appSide : imageSide + 2)
             } else {
-                Image(systemName: { if case .folder = row { return "folder" } else { return "app" } }())
+                Image(systemName: {
+                    switch row {
+                    case .folder:    return "folder"
+                    case .selection: return "doc"
+                    default:         return "app"
+                    }
+                }())
                     .font(.system(size: symbolSize, weight: .regular))
                     .foregroundStyle(.secondary)
             }
@@ -2137,7 +2192,7 @@ private struct SearchRowView: View {
         // 英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）
         case .appCommand(let c, let a): return c.subtitle ?? a?.name ?? "macOS"
         case .window(let w):     return w.subtitle
-        case .command, .openWith: return ""
+        case .command, .openWith, .selection, .selectionOpener: return ""
         }
     }
 
@@ -2376,7 +2431,7 @@ private struct SearchRowView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
-            case .command, .openWith:
+            case .command, .openWith, .selection, .selectionOpener:
                 EmptyView()
             }
         }
@@ -2607,6 +2662,14 @@ final class TabSearchPanel {
     var commandHandler: ((RowCommand, SearchRow) -> Void)?
     /// 面板里按了 ⌘,：面板已关，去开设置。
     var openSettingsHandler: (() -> Void)?
+    /// 选了「打开方式…」命令：面板还开着，MRUController 去读访达选中项，读回来调 `showOpenWith`。
+    var openWithHandler: (() -> Void)?
+
+    /// 列表换成能打开访达选中项目的 App（面板已经收起就不管了）。
+    func showOpenWith(_ selection: FileSelection, openers: [OpenerApp]) {
+        guard shown else { return }
+        model.showOpenWith(selection, openers: openers)
+    }
     /// 输入变了（已去首尾空白）。MRUController 拿它去问扩展要历史记录。
     var queryHandler: ((String) -> Void)? {
         didSet { model.onQueryChange = queryHandler }
@@ -2645,6 +2708,11 @@ final class TabSearchPanel {
             if let identity = row.memoryIdentity {
                 SearchMemory.shared.record(query: self.model.baseQuery, identity: identity)
             }
+            // 「打开方式…」：面板不关，去读访达里选中的项目，读回来列表换成能打开它的 App
+            if case .appCommand(let command, _) = row, case .openWith = command.action {
+                self.openWithHandler?()
+                return
+            }
             // 先关面板再切：关面板会把 key 还给浏览器，切换命令随后到达时
             // 焦点已经在它那边了。
             let pick = self.pickHandler
@@ -2661,6 +2729,8 @@ final class TabSearchPanel {
             case .opener(let o, let f): pick?(.folder(f, o))
             case .openWith(let o, let target):
                 if let url = target.pageURL { pick?(.openWith(url, o)) }
+            case .selectionOpener(let o, let s): pick?(.openSelection(s, o))
+            case .selection:         break   // 只当二级的 target，不会被选中
             case .app(let a):        pick?(.app(a))
             case .appCommand(let c, let a): pick?(.appCommand(c, a))
             case .window(let w):     pick?(.window(w))

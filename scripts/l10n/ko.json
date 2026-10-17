@@ -319,5 +319,12 @@
  "This window hasn't been moved": "이 윈도우는 이동한 적이 없습니다",
  "Only one display is connected": "디스플레이가 하나만 연결되어 있습니다",
  "This window can't go full screen": "이 윈도우는 전체 화면으로 전환할 수 없습니다",
- "Couldn't move the window": "윈도우를 이동할 수 없음"
+ "Couldn't move the window": "윈도우를 이동할 수 없음",
+ "Open With…": "다음으로 열기…",
+ "Finder": "Finder",
+ "{0} items": "{0}개 항목",
+ "Opened {0} items in {1}": "{1}에서 {0}개 항목 열림",
+ "Couldn't read the Finder selection": "Finder에서 선택한 항목을 읽을 수 없음",
+ "Open “{0}” with…": "‘{0}’ 다음으로 열기…",
+ "No app can open it": "열 수 있는 앱 없음"
 }

@@ -319,5 +319,12 @@
  "This window hasn't been moved": "Esta ventana no se ha movido",
  "Only one display is connected": "Solo hay una pantalla conectada",
  "This window can't go full screen": "Esta ventana no admite pantalla completa",
- "Couldn't move the window": "No se pudo mover la ventana"
+ "Couldn't move the window": "No se pudo mover la ventana",
+ "Open With…": "Abrir con…",
+ "Finder": "Finder",
+ "{0} items": "{0} elementos",
+ "Opened {0} items in {1}": "Se abrieron {0} elementos en {1}",
+ "Couldn't read the Finder selection": "No se pudo leer la selección del Finder",
+ "Open “{0}” with…": "Abrir «{0}» con…",
+ "No app can open it": "Ninguna app puede abrirlo"
 }

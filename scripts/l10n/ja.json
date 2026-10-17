@@ -319,5 +319,12 @@
  "This window hasn't been moved": "このウインドウは移動していません",
  "Only one display is connected": "ディスプレイが1台しか接続されていません",
  "This window can't go full screen": "このウインドウはフルスクリーンにできません",
- "Couldn't move the window": "ウインドウを移動できませんでした"
+ "Couldn't move the window": "ウインドウを移動できませんでした",
+ "Open With…": "このアプリケーションで開く…",
+ "Finder": "Finder",
+ "{0} items": "{0} 項目",
+ "Opened {0} items in {1}": "{0} 項目を{1}で開きました",
+ "Couldn't read the Finder selection": "Finder で選択した項目を読み取れません",
+ "Open “{0}” with…": "「{0}」をこのアプリケーションで開く…",
+ "No app can open it": "開けるアプリがありません"
 }

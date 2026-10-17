@@ -319,5 +319,12 @@
  "This window hasn't been moved": "Cette fenêtre n’a pas été déplacée",
  "Only one display is connected": "Un seul écran est connecté",
  "This window can't go full screen": "Cette fenêtre ne peut pas passer en plein écran",
- "Couldn't move the window": "Impossible de déplacer la fenêtre"
+ "Couldn't move the window": "Impossible de déplacer la fenêtre",
+ "Open With…": "Ouvrir avec…",
+ "Finder": "Finder",
+ "{0} items": "{0} éléments",
+ "Opened {0} items in {1}": "{0} éléments ouverts dans {1}",
+ "Couldn't read the Finder selection": "Impossible de lire la sélection du Finder",
+ "Open “{0}” with…": "Ouvrir « {0} » avec…",
+ "No app can open it": "Aucune app ne peut l’ouvrir"
 }

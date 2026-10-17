@@ -319,5 +319,12 @@
  "This window hasn't been moved": "這個視窗沒調整過",
  "Only one display is connected": "只接了一台顯示器",
  "This window can't go full screen": "這個視窗無法全螢幕",
- "Couldn't move the window": "無法調整視窗"
+ "Couldn't move the window": "無法調整視窗",
+ "Open With…": "打開方式…",
+ "Finder": "Finder",
+ "{0} items": "{0} 個項目",
+ "Opened {0} items in {1}": "已在 {1} 打開 {0} 個項目",
+ "Couldn't read the Finder selection": "讀不到 Finder 裡選取的項目",
+ "Open “{0}” with…": "「{0}」的打開方式",
+ "No app can open it": "沒有能打開它的 App"
 }
