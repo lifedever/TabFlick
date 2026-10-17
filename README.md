@@ -44,7 +44,7 @@ One box for open tabs, recently closed tabs, bookmarks, history, favorite folder
 - **Pinyin works.** Chinese titles match full pinyin and initials.
 - **Nothing found? Search the web** with the browser's own default engine, or with site search such as GitHub and YouTube (templates are editable).
 - **From any app.** ⌥Space opens the panel outside the browser and searches every connected browser's tabs. With nothing typed it lists recent browser tabs and running apps together, most recent first; Enter goes back to what you were doing before.
-- **⌘↩ for actions.** Copy the URL, title or a Markdown link, reload, return a pinned tab to its pinned URL, close the tab, delete from history, open a folder with another app or copy its path. The footer shows what Enter will do.
+- **⌘↩ for actions.** Copy the URL, title or a Markdown link, reload, open the page in another browser, return a pinned tab to its pinned URL, close the tab, delete from history, open a folder with another app or copy its path. The footer shows what Enter will do.
 - **Built-in commands.** Type "lock" to lock the screen; with Amphetamine installed, type "amp" or "end" to start or end a session. The first time you run an Amphetamine command, macOS asks whether TabFlick may control it.
 - **Learns as you go.** Search the same thing again and what you picked last time comes first; the closest match gets its own top row. Word initials (`pr` finds Pull Request) and one-letter typos still match.
 - **Duplicate tabs are marked**, with an action to close the others.

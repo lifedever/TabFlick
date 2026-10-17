@@ -85,6 +85,8 @@ enum SearchRow: Identifiable {
     case app(AppEntry)
     /// ⌘↩ 展开的「操作」里的一项：对 target 那一行做什么
     indirect case command(RowCommand, SearchRow)
+    /// ⌘↩ 展开的「用 X 打开」：网页类的 target 换个浏览器打开
+    indirect case openWith(WebOpener, SearchRow)
     /// 内置命令（`AppCommands`）：有输入且命中时跟在它的 App 下面，App 的 ⌘↩ 里也有。
     /// App 为 nil 是系统命令（锁屏），一级里单独列在「应用」段末尾
     case appCommand(AppCommand, AppEntry?)
@@ -105,6 +107,7 @@ enum SearchRow: Identifiable {
         // 用 rawValue 拼：第一版给 RowCommand 写了 description = String(reflecting: self)，
         // 而 String(reflecting:) 会回头调 description —— 无限递归，打开面板画第一行操作就栈溢出崩溃
         case .command(let c, let target): return "cmd#\(c.rawValue)#\(target.id)"
+        case .openWith(let o, let target): return "openwith#\(o.bundleID)#\(target.id)"
         case .appCommand(let c, _): return "appcmd#\(c.id)"
         case .window(let w):     return w.id
         }
@@ -122,6 +125,7 @@ enum SearchRow: Identifiable {
         case .action(.siteSearch(let site, _)): return "site:" + site.host
         case .folder(let f):     return "file:" + f.path
         case .opener(let o, _):  return "file:" + o.path
+        case .openWith(let o, _): return "file:" + o.path
         case .app(let a):        return "file:" + a.path
         // 命令用它那个 App 的图标（Raycast 的做法）：一眼看出是谁的命令
         case .appCommand(_, let a): return a.map { "file:" + $0.path } ?? ""
@@ -162,6 +166,7 @@ enum SearchRow: Identifiable {
         case .opener(let o, _):  return o.name
         case .app(let a):        return a.name
         case .command(let c, let target): return c.title(for: target)
+        case .openWith(let o, _): return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
         case .appCommand(let c, _): return c.title
         case .window(let w):     return w.title
         }
@@ -191,6 +196,7 @@ enum SearchRow: Identifiable {
         case .opener(let o, _):  return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
         case .app:               return L10n.t("打开应用", "Open application")
         case .command(let c, let target): return c.title(for: target)
+        case .openWith(let o, _): return L10n.t("用 \(o.name) 打开", "Open with \(o.name)")
         case .appCommand(let c, _): return c.title
         case .window:            return L10n.t("切换到窗口", "Switch to window")
         }
@@ -211,7 +217,8 @@ enum SearchRow: Identifiable {
         // 记下「amp 选了结束会话」：常用的那条在它的 App 下面排前面
         case .appCommand(let c, _): return "appcmd:" + c.id
         case .window(let w):     return w.id
-        case .command(.primary, let target): return target.memoryIdentity
+        // 换个浏览器打开也是「这个输入要的就是这一页」
+        case .command(.primary, let target), .openWith(_, let target): return target.memoryIdentity
         case .action, .command:  return nil
         }
     }
@@ -386,6 +393,8 @@ enum SearchPick {
     case action(SearchAction)
     /// 文件夹；opener 为 nil = 用最近用过的方式
     case folder(FavoriteFolder, OpenerApp?)
+    /// 用另一个浏览器打开这个网址
+    case openWith(String, WebOpener)
     case app(AppEntry)
     case appCommand(AppCommand, AppEntry?)
     case window(AppWindow)
@@ -521,6 +530,8 @@ final class TabSearchModel: ObservableObject {
     var badgeProvider: ((SearchRow) -> (browser: String?, profile: String?))?
     /// 这个标签是置顶标签且漂离了原始地址时，给出那个地址（MRUController 提供）；否则 nil。
     var pinnedHomeProvider: ((SwitcherItem) -> String?)?
+    /// 网页类的行 ⌘↩ 里「用 X 打开」的候选浏览器（MRUController 接 `WebOpeners.current`）。
+    var webOpenerProvider: (() -> [WebOpener])?
 
     private var lastContentHeight: CGFloat = -1
     var onContentHeightChange: ((CGFloat) -> Void)?
@@ -777,21 +788,27 @@ final class TabSearchModel: ObservableObject {
     /// 某一行的操作列表。第一项是回车的默认动作（文件夹是默认打开方式，后面跟其他打开方式）。
     func commandRows(for target: SearchRow) -> [SearchRow] {
         let copies: [RowCommand] = [.copyURL, .copyTitle, .copyMarkdown]
-        let commands: [RowCommand]
+        // 网页类：打开类（默认动作、换个浏览器打开）→ 拷贝类 → 删除类
+        let head: [RowCommand]
+        let tail: [RowCommand]
         switch target {
         case .tab:
             // 只剩一个标签不给关：浏览器窗口会跟着没（同悬停 ✕）
             let dupes: [RowCommand] = { if case .tab(let item) = target, duplicateCount(of: item) > 1 { return [.closeDuplicates] } else { return [] } }()
             // 置顶标签漂离了原始地址才给「回到置顶地址」
             let home: [RowCommand] = { if case .tab(let item) = target, pinnedHomeProvider?(item) != nil { return [.returnToPinned] } else { return [] } }()
-            commands = [.primary, .reloadTab] + home + copies + dupes + (canCloseTabs ? [.closeTab] : [])
+            head = [.primary, .reloadTab] + home
+            tail = copies + dupes + (canCloseTabs ? [.closeTab] : [])
         case .closed:
-            commands = [.primary] + copies + [.removeClosed]
+            head = [.primary]
+            tail = copies + [.removeClosed]
         case .bookmark:
             // 不给删书签：删了找不回来，一个按键就执行的面板里误触代价太大（用户定的）
-            commands = [.primary] + copies
+            head = [.primary]
+            tail = copies
         case .history:
-            commands = [.primary] + copies + [.deleteHistory]
+            head = [.primary]
+            tail = copies + [.deleteHistory]
         case .folder(let folder):
             return openers.map { .opener($0, folder) }
                 + [RowCommand.copyPath, .revealInFinder, .unfavorite].map { .command($0, target) }
@@ -801,10 +818,20 @@ final class TabSearchModel: ObservableObject {
             return [.command(.primary, target)] + builtins
                 + ([.getInfo, .revealInFinder, .copyPath] + (isRunning(app) ? [.quitApp] : [])).map { .command($0, target) }
         // 窗口行没有二级：它本身就是「跳过去」这一个动作，App 的「退出」放这里会把整个微信退掉
-        case .url, .action, .opener, .command, .appCommand, .window:
+        case .url, .action, .opener, .command, .openWith, .appCommand, .window:
             return []
         }
-        return commands.map { .command($0, target) }
+        return head.map { .command($0, target) } + openWithRows(for: target) + tail.map { .command($0, target) }
+    }
+
+    /// 「用 X 打开」：换个浏览器打开这一页，它自己所在的浏览器不列（回车开的就是它）。
+    /// 只给 http(s)：chrome:// 这类页面别家打不开。
+    private func openWithRows(for target: SearchRow) -> [SearchRow] {
+        guard let url = target.pageURL,
+              let scheme = URL(string: url)?.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let openers = webOpenerProvider?(), !openers.isEmpty else { return [] }
+        let own = badgeProvider?(target).browser ?? searchBrowser
+        return openers.filter { $0.bundleID != own }.map { .openWith($0, target) }
     }
 
     /// 面板里删了一条历史：本地先摘掉（扩展删完不会推送），游标留在原位。
@@ -1940,7 +1967,7 @@ private struct SearchRowIcon: View {
             Image(systemName: command.symbol)
                 .font(.system(size: symbolSize, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.7))
-        case .folder, .opener, .app, .appCommand, .window:
+        case .folder, .opener, .openWith, .app, .appCommand, .window:
             // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标
             if let icon {
                 let isApp: Bool = { if case .folder = row { return false } else { return true } }()
@@ -2110,7 +2137,7 @@ private struct SearchRowView: View {
         // 英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）
         case .appCommand(let c, let a): return c.subtitle ?? a?.name ?? "macOS"
         case .window(let w):     return w.subtitle
-        case .command:           return ""
+        case .command, .openWith: return ""
         }
     }
 
@@ -2349,7 +2376,7 @@ private struct SearchRowView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
-            case .command:
+            case .command, .openWith:
                 EmptyView()
             }
         }
@@ -2632,6 +2659,8 @@ final class TabSearchPanel {
             case .action(let a):     pick?(.action(a))
             case .folder(let f):     pick?(.folder(f, nil))
             case .opener(let o, let f): pick?(.folder(f, o))
+            case .openWith(let o, let target):
+                if let url = target.pageURL { pick?(.openWith(url, o)) }
             case .app(let a):        pick?(.app(a))
             case .appCommand(let c, let a): pick?(.appCommand(c, a))
             case .window(let w):     pick?(.window(w))

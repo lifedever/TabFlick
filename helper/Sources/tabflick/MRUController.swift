@@ -722,6 +722,7 @@ final class MRUController {
         search.model.pinnedHomeProvider = { [weak self] item in
             self?.pinnedHomeURL(tabID: item.tab.id, clientID: item.clientID)
         }
+        search.model.webOpenerProvider = { WebOpeners.current }
         search.model.badgeProvider = { [weak self] row in
             guard let self else { return (nil, nil) }
             @MainActor func of(_ id: UUID?) -> (browser: String?, profile: String?) {
@@ -1133,6 +1134,8 @@ final class MRUController {
         // App 清单：「全部」模式里应用排第一，所以每次打开都保证清单是新的
         //（后台线程扫、一分钟内不重扫，扫完刷新面板）
         appCatalog.refreshIfStale { [weak self] in self?.refreshSearch() }
+        // ⌘↩ 里「用 X 打开」的浏览器清单：同样后台扫、一分钟内不重扫，⌘↩ 时只读结果
+        WebOpeners.refreshIfStale()
         search.model.showBrowserIcons = global && Set(clients.keys.map { effectiveBrowser(of: $0) }).count > 1
         search.model.windowTarget = WindowTarget.front()
         // ⌘E 只看前台这个 Profile 的扩展；⌥Space 用到所有连接，任何一个要更新都提示
@@ -1343,6 +1346,8 @@ final class MRUController {
                 ?? OpenerApp(name: "Finder", url: URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"))
             log("🔍 open folder → \(folder.name) with \(chosen.name)")
             openFolderHandler?(folder, chosen)
+        case .openWith(let url, let opener):
+            open(url, with: opener)
         case .appCommand(let command, let app):
             log("🔍 app command → \(app?.name ?? "system"): \(command.id)")
             AppCommands.run(command, appName: app?.name)
@@ -1359,6 +1364,22 @@ final class MRUController {
                                    detail: error.localizedDescription, kind: .failure)
                     }
                 }
+            }
+        }
+    }
+
+    /// 「用 X 打开」：交给 macOS 用那个浏览器开（没装扩展的也行），浏览器自己会到前台。
+    /// 成功不弹 toast（浏览器窗口自己出来了），失败才说。
+    private func open(_ url: String, with opener: WebOpener) {
+        guard let target = URL(string: url) else { return }
+        WebOpeners.touch(opener)
+        log("🔍 open with \(opener.bundleID) → \(url.prefix(80))")
+        NSWorkspace.shared.open([target], withApplicationAt: opener.url,
+                                configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            guard let error else { return }
+            Task { @MainActor in
+                log("⚠️  open with \(opener.bundleID) failed: \(error.localizedDescription)")
+                Toast.show(L10n.t("打开失败", "Failed to open"), detail: error.localizedDescription, kind: .failure)
             }
         }
     }
