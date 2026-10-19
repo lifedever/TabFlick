@@ -246,9 +246,10 @@ final class AppCatalog {
         var result: [AppEntry] = []
         let fm = FileManager.default
         for dir in directories {
-            guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil,
-                                                          options: [.skipsHiddenFiles]) else { continue }
-            for url in items where url.pathExtension == "app" {
+            // 不能用 .skipsHiddenFiles：/Applications/Safari.app 是指向 Cryptex 的符号链接，
+            // 系统给它打了 hidden 标志（访达照常显示），跳过隐藏项就搜不到 Safari。只滤点开头的。
+            guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
+            for url in items where url.pathExtension == "app" && !url.lastPathComponent.hasPrefix(".") {
                 let path = url.standardizedFileURL.path
                 guard !seen.contains(path) else { continue }
                 seen.insert(path)
