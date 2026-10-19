@@ -328,6 +328,8 @@ enum RowCommand: String {
     case revealInFinder
     /// 访达的「显示简介」窗口（App 的二级菜单，用户 2026-09-28 要的）
     case getInfo
+    /// 访达的「显示包内容」（App 的二级菜单，用户 2026-10-19 要的）
+    case showPackageContents
     case closeTab
     /// 关掉和它同网址的其余标签（同一个浏览器 / Profile），留下它自己
     case closeDuplicates
@@ -359,6 +361,7 @@ enum RowCommand: String {
         case .copyPath:       return L10n.t("拷贝路径", "Copy path")
         case .revealInFinder: return L10n.t("在访达中显示", "Show in Finder")
         case .getInfo:        return L10n.t("显示简介", "Get Info")
+        case .showPackageContents: return L10n.t("显示包内容", "Show Package Contents")
         case .closeTab:       return L10n.t("关闭标签", "Close tab")
         case .closeDuplicates: return L10n.t("关闭其余重复的标签", "Close other duplicate tabs")
         case .removeClosed:   return L10n.t("从最近关闭中移除", "Remove from recently closed")
@@ -386,6 +389,7 @@ enum RowCommand: String {
         case .copyURL, .copyTitle, .copyMarkdown, .copyPath: return "doc.on.doc"
         case .revealInFinder: return "folder"
         case .getInfo:        return "info.circle"
+        case .showPackageContents: return "shippingbox"
         case .closeTab:       return "xmark"
         case .closeDuplicates: return "square.on.square.dashed"
         case .removeClosed, .deleteHistory: return "trash"
@@ -852,7 +856,7 @@ final class TabSearchModel: ObservableObject {
             // 内置命令排在「打开」后面：回车默认仍是打开，常用命令一个 ↓ 就到
             let builtins = AppCommands.commands(for: app.bundleID).map { SearchRow.appCommand($0, app) }
             return [.command(.primary, target)] + builtins
-                + ([.getInfo, .revealInFinder, .copyPath] + (isRunning(app) ? [.quitApp] : [])).map { .command($0, target) }
+                + ([.getInfo, .revealInFinder, .showPackageContents, .copyPath] + (isRunning(app) ? [.quitApp] : [])).map { .command($0, target) }
         // 窗口行没有二级：它本身就是「跳过去」这一个动作，App 的「退出」放这里会把整个微信退掉
         case .selection(let selection):
             return selectionOpeners.map { .selectionOpener($0, selection) }

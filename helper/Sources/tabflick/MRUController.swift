@@ -1489,6 +1489,9 @@ final class MRUController {
         case .getInfo:
             guard let path = target.filePath else { return }
             showFinderInfo(path)
+        case .showPackageContents:
+            guard let path = target.filePath else { return }
+            showPackageContents(path)
         case .unfavorite:
             guard case .folder(let folder) = target else { return }
             unfavoriteFolderHandler?(folder)
@@ -1539,6 +1542,18 @@ final class MRUController {
                            kind: .failure)
             }
         }
+    }
+
+    /// 访达的「显示包内容」：选中包里的一项，访达就把包当文件夹打开（不用「自动化」授权）。
+    /// iOS App 的包里没有 Contents（是 Wrapper + WrappedBundle），选第一项。
+    private func showPackageContents(_ path: String) {
+        let fm = FileManager.default
+        let package = URL(fileURLWithPath: path, isDirectory: true)
+        let contents = package.appendingPathComponent("Contents")
+        let child = fm.fileExists(atPath: contents.path) ? contents
+            : (try? fm.contentsOfDirectory(at: package, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]))?
+                .min { $0.lastPathComponent < $1.lastPathComponent }
+        NSWorkspace.shared.activateFileViewerSelecting([child ?? package])
     }
 
     /// 「重新加载」「从历史记录中删除」是扩展 0.17.0 加的命令，「回到置顶地址」（navigate）

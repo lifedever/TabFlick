@@ -282,6 +282,7 @@
  "{0} more tab(s) with this page are open; ⌘↩ closes them": "{0} autre(s) onglet(s) avec cette page sont ouverts ; ⌘↩ les ferme",
  "Close other duplicate tabs": "Fermer les autres onglets en double",
  "Get Info": "Lire les informations",
+ "Show Package Contents": "Afficher le contenu du paquet",
  "Couldn't open Get Info": "Impossible d’ouvrir les informations",
  "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "Autorisez TabFlick à contrôler le Finder dans Réglages Système → Confidentialité et sécurité → Automatisation.",
  "Start New Session": "Démarrer une nouvelle session",
