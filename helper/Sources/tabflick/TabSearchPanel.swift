@@ -532,12 +532,13 @@ final class TabSearchModel: ObservableObject {
     @Published var icons: [String: IconInfo] = [:]
     /// ⌘ 正被按着：行尾显示 ⌘1–⌘9 的角标。
     @Published var commandHeld = false
-    /// 跨浏览器且不止一条连接（多个浏览器，或同一个浏览器多个 Profile）：行尾用浏览器图标
-    /// （和 Profile 名）代替「x 分钟前」认归属。
+    /// 跨浏览器且不止一条连接（多个浏览器，或同一个浏览器多个 Profile）：要标 Profile 名认归属。
     @Published var showBrowserBadges = false
-    /// 行尾归属标记只有一条规则（用户 2026-09-27：图标、名字时有时无看不懂）：浏览器图标
+    /// 归属标记只有一条规则（用户 2026-09-27：图标、名字时有时无看不懂）：浏览器图标
     /// 只在真有多个浏览器时画，回答「在哪个浏览器」；Profile 名只在同一个浏览器开了多个
     /// Profile 时写，回答「在哪个 Profile」。每种行（标签、最近关闭、书签、历史）都一样。
+    /// 浏览器图标是行首图标右下角的角标（2026-10-20 从行尾挪过去，行尾留给时间）；
+    /// 「最近使用」那张表里标签和 App 混排，只有一个浏览器也画（见 `rowView`）。
     var showBrowserIcons = false
     /// 打开面板时的前台 App：窗口命令（居中、左半屏……）动的是它的焦点窗口。前台是 TabFlick 自己时 nil。
     var windowTarget: WindowTarget?
@@ -1370,6 +1371,8 @@ let kSearchQuickPickCount = 9
 /// 行 favicon 的边长。输入框里的放大镜占同样宽的格子、用同样的间距，
 /// 这样占位文字和下面的标题落在同一条竖线上（同切换器列表分组头那条约定）。
 private let kSearchRowIconSize: CGFloat = 22
+/// 行首图标右下角的浏览器角标（网页类的行）。
+private let kSearchBrowserBadgeSize: CGFloat = 13
 private let kSearchIconGap: CGFloat = 10
 private let kSearchRowInset: CGFloat = 10
 /// 分组头：照 Raycast，就是一行小字，没有分隔线（用户 2026-09-26 拿 Raycast 对比后定的）。
@@ -1620,7 +1623,9 @@ private struct TabSearchView: View {
             isCurrent: row.id == model.currentID,
             quickKey: model.commandHeld && index < kSearchQuickPickCount ? index + 1 : nil,
             closable: model.showsCloseButtons,
-            browserBadge: model.showBrowserIcons ? model.badgeProvider?(row).browser : nil,
+            // 「最近使用」里标签和 App 混排：只有一个浏览器也画角标，一眼分出哪行是网页
+            //（Teams 网页和 Teams App 的图标一个样，用户 2026-10-20 截图）
+            browserBadge: model.showBrowserIcons || model.showingRecent ? model.badgeProvider?(row).browser : nil,
             profileBadge: model.showBrowserBadges ? model.badgeProvider?(row).profile : nil,
             searchBrowser: model.searchBrowser,
             defaultOpener: model.openers.first,
@@ -1975,9 +1980,25 @@ private struct SearchRowIcon: View {
     var box: CGFloat = kSearchRowIconSize
     /// 紧凑（操作列表 / 底栏）：App 图标不放大、符号小一号。
     var compact = false
+    /// 非 nil 时右下角叠这个浏览器的图标：网页类的行认得出是哪个浏览器的，和 App 行分得开。
+    var browserBadge: String? = nil
 
     var body: some View {
         content.frame(width: box, height: box)
+            .overlay(alignment: .bottomTrailing) { badge }
+    }
+
+    /// 浏览器图标自带一圈透明边距，13pt 画出来实际约 10pt；往格子外探出 4pt，
+    /// 和放大到 28pt 画的 App 图标占地差不多。玻璃底色随背后变，垫不了同色描边隔开，用一点阴影。
+    @ViewBuilder
+    private var badge: some View {
+        if let browserBadge, let image = BrowserSupport.icon(browserBadge) {
+            Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+                .frame(width: kSearchBrowserBadgeSize, height: kSearchBrowserBadgeSize)
+                .shadow(color: .black.opacity(0.30), radius: 1, y: 0.5)
+                .offset(x: 4, y: 4)
+                .help(BrowserSupport.displayName(browserBadge))
+        }
     }
 
     /// App 图标自带一圈透明边距，按 favicon 的格子画会显小：两行的行里放大到 28/22 画，
@@ -2124,9 +2145,9 @@ private struct SearchRowView: View {
     let isCurrent: Bool
     let quickKey: Int?
     let closable: Bool
-    /// 非 nil 时行尾画这个浏览器的图标（跨浏览器搜索、多浏览器）。
+    /// 非 nil 时行首图标右下角叠这个浏览器的图标（跨浏览器搜索、多浏览器；「最近使用」里一律画）。
     let browserBadge: String?
-    /// 跨浏览器搜索、同一个浏览器开了多个 Profile：行尾写是哪个 Profile 的。
+    /// 跨浏览器搜索、同一个浏览器开了多个 Profile：行尾写是哪个 Profile 的（「最近使用」里写在第二行）。
     var profileBadge: String? = nil
     /// 「搜索」操作行行首画的浏览器（搜索会发给它）。
     let searchBrowser: String?
@@ -2175,6 +2196,11 @@ private struct SearchRowView: View {
     /// 书签的副标题是「文件夹 · 完整地址」（用户要看到地址；放不下末尾省略），根下的只有地址。
     private var subtitle: String {
         switch row {
+        // 「最近使用」里和「应用 · 运行中」对称：「Chrome · 域名」，多 Profile 时「Chrome · 工作 · 域名」
+        case .tab(let item) where inRecent:
+            let host = Self.host(of: item.tab.url)
+            return [browserBadge.map(BrowserSupport.displayName), profileBadge, host.isEmpty ? nil : host]
+                .compactMap { $0 }.joined(separator: " · ")
         case .tab(let item):     return Self.host(of: item.tab.url)
         case .closed(let entry): return Self.host(of: entry.url)
         case .url(let url, _):   return url
@@ -2217,7 +2243,8 @@ private struct SearchRowView: View {
 
     var body: some View {
         HStack(spacing: kSearchIconGap) {
-            SearchRowIcon(row: row, icon: icon, searchBrowser: searchBrowser, compact: compact)
+            SearchRowIcon(row: row, icon: icon, searchBrowser: searchBrowser, compact: compact,
+                          browserBadge: compact ? nil : browserBadge)
                 .opacity(dimmed ? 0.55 : 1)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -2325,30 +2352,14 @@ private struct SearchRowView: View {
             }
             .buttonStyle(.plain)
             .help(L10n.t("关闭标签", "Close tab"))
-        } else if profileBadge != nil || browserBadge.flatMap(BrowserSupport.icon) != nil {
-            HStack(spacing: 5) {
-                if let profileBadge {
-                    Text(profileBadge)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.primary.opacity(0.45))
-                        .lineLimit(1)
-                }
-                if let browserBadge, let icon = BrowserSupport.icon(browserBadge) {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 16, height: 16)
-                        .opacity(0.85)
-                        .help(BrowserSupport.displayName(browserBadge))
-                }
-                // 「最近使用」右边那列要是一条时间线：多浏览器时标签也在图标后面写时间
-                if inRecent, let ago = isCurrent ? L10n.t("当前", "Current") : recentAgo {
-                    Text(ago)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.primary.opacity(0.30))
-                }
-            }
         } else {
+            // 浏览器图标在行首角标上，行尾只剩 Profile 名（「最近使用」里它写在第二行）和时间
+            if let profileBadge, !inRecent {
+                Text(profileBadge)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.primary.opacity(0.45))
+                    .lineLimit(1)
+            }
             switch row {
             case .tab(let item):
                 if duplicates > 1 {
