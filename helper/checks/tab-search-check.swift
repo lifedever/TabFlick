@@ -233,6 +233,42 @@ struct TabSearchCheck {
             print("✗ 缩写得分：期望 3，实际 \(String(describing: TabSearch.score(abbr[0], query: "tg")))")
         }
 
+        // 别名（App 的英文原名）和标题同档（用户 2026-10-21：打 photo 选了几次「照片」，还是 Photo Booth 在前）
+        let boothID = "/System/Applications/Photo Booth.app", photosID = "/System/Applications/Photos.app"
+        func app(_ title: String, _ bundle: String, _ id: String, alias: String? = nil) -> SearchCandidate {
+            let py = Pinyin.index(title)
+            return SearchCandidate(title: title, url: bundle, pinyin: py.full, initials: py.initials,
+                                   identity: id, name: title, alias: alias, abbreviations: true)
+        }
+        let aliased: [SearchCandidate] = [
+            app("Photo Booth", "com.apple.PhotoBooth", boothID),                                        // 0
+            app("照片", "com.apple.Photos", photosID, alias: "Photos"),                                  // 1
+            app("活动监视器", "com.apple.ActivityMonitor", "/System/Applications/Utilities/Activity Monitor.app",
+                alias: "Activity Monitor"),                                                             // 2
+        ]
+        let aliasCases: [(String, String, [String: Int], [Int])] = [
+            ("别名开头和标题开头同分，按原顺序", "photo", [:], [0, 1]),
+            // 1 = 8 + 9 = 17 > 0 = 8 + 5（「ph」选过 Photo Booth 也算进来）；放在网址栏时是 2 + 9 = 11，永远追不上
+            ("选过几次就排前面", "photo", [photosID: 9, boothID: 5], [1, 0]),
+            // 1 = 8 + 4（别名就是整条输入）；0 只有模糊 1 分
+            ("别名全名", "photos", [:], [1, 0]),
+            ("别名的英文词头", "am", [:], [2]),
+            ("中文名照样认拼音", "zp", [:], [1]),
+            ("别名里的单词也认", "monitor", [:], [2]),
+        ]
+        for (name, query, boosts, want) in aliasCases {
+            let got = TabSearch.rank(aliased, query: query, boosts: boosts)
+            if got != want {
+                failures += 1
+                print("✗ \(name)：期望 \(want)，实际 \(got)")
+            }
+        }
+        let aliasScores: [(String, Int)] = [("photo", 8), ("photos", 12), ("hotos", 6)]
+        for (query, want) in aliasScores where TabSearch.score(aliased[1], query: query) != want {
+            failures += 1
+            print("✗ 别名得分「\(query)」：期望 \(want)，实际 \(String(describing: TabSearch.score(aliased[1], query: query)))")
+        }
+
         let py = Pinyin.index("掘金 - Swift 并发")
         if py.full != "juejin-swiftbingfa" || py.initials != "jj-swiftbf" {
             failures += 1

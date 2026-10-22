@@ -885,9 +885,9 @@ final class TabSearchModel: ObservableObject {
     }
 
     private func candidate(title: String, url: String, identity: String? = nil,
-                           name: String? = nil, abbreviations: Bool = false) -> SearchCandidate {
+                           name: String? = nil, alias: String? = nil, abbreviations: Bool = false) -> SearchCandidate {
         let cacheKey = title + "\u{1F}" + url + "\u{1F}" + (identity ?? "") + "\u{1F}" + (name ?? "")
-            + (abbreviations ? "\u{1F}abbr" : "")
+            + "\u{1F}" + (alias ?? "") + (abbreviations ? "\u{1F}abbr" : "")
         if let hit = candidateCache[cacheKey] { return hit }
         let py: (full: String, initials: String)
         if let cached = pinyinCache[title] {
@@ -897,7 +897,7 @@ final class TabSearchModel: ObservableObject {
             pinyinCache[title] = py
         }
         let made = SearchCandidate(title: title, url: url, pinyin: py.full, initials: py.initials,
-                                   identity: identity, name: name, abbreviations: abbreviations)
+                                   identity: identity, name: name, alias: alias, abbreviations: abbreviations)
         // 上限按「标签 + 最近关闭 + 书签 + 应用 + 历史」的量级留余量；到了整个清掉重来，
         // 别让标题不断变化的标签把它越攒越大（一条带字节键约 0.5KB）
         if candidateCache.count > 10_000 { candidateCache.removeAll(keepingCapacity: true) }
@@ -1279,11 +1279,11 @@ final class TabSearchModel: ObservableObject {
     }
 
     private func appCandidate(_ app: AppEntry) -> SearchCandidate {
-        // 英文原名和 bundle id 放进「网址」栏参与匹配（得分低于标题命中）
+        // 英文原名是别名、和显示名同档（打 photo 找「照片」）；bundle id 放进「网址」栏，得分低于名字命中
         // 访达注释拼进标题一起匹配（和显示名同档、也认拼音）：名字古怪的 App 靠它起个好认的名字
         candidate(title: [app.name, app.comment].compactMap { $0 }.joined(separator: " "),
-                  url: [app.alternateName, app.bundleID].compactMap { $0 }.joined(separator: " "),
-                  identity: app.path, name: app.name, abbreviations: true)
+                  url: app.bundleID ?? "",
+                  identity: app.path, name: app.name, alias: app.alternateName, abbreviations: true)
     }
 
     /// 某一行对当前输入的得分（「最佳匹配」跨段比分用）。

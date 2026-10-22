@@ -28,12 +28,17 @@ struct SearchCandidate {
     let identity: String
     /// 「整条输入等于名字」比的是它。默认就是标题；App 的标题拼了访达注释，这里单给名字本身。
     let nameKey: [UInt8]
+    /// 另一个名字，和标题同档计分（开头 8、含 6、词头 4、全名 +4）：App 的英文原名，中文系统下
+    /// 「照片」是 Photos。原来放在网址栏只得 2 分，打「photo」时「照片」永远排在 Photo Booth
+    /// 后面，选几次都追不上（用户 2026-10-21 报的）。没有就是空。
+    let aliasKey: [UInt8]
+    let aliasInitialsKey: [UInt8]
     /// 认缩写：两个字母起，首字母对上某个单词的开头、其余字母在同一个单词里按顺序出现（`tg` → Telegram、
     /// `ps` → Photoshop）。只给 App 开（用户 2026-09-29 要的）：网页标题单词多，两个字母这么认满屏都是。
     let abbreviations: Bool
 
     init(title: String, url: String, pinyin: String = "", initials: String = "", identity: String? = nil,
-         name: String? = nil, abbreviations: Bool = false) {
+         name: String? = nil, alias: String? = nil, abbreviations: Bool = false) {
         self.abbreviations = abbreviations
         self.title = title
         self.url = url
@@ -46,6 +51,8 @@ struct SearchCandidate {
         pinyinKey = Array(pinyin.utf8)
         initialsKey = Array(initials.utf8)
         wordInitialsKey = Self.wordInitials(title)
+        aliasKey = alias.map(Self.key) ?? []
+        aliasInitialsKey = alias.map(Self.wordInitials) ?? []
     }
 
     /// 英文词头：前一个不是字母数字（含中文等非 ASCII），或者小写后面跟大写（驼峰）。
@@ -80,7 +87,7 @@ enum TabSearch {
     /// 把查询拆成空白分隔的词，**每个词都要命中**（标题、拼音、网址任一）。
     /// 空查询 = 不过滤，原顺序（MRU）返回。
     ///
-    /// 得分（每个词）：标题以词开头 8、标题含词 6、拼音（全拼或首字母）/ 英文词头含词 4、
+    /// 得分（每个词）：标题（或别名，见 `SearchCandidate.aliasKey`）以词开头 8、含词 6、拼音（全拼或首字母）/ 英文词头含词 4、
     /// 缩写（只有 App，见 `SearchCandidate.abbreviations`）3、只有网址含词 2、模糊命中 1，各词累加；整条输入等于名字（`nameKey`）再加 4 ——
     /// 打「Firefox」时 App「Firefox」要压过标题以 Firefox 开头的网页（用户 2026-09-29 定的）；
     /// 最后加记忆分（`boosts`，按 identity 查）。
@@ -148,24 +155,25 @@ enum TabSearch {
         var usedFuzzy = false
         var words: [ArraySlice<UInt8>]?
         for term in terms {
-            if hasPrefix(candidate.titleKey, term.bytes) {
+            if hasPrefix(candidate.titleKey, term.bytes) || hasPrefix(candidate.aliasKey, term.bytes) {
                 total += 8
-            } else if contains(candidate.titleKey, term.bytes) {
+            } else if contains(candidate.titleKey, term.bytes) || contains(candidate.aliasKey, term.bytes) {
                 total += 6
             } else if term.latin,
                       contains(candidate.initialsKey, term.bytes) || contains(candidate.pinyinKey, term.bytes)
-                        || (term.bytes.count >= 2 && initialsMatch(term.bytes, candidate.wordInitialsKey)) {
+                        || (term.bytes.count >= 2 && (initialsMatch(term.bytes, candidate.wordInitialsKey)
+                                                      || initialsMatch(term.bytes, candidate.aliasInitialsKey))) {
                 total += 4
             } else if candidate.abbreviations, term.latin, term.bytes.count >= 2,
-                      abbreviationMatches(term.bytes, words: words ?? { words = asciiWords(candidate.titleKey); return words! }()) {
+                      abbreviationMatches(term.bytes, words: words ?? { words = asciiWords(candidate); return words! }()) {
                 total += 3
             } else if contains(candidate.urlKey, term.bytes) {
                 total += 2
             } else if allowFuzzy, term.fuzzyEligible,
                       // 预筛：模糊要求某个单词的首字母对上，词头里连这个字母都没有就不拆单词了
                       //（6700 条的模糊一遍 4.9ms → 见 CLAUDE.md 的实测）
-                      candidate.wordInitialsKey.contains(term.bytes[0]),
-                      fuzzyMatches(term.bytes, words: words ?? { words = asciiWords(candidate.titleKey); return words! }()) {
+                      candidate.wordInitialsKey.contains(term.bytes[0]) || candidate.aliasInitialsKey.contains(term.bytes[0]),
+                      fuzzyMatches(term.bytes, words: words ?? { words = asciiWords(candidate); return words! }()) {
                 total += 1
                 usedFuzzy = true
             } else {
@@ -174,7 +182,7 @@ enum TabSearch {
         }
         // 模糊那一遍只收「至少一个词靠模糊才命中」的，严格命中的第一遍已经收过
         if allowFuzzy { return usedFuzzy ? total : nil }
-        return equalsQuery(candidate.nameKey, terms) ? total + 4 : total
+        return equalsQuery(candidate.nameKey, terms) || equalsQuery(candidate.aliasKey, terms) ? total + 4 : total
     }
 
     /// 名字是否就是整条输入（各词以单个空格相连）。逐段比，不拼新数组 —— 每个候选都要过一遍。
@@ -226,6 +234,12 @@ enum TabSearch {
 
     private nonisolated static func asciiWords(_ key: [UInt8]) -> [ArraySlice<UInt8>] {
         key.split { !(($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57)) }
+    }
+
+    /// 标题和别名里的英文单词，缩写和模糊都在这里面找。
+    private nonisolated static func asciiWords(_ candidate: SearchCandidate) -> [ArraySlice<UInt8>] {
+        candidate.aliasKey.isEmpty ? asciiWords(candidate.titleKey)
+            : asciiWords(candidate.titleKey) + asciiWords(candidate.aliasKey)
     }
 
     /// 模糊命中某个单词：① 同一个单词里按顺序出现、首字母对上（`gthb` → github，漏打）；
