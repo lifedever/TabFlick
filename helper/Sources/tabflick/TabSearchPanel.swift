@@ -538,8 +538,15 @@ final class TabSearchModel: ObservableObject {
     /// 只在真有多个浏览器时画，回答「在哪个浏览器」；Profile 名只在同一个浏览器开了多个
     /// Profile 时写，回答「在哪个 Profile」。每种行（标签、最近关闭、书签、历史）都一样。
     /// 浏览器图标是行首图标右下角的角标（2026-10-20 从行尾挪过去，行尾留给时间）；
-    /// 「最近使用」那张表里标签和 App 混排，只有一个浏览器也画（见 `rowView`）。
+    /// 标签和 App 混排的表里只有一个浏览器也画（见 `drawsBrowserBadges`）。
     var showBrowserIcons = false
+    /// 网页类的行画不画浏览器角标。只有一个浏览器时，标签和 App 混排的两张表也画，一眼分出哪行是网页
+    ///（Teams 网页和 Teams App 的图标一个样）：「最近使用」（2026-10-20）、「全部」有输入时（2026-10-23）。
+    /// 「全部」看有没有输入、不看有没有 App 命中，否则角标随输入时有时无。
+    var drawsBrowserBadges: Bool {
+        showBrowserIcons || showingRecent
+            || (mode == .all && !query.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
     /// 打开面板时的前台 App：窗口命令（居中、左半屏……）动的是它的焦点窗口。前台是 TabFlick 自己时 nil。
     var windowTarget: WindowTarget?
     /// 打开面板那一刻前台是访达：「打开方式…」命令只在这时列（Raycast 也要求访达在前台）。
@@ -1623,9 +1630,7 @@ private struct TabSearchView: View {
             isCurrent: row.id == model.currentID,
             quickKey: model.commandHeld && index < kSearchQuickPickCount ? index + 1 : nil,
             closable: model.showsCloseButtons,
-            // 「最近使用」里标签和 App 混排：只有一个浏览器也画角标，一眼分出哪行是网页
-            //（Teams 网页和 Teams App 的图标一个样，用户 2026-10-20 截图）
-            browserBadge: model.showBrowserIcons || model.showingRecent ? model.badgeProvider?(row).browser : nil,
+            browserBadge: model.drawsBrowserBadges ? model.badgeProvider?(row).browser : nil,
             profileBadge: model.showBrowserBadges ? model.badgeProvider?(row).profile : nil,
             searchBrowser: model.searchBrowser,
             defaultOpener: model.openers.first,
