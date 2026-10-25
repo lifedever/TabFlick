@@ -327,5 +327,6 @@
  "Opened {0} items in {1}": "{0} Objekte in {1} geöffnet",
  "Couldn't read the Finder selection": "Die Auswahl im Finder konnte nicht gelesen werden",
  "Open “{0}” with…": "„{0}“ öffnen mit …",
- "No app can open it": "Keine App kann das öffnen"
+ "No app can open it": "Keine App kann das öffnen",
+ "Restart TabFlick": "TabFlick neu starten"
 }

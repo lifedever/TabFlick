@@ -327,5 +327,6 @@
  "Opened {0} items in {1}": "{1}에서 {0}개 항목 열림",
  "Couldn't read the Finder selection": "Finder에서 선택한 항목을 읽을 수 없음",
  "Open “{0}” with…": "‘{0}’ 다음으로 열기…",
- "No app can open it": "열 수 있는 앱 없음"
+ "No app can open it": "열 수 있는 앱 없음",
+ "Restart TabFlick": "TabFlick 재시작"
 }

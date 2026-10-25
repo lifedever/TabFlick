@@ -240,6 +240,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let restart = NSMenuItem(title: L10n.t("重启 TabFlick", "Restart TabFlick"), action: #selector(restart), keyEquivalent: "")
+        restart.target = self
+        restart.icon = Self.symbol("arrow.clockwise")
+        menu.addItem(restart)
+
         let quit = NSMenuItem(title: L10n.t("退出 TabFlick", "Quit TabFlick"), action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         quit.icon = Self.symbol("power")
@@ -780,6 +785,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func checkForUpdates() {
         onCheckForUpdates?()
+    }
+
+    @objc private func restart() {
+        PermissionGuide.relaunch()
     }
 
     @objc private func quit() {
