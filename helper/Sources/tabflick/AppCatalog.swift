@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 
 /// 一个已安装的 App（搜索面板「应用」模式的一行）。
 struct AppEntry: Identifiable, Equatable {
@@ -35,12 +36,17 @@ struct AppEntry: Identifiable, Equatable {
 ///
 /// 不走 Spotlight：`NSMetadataQuery` 要起一次索引查询、回调异步、Spotlight 关掉就
 /// 没结果；几个目录 `contentsOfDirectory` 一共几十毫秒，放后台线程扫，够用。
-/// 清单每分钟最多重扫一次（进「应用」模式时触发），新装的 App 一分钟内出现。
+/// 清单每分钟最多重扫一次（打开面板时触发）；应用目录有增删时当场作废（`watchFolders`），
+/// 面板开着就立刻重扫，新装的 App 不用关了再开。
 @MainActor
 final class AppCatalog {
     private(set) var entries: [AppEntry] = []
     private var scannedAt: Date?
     private var scanning = false
+    /// 扫的途中目录又变了：那一份可能缺刚装的 App，扫完不算新鲜。
+    private var changedDuringScan = false
+    private var folderWatcher: AppFolderWatcher?
+    private var onFoldersChanged: (() -> Void)?
     /// 每个 App 最近一次被切到前台的时间（key 见 `AppEntry.usageKey`）。
     /// Spotlight 的 lastUsed 只在启动 App 时更新，来回切换不算，这份补上「刚刚在用」。
     /// 普通 App 的存盘（`AppActivity`），重启后读回来；其余的只在内存里。
@@ -233,12 +239,38 @@ final class AppCatalog {
             let found = Self.scan()
             Task { @MainActor in
                 self.entries = found
-                self.scannedAt = Date()
                 self.scanning = false
+                self.folderWatcher?.updateKnown(Set(found.map(\.path)))
                 Pinyin.prewarm(found.map(\.name))
                 completion()
+                if self.changedDuringScan {
+                    self.changedDuringScan = false
+                    self.onFoldersChanged?()
+                } else {
+                    self.scannedAt = Date()
+                }
             }
         }
+    }
+
+    /// 盯着应用目录：有 App 装上、删掉、改名，清单当场作废，再调 `onChange`（要不要立刻重扫由调用方定：
+    /// 面板开着才扫，关着等下次打开）。不放进 init：官网素材的样例程序也建 AppCatalog，不该盯本机目录。
+    func watchFolders(onChange: @escaping () -> Void) {
+        guard folderWatcher == nil else { return }
+        onFoldersChanged = onChange
+        let roots = Self.directories.map(\.path).filter { !$0.hasPrefix("/System/") }   // 系统卷只读
+        let watcher = AppFolderWatcher(roots: roots) { [weak self] in
+            MainActor.assumeIsolated { self?.foldersChanged() }
+        }
+        watcher.updateKnown(Set(entries.map(\.path)))
+        watcher.start()
+        folderWatcher = watcher
+    }
+
+    private func foldersChanged() {
+        scannedAt = nil
+        if scanning { changedDuringScan = true; return }   // 等这一轮扫完再说（见 refreshIfStale）
+        onFoldersChanged?()
     }
 
     private nonisolated static func scan() -> [AppEntry] {
@@ -289,6 +321,99 @@ final class AppCatalog {
         return (MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date,
                 comment?.isEmpty == false ? comment : nil)
     }
+}
+
+/// 应用目录的 FSEvents 监视（递归，只到目录一级的粒度）。只认两种事件：目录本身的条目变了
+/// （装上、删掉、改名），或者往一个清单里还没有的 `.app` 里写东西（拷贝 / 安装进行中）。
+/// 已有 App 自己更新时往包里写的一大串事件全滤掉。写完安静 1 秒才报：包拷到一半就去扫，
+/// 读到的是没有 Info.plist、没有图标的半成品。
+final class AppFolderWatcher {
+    private let roots: [String]
+    private let onChange: () -> Void
+    /// 回调和下面两项只在这条队列上碰。
+    private let queue = DispatchQueue(label: "TabFlick.app-folders", qos: .utility)
+    private var known: Set<String> = []
+    private var pending: DispatchWorkItem?
+    private var stream: FSEventStreamRef?
+
+    /// roots：扫描的那几个目录（标准化路径）；`onChange` 在主线程调。
+    init(roots: [String], onChange: @escaping () -> Void) {
+        self.roots = roots.map(Self.normalized)
+        self.onChange = onChange
+    }
+
+    func start() {
+        // 子目录（Utilities）跟着父目录递归就有，只登记最外层且存在的
+        let watched = roots.filter { root in
+            FileManager.default.fileExists(atPath: root)
+                && !roots.contains { $0 != root && root.hasPrefix($0 + "/") }
+        }
+        guard stream == nil, !watched.isEmpty else { return }
+        var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
+                                           retain: nil, release: nil, copyDescription: nil)
+        guard let created = FSEventStreamCreate(kCFAllocatorDefault, appFolderEvents, &context,
+                                                watched as CFArray,
+                                                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.5,
+                                                FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes)) else {
+            log("⚠️  app folder watch failed to start")
+            return
+        }
+        FSEventStreamSetDispatchQueue(created, queue)
+        FSEventStreamStart(created)
+        stream = created
+    }
+
+    /// 扫完一轮后告诉它现在有哪些 App（往这些包里写的事件不算新装）。
+    func updateKnown(_ paths: Set<String>) {
+        queue.async { self.known = paths }
+    }
+
+    fileprivate func handle(_ paths: [String]) {
+        guard paths.contains(where: { Self.isRelevant($0, roots: roots, known: known) }) else { return }
+        pending?.cancel()
+        let item = DispatchWorkItem { [onChange] in DispatchQueue.main.async(execute: onChange) }
+        pending = item
+        queue.asyncAfter(deadline: .now() + 1, execute: item)
+    }
+
+    /// 这条事件路径要不要管（纯函数，`checks/app-folder-watch-check.swift`）。
+    /// 先比长的根：`/Applications/Utilities` 下的事件要按它算，不按 `/Applications`。
+    nonisolated static func isRelevant(_ path: String, roots: [String], known: Set<String>) -> Bool {
+        let path = normalized(path)
+        for root in roots.sorted(by: { $0.count > $1.count }) {
+            if path == root { return true }
+            guard path.hasPrefix(root + "/") else { continue }
+            let top = path.dropFirst(root.count + 1).split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
+            guard top.hasSuffix(".app") else { return false }   // 目录里的杂物、装在子文件夹里的（不扫一层以下）
+            return !known.contains(root + "/" + top)
+        }
+        return false
+    }
+
+    /// 去掉尾斜杠（FSEvents 报的目录带一个），数据卷前缀也剥掉，以防按 `/System/Volumes/Data/…` 报。
+    nonisolated static func normalized(_ path: String) -> String {
+        var path = path
+        if path.hasPrefix("/System/Volumes/Data/") { path = String(path.dropFirst("/System/Volumes/Data".count)) }
+        while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+        return path
+    }
+
+    deinit {
+        guard let stream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+    }
+}
+
+/// FSEvents 的 C 回调：文件级函数，不捕获任何东西（同 event tap 那条约束）。
+private func appFolderEvents(_ stream: ConstFSEventStreamRef, _ info: UnsafeMutableRawPointer?, _ count: Int,
+                             _ paths: UnsafeMutableRawPointer, _ flags: UnsafePointer<FSEventStreamEventFlags>,
+                             _ ids: UnsafePointer<FSEventStreamEventId>) {
+    guard let info else { return }
+    let watcher = Unmanaged<AppFolderWatcher>.fromOpaque(info).takeUnretainedValue()
+    let list = Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as? [String] ?? []
+    watcher.handle(list)
 }
 
 extension Notification.Name {

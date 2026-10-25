@@ -329,5 +329,7 @@
  "Open “{0}” with…": "Abrir «{0}» con…",
  "No app can open it": "Ninguna app puede abrirlo",
  "Restart TabFlick": "Reiniciar TabFlick",
- "Open Quick Search": "Abrir búsqueda rápida"
+ "Open Quick Search": "Abrir búsqueda rápida",
+ "Search failed": "No se pudo buscar",
+ "The extension in {0} didn't connect.": "La extensión de {0} no se conectó."
 }

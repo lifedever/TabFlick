@@ -329,5 +329,7 @@
  "Open “{0}” with…": "「{0}」的打開方式",
  "No app can open it": "沒有能打開它的 App",
  "Restart TabFlick": "重新啟動 TabFlick",
- "Open Quick Search": "開啟快速搜尋"
+ "Open Quick Search": "開啟快速搜尋",
+ "Search failed": "無法搜尋",
+ "The extension in {0} didn't connect.": "{0} 裡的擴充功能沒有連線。"
 }

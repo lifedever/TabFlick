@@ -357,8 +357,9 @@
   "zh": "打开失败",
   "refs": [
    "FavoriteFolders.swift:406",
-   "MRUController.swift:1437",
-   "MRUController.swift:1453"
+   "MRUController.swift:972",
+   "MRUController.swift:1496",
+   "MRUController.swift:1512"
   ]
  },
  {
@@ -411,54 +412,68 @@
   ]
  },
  {
+  "key": "Search failed",
+  "zh": "搜索失败",
+  "refs": [
+   "MRUController.swift:981"
+  ]
+ },
+ {
+  "key": "The extension in {0} didn't connect.",
+  "zh": "{0} 里的扩展没连上。",
+  "refs": [
+   "MRUController.swift:982"
+  ]
+ },
+ {
   "key": "Couldn't open {0}",
   "zh": "打不开 {0}",
   "refs": [
-   "MRUController.swift:1399"
+   "MRUController.swift:1458"
   ]
  },
  {
   "key": "Couldn't read the Finder selection",
   "zh": "读不到访达里选中的项目",
   "refs": [
-   "MRUController.swift:1417",
-   "MRUController.swift:1422"
+   "MRUController.swift:1476",
+   "MRUController.swift:1481"
   ]
  },
  {
   "key": "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.",
   "zh": "系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「访达」。",
   "refs": [
-   "MRUController.swift:1418",
-   "MRUController.swift:1572"
+   "MRUController.swift:1477",
+   "MRUController.swift:1631"
   ]
  },
  {
   "key": "URL copied",
   "zh": "已拷贝网址",
   "refs": [
-   "MRUController.swift:1471"
+   "MRUController.swift:1530"
   ]
  },
  {
   "key": "Title copied",
   "zh": "已拷贝标题",
   "refs": [
-   "MRUController.swift:1472"
+   "MRUController.swift:1531"
   ]
  },
  {
   "key": "Markdown link copied",
   "zh": "已拷贝 Markdown 链接",
   "refs": [
-   "MRUController.swift:1473"
+   "MRUController.swift:1532"
   ]
  },
  {
   "key": "Path copied",
   "zh": "已拷贝路径",
   "refs": [
-   "MRUController.swift:1474",
+   "MRUController.swift:1533",
    "StatusItemController.swift:717"
   ]
  },
@@ -466,28 +481,28 @@
   "key": "Reloaded",
   "zh": "已重新加载",
   "refs": [
-   "MRUController.swift:1481"
+   "MRUController.swift:1540"
   ]
  },
  {
   "key": "Couldn't open Get Info",
   "zh": "打不开简介",
   "refs": [
-   "MRUController.swift:1571"
+   "MRUController.swift:1630"
   ]
  },
  {
   "key": "The extension is too old for this",
   "zh": "扩展版本太旧，做不了这个操作",
   "refs": [
-   "MRUController.swift:1601"
+   "MRUController.swift:1660"
   ]
  },
  {
   "key": "Download the latest extension zip, replace the folder, then reload it in chrome://extensions.",
   "zh": "下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
   "refs": [
-   "MRUController.swift:1602",
+   "MRUController.swift:1661",
    "TabSearchPanel.swift:1837"
   ]
  },
@@ -495,35 +510,35 @@
   "key": "Window reopened",
   "zh": "已恢复窗口",
   "refs": [
-   "MRUController.swift:1834"
+   "MRUController.swift:1894"
   ]
  },
  {
   "key": "Tab reopened",
   "zh": "已恢复标签",
   "refs": [
-   "MRUController.swift:1834"
+   "MRUController.swift:1894"
   ]
  },
  {
   "key": "Nothing to reopen",
   "zh": "没有可恢复的标签",
   "refs": [
-   "MRUController.swift:1838"
+   "MRUController.swift:1898"
   ]
  },
  {
   "key": "Profile {0}",
   "zh": "个人资料 {0}",
   "refs": [
-   "MRUController.swift:2088"
+   "MRUController.swift:2149"
   ]
  },
  {
   "key": "Returned to the pinned URL",
   "zh": "已回到置顶地址",
   "refs": [
-   "MRUController.swift:2439"
+   "MRUController.swift:2500"
   ]
  },
  {

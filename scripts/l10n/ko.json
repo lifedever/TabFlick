@@ -329,5 +329,7 @@
  "Open “{0}” with…": "‘{0}’ 다음으로 열기…",
  "No app can open it": "열 수 있는 앱 없음",
  "Restart TabFlick": "TabFlick 재시작",
- "Open Quick Search": "빠른 검색 열기"
+ "Open Quick Search": "빠른 검색 열기",
+ "Search failed": "검색 실패",
+ "The extension in {0} didn't connect.": "{0}의 확장 프로그램이 연결되지 않았습니다."
 }

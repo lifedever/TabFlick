@@ -713,6 +713,12 @@ final class MRUController {
         search.pickHandler = { [weak self] pick in
             self?.pickFromSearch(pick)
         }
+        // 应用目录有增删：面板开着就当场重扫、刷新（新装的 App 不用关了再开）；关着只作废，下次打开再扫
+        appCatalog.watchFolders { [weak self] in
+            guard let self, self.search.isVisible else { return }
+            log("📦 app folders changed → rescanning")
+            self.appCatalog.refreshIfStale { [weak self] in self?.refreshSearch() }
+        }
         search.closeHandler = { [weak self] itemID in
             self?.closeFromSearch(itemID: itemID)
         }
@@ -936,6 +942,65 @@ final class MRUController {
         }?.key ?? activeClientID
     }
 
+    /// 「在浏览器搜索」发给哪个浏览器（行首画它的图标）。跨浏览器面板一个浏览器都没连着时用
+    /// 系统默认浏览器：选了就先打开它、等它的扩展连上再搜（`searchInLaunchedBrowser`）。只认连过
+    /// TabFlick 的（装着扩展）—— 没装扩展的拿不到它设的搜索引擎，那行就不列。
+    private var webSearchBrowser: String? {
+        if let id = searchIsGlobal ? mostRecentClientID : activeClientID { return effectiveBrowser(of: id) }
+        guard searchIsGlobal,
+              let probe = URL(string: "https://example.com"),
+              let app = NSWorkspace.shared.urlForApplication(toOpen: probe),
+              let browser = Bundle(url: app)?.bundleIdentifier,
+              settings.knownBrowsers.contains(browser) else { return nil }
+        return browser
+    }
+
+    /// 浏览器没开时选了「在浏览器搜索」：等那个浏览器的扩展连上、推来第一份标签再发。
+    /// serial 认是哪一次（超时回调和新的一次搜索别互相误伤）。
+    private var pendingWebSearch: (text: String, browser: String, serial: Int)?
+    private var webSearchSerial = 0
+
+    /// 一个浏览器都没连着时的「在浏览器搜索」：打开默认浏览器，扩展连上后照常发 `search`，
+    /// 用的还是浏览器自己设的搜索引擎。20 秒没连上就说没搜成。
+    private func searchInLaunchedBrowser(_ text: String) {
+        guard let browser = webSearchBrowser,
+              let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browser) else { return }
+        webSearchSerial += 1
+        let serial = webSearchSerial
+        pendingWebSearch = (text, browser, serial)
+        log("🔍 web search → launching \(browser), waiting for its extension")
+        NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
+            guard let error else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.pendingWebSearch?.serial == serial else { return }
+                self.pendingWebSearch = nil
+                log("⚠️  launch \(browser) for web search failed: \(error.localizedDescription)")
+                Toast.show(L10n.t("打开失败", "Failed to open"), detail: error.localizedDescription, kind: .failure)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.pendingWebSearch?.serial == serial else { return }
+                self.pendingWebSearch = nil
+                let name = BrowserSupport.displayName(browser)
+                log("⚠️  web search: \(browser) extension didn't connect in 20s")
+                Toast.show(L10n.t("搜索失败", "Search failed"),
+                           detail: L10n.t("\(name) 里的扩展没连上。", "The extension in \(name) didn't connect."),
+                           kind: .failure)
+            }
+        }
+    }
+
+    /// 等着的那次搜索：这条连接是那个浏览器的、而且已经推来了标签（扩展跑起来了、窗口也在）才发。
+    /// 推送和身份识别谁先到不一定，两处都调。
+    private func deliverPendingWebSearch(to clientID: UUID) {
+        guard let pending = pendingWebSearch, let client = clients[clientID],
+              client.browser == pending.browser, !client.tabs.isEmpty else { return }
+        pendingWebSearch = nil
+        log("🔍 web search → \(pending.text.prefix(60)) (after launching the browser)")
+        server.send(["type": "search", "text": pending.text], to: clientID)
+    }
+
     /// 把某个连接所属的浏览器激活到前台（跨 App 的激活必须 helper 做）。
     private func activateBrowser(of clientID: UUID) {
         _ = NSRunningApplication
@@ -1084,9 +1149,9 @@ final class MRUController {
         let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
         let recent: (rows: [SearchRow], leftAt: [String: Double]) =
             searchEmptyContent == .recent ? recentSearchRows(items: items) : ([], [:])
-        // 跨浏览器面板开着时浏览器连上 / 全断了：「在浏览器搜索」那行跟着出现 / 消失
+        // 跨浏览器面板开着时浏览器连上 / 全断了：「在浏览器搜索」那行换成对应浏览器的图标
         if searchIsGlobal {
-            let browser = mostRecentClientID.map { effectiveBrowser(of: $0) }
+            let browser = webSearchBrowser
             if search.model.searchBrowser != browser { search.model.searchBrowser = browser }
         }
         // 在小程序里按的 ⌥Space：前台 App 是微信（小程序在系统眼里不是独立 App），窗口读回来之后才知道
@@ -1182,7 +1247,7 @@ final class MRUController {
                     icons: iconMap(for: items, closed: closed),
                     // 多个浏览器，或同一个浏览器开了多个 Profile（多条连接）都要标归属
                     global: global, showBrowserBadges: global && (browsers.count > 1 || clients.count > 1),
-                    searchBrowser: (global ? mostRecentClientID : activeClientID).map { effectiveBrowser(of: $0) },
+                    searchBrowser: webSearchBrowser,
                     globalCurrent: global ? frontBrowserCurrentItem(in: items) ?? frontAppRow(in: recent.rows) : nil)
         setEventTapSearchPanelOpen(true)
         // 「全部」没输入时要列历史的话，打开就得去要一次最近访问的
@@ -1365,7 +1430,7 @@ final class MRUController {
             log("🔍 open history → \(entry.title.prefix(50))")
             server.send(["type": "reopen", "url": entry.url], to: clientID)
         case .action(.webSearch(let text)):
-            guard let clientID = target(fallbackClient) else { return }
+            guard let clientID = target(fallbackClient) else { searchInLaunchedBrowser(text); return }
             log("🔍 web search → \(text.prefix(60))")
             server.send(["type": "search", "text": text], to: clientID)
         case .action(.siteSearch(let site, let text)):
@@ -1643,6 +1708,7 @@ final class MRUController {
             updateReadiness()
             publishStatus()
             if searchIsGlobal || clientID == activeClientID { refreshSearch() }
+            deliverPendingWebSearch(to: clientID)
             if !cycling, clientID == activeClientID {
                 log("MRU updated: \(decoded.count) tabs, current: \(decoded.first?.title.prefix(40) ?? "?")")
             }
@@ -1913,6 +1979,7 @@ final class MRUController {
         profileIdentityChanged(id)
         updateReadiness()
         publishStatus()
+        deliverPendingWebSearch(to: id)
     }
 
     // MARK: - 多 Profile 的身份
