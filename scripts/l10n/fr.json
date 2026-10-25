@@ -328,5 +328,6 @@
  "Couldn't read the Finder selection": "Impossible de lire la sélection du Finder",
  "Open “{0}” with…": "Ouvrir « {0} » avec…",
  "No app can open it": "Aucune app ne peut l’ouvrir",
- "Restart TabFlick": "Redémarrer TabFlick"
+ "Restart TabFlick": "Redémarrer TabFlick",
+ "Open Quick Search": "Ouvrir la recherche rapide"
 }

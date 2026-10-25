@@ -200,10 +200,10 @@ private var gSearchPanelOpen = false
 
 /// 浏览器之外的搜索键（默认 ⌥Space，用户 2026-09-26 从 ⌥⌘E 改的）：任何 App 前台都
 /// 接管，**不看排除名单**——搜索面板是全局工具，要关就关开关，不按 App 分。
+/// 也不看有没有浏览器连着：应用、文件夹、窗口命令、最近关闭都不靠浏览器（2026-10-25 用户要的）。
 private var gGlobalSearchKeyCode: Int64 = Int64(kVK_Space)
 private var gGlobalSearchModifiers: CGEventFlags = .maskAlternate
 private var gGlobalSearchEnabled = true
-private var gGlobalSearchReady = false
 private var gOnGlobalSearchHotkey: (() -> Void)?
 
 /// 全局搜索键设置变化时由主线程调用。keyCode 传 nil = 默认 ⌥Space。
@@ -215,11 +215,6 @@ func configureGlobalSearchHotkey(keyCode: Int64?, flags: CGEventFlags, enabled: 
         : flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift])
     gGlobalSearchEnabled = enabled
     gOnGlobalSearchHotkey = handler
-}
-
-/// 全局搜索的就绪状态（有扩展连着、所有浏览器合起来至少一个标签）。
-func setEventTapGlobalSearchReady(_ ready: Bool) {
-    gGlobalSearchReady = ready
 }
 
 /// 搜索快捷键设置变化时由主线程调用。keyCode 传 nil = 默认 ⌘E。
@@ -346,7 +341,6 @@ private func tabflickTapCallback(proxy: CGEventTapProxy,
         // 排除名单不管它。面板开着时这一下同样是「关掉」。
         if gGlobalSearchEnabled, code == gGlobalSearchKeyCode,
            flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]) == gGlobalSearchModifiers {
-            guard gGlobalSearchReady || gSearchPanelOpen else { break }
             gOnGlobalSearchHotkey?()
             return nil
         }

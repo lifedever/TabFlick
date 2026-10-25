@@ -668,9 +668,9 @@ final class MRUController {
     private func updateReadiness() {
         setEventTapReady(connected && switcherTabs.count > 1)
         refreshPinnedDriftedFlag()
-        // 搜索面板不按窗口过滤，也不要求两个以上：一个标签也搜得到
+        // 搜索面板不按窗口过滤，也不要求两个以上：一个标签也搜得到。
+        // ⌥Space 那个不看这里：没有浏览器也能用（应用、文件夹、窗口命令、最近关闭）
         setEventTapSearchReady(connected && !tabs.isEmpty)
-        setEventTapGlobalSearchReady(connected && globalTabCount > 0)
 
         // 全局切换器「按了没反应」有两种完全不同的原因：拦截没开（就绪为 false，
         // 键被放行）和路由判错（吞了却没弹）。日志里要能一眼分开，所以
@@ -976,7 +976,11 @@ final class MRUController {
 
     private func flushFaviconQueue() {
         guard let clientID = searchIsGlobal ? mostRecentClientID : activeClientID else {
-            faviconQueue.removeAll(); faviconInflight.removeAll(); return
+            // 没有浏览器可问（⌥Space 在浏览器全关时打开的）：直接自己去站上取
+            let keys = faviconQueue.map(\.key)
+            faviconQueue.removeAll()
+            fallBackUnanswered(keys)
+            return
         }
         let batch = faviconQueue
         faviconQueue.removeAll()
@@ -1080,6 +1084,11 @@ final class MRUController {
         let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
         let recent: (rows: [SearchRow], leftAt: [String: Double]) =
             searchEmptyContent == .recent ? recentSearchRows(items: items) : ([], [:])
+        // 跨浏览器面板开着时浏览器连上 / 全断了：「在浏览器搜索」那行跟着出现 / 消失
+        if searchIsGlobal {
+            let browser = mostRecentClientID.map { effectiveBrowser(of: $0) }
+            if search.model.searchBrowser != browser { search.model.searchBrowser = browser }
+        }
         // 在小程序里按的 ⌥Space：前台 App 是微信（小程序在系统眼里不是独立 App），窗口读回来之后才知道
         // 最上面的是小程序，这时最前那个小程序才是「当前」
         if searchIsGlobal, searchFrontBundle == WeChatWindows.bundleID, wechatMiniOnTop,
@@ -1115,6 +1124,12 @@ final class MRUController {
         }
     }
 
+    /// 状态栏「打开快捷搜索」：和 ⌥Space 同一个面板。菜单项是「打开」，已经开着就不动。
+    func openGlobalSearch() {
+        guard !search.isVisible else { return }
+        toggleTabSearch(global: true)
+    }
+
     /// 搜索快捷键：开着就关，关着就开。cycling 中不开 —— 两个浮层叠一起没法用。
     /// `global` = ⌥⌘E 唤出的跨浏览器搜索：所有浏览器的标签合成一张表、贴屏幕居中。
     func toggleTabSearch(global: Bool = false) {
@@ -1128,7 +1143,8 @@ final class MRUController {
         searchFrontBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         refreshWeChatWindows()
         let items = global ? globalSearchItems : searchItems
-        guard !items.isEmpty else { return }
+        // 跨浏览器面板一个标签都没有也照开：浏览器全关着时应用、文件夹这些照样要搜
+        guard global || !items.isEmpty else { return }
         let closed = global ? globalSearchClosed : searchClosed
         // 已关闭记录的 favicon 平时只预热了菜单那 20 条，搜索候选多得多，补最近 60 条
         //（再往前的命中了也就显示 globe，不值得每次打开都发几百个请求）
@@ -1331,7 +1347,7 @@ final class MRUController {
             log("🔍 reopen closed → \(entry.displayTitle.prefix(50))")
             reopenClosedTab(id: entry.id)   // 自己会激活浏览器、按记录的 Profile 找连接
         case .url(let url, nil):
-            guard let clientID = target(fallbackClient) else { return }
+            guard let clientID = target(fallbackClient) else { openInDefaultBrowser(url); return }
             log("🔍 open url → \(url.prefix(80))")
             server.send(["type": "reopen", "url": url], to: clientID)
         case .url(let url, let current?):
@@ -1353,7 +1369,8 @@ final class MRUController {
             log("🔍 web search → \(text.prefix(60))")
             server.send(["type": "search", "text": text], to: clientID)
         case .action(.siteSearch(let site, let text)):
-            guard let url = site.url(for: text), let clientID = target(fallbackClient) else { return }
+            guard let url = site.url(for: text) else { return }
+            guard let clientID = target(fallbackClient) else { openInDefaultBrowser(url); return }
             log("🔍 site search \(site.name) → \(text.prefix(60))")
             server.send(["type": "reopen", "url": url], to: clientID)
         case .folder(let folder, let opener):
@@ -1403,6 +1420,21 @@ final class MRUController {
                            kind: .failure)
             case .failure(.noFolder):
                 Toast.show(L10n.t("读不到访达里选中的项目", "Couldn't read the Finder selection"), kind: .failure)
+            }
+        }
+    }
+
+    /// 一个浏览器都没连着（⌥Space 在浏览器全关时也能开）：网址交给系统默认浏览器。
+    /// 只放行 http(s)，和扩展的 `reopen` 同一个口径（站内搜索的模板是用户自己填的）。
+    private func openInDefaultBrowser(_ url: String) {
+        guard let target = URL(string: url),
+              let scheme = target.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return }
+        log("🔍 no browser connected → default browser: \(url.prefix(80))")
+        NSWorkspace.shared.open(target, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            guard let error else { return }
+            Task { @MainActor in
+                log("⚠️  open in default browser failed: \(error.localizedDescription)")
+                Toast.show(L10n.t("打开失败", "Failed to open"), detail: error.localizedDescription, kind: .failure)
             }
         }
     }

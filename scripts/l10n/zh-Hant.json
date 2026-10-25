@@ -328,5 +328,6 @@
  "Couldn't read the Finder selection": "讀不到 Finder 裡選取的項目",
  "Open “{0}” with…": "「{0}」的打開方式",
  "No app can open it": "沒有能打開它的 App",
- "Restart TabFlick": "重新啟動 TabFlick"
+ "Restart TabFlick": "重新啟動 TabFlick",
+ "Open Quick Search": "開啟快速搜尋"
 }

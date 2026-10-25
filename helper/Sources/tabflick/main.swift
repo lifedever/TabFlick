@@ -296,6 +296,20 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated { controller.returnCurrentTabToPinnedURL() }
         }
 
+        // 「打开快捷搜索」：和 ⌥Space 同一个面板，右侧显示那个键（没改过就是 ⌥Space）
+        statusItem.searchEnabled = {
+            MainActor.assumeIsolated { settings.tabSearch }
+        }
+        statusItem.searchHotkeyProvider = {
+            MainActor.assumeIsolated {
+                guard let hotkey = settings.globalSearchHotkey else { return (" ", .option) }
+                return (hotkey.character, hotkey.modifierFlags)
+            }
+        }
+        statusItem.onOpenSearch = {
+            MainActor.assumeIsolated { controller.openGlobalSearch() }
+        }
+
         // 置顶快捷键：设置变化时重挂 event tap 匹配；菜单项右侧原生显示
         statusItem.pinHotkeyProvider = {
             MainActor.assumeIsolated {

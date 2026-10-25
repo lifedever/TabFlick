@@ -1041,9 +1041,10 @@ final class TabSearchModel: ObservableObject {
         return host + "|" + h.title
     }
 
-    /// 「搜索」模式的行：搜索引擎 + 站内搜索。
+    /// 「搜索」模式的行：搜索引擎 + 站内搜索。一个浏览器都没连着（`searchBrowser` 为 nil）时
+    /// 不列搜索引擎那行：用的是浏览器自己设的引擎，没连上不知道是哪个；站内搜索交给默认浏览器。
     private func actionRows(_ text: String) -> [SearchRow] {
-        [.action(.webSearch(text))] + siteSearches.map { .action(.siteSearch($0, text)) }
+        (searchBrowser == nil ? [] : [.action(.webSearch(text))]) + siteSearches.map { .action(.siteSearch($0, text)) }
     }
 
     /// 「全部」模式：最佳匹配、应用、活标签、最近关闭、书签、历史各几条，再加「操作」段。

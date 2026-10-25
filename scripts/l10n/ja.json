@@ -328,5 +328,6 @@
  "Couldn't read the Finder selection": "Finder で選択した項目を読み取れません",
  "Open “{0}” with…": "「{0}」をこのアプリケーションで開く…",
  "No app can open it": "開けるアプリがありません",
- "Restart TabFlick": "TabFlickを再起動"
+ "Restart TabFlick": "TabFlickを再起動",
+ "Open Quick Search": "クイック検索を開く"
 }

@@ -26,6 +26,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 清空某一行（某个 Profile）的已关闭记录。参数是那一行的连接 key。
     var onClearClosedTabs: ((String) -> Void)?
 
+    /// 「打开快捷搜索」：和 ⌥Space 同一个面板，不看前台、不看浏览器连没连着。
+    /// 设置里关了搜索面板时整项隐藏。
+    private let searchItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    /// 搜索面板开着没有（设置 → 搜索面板的总开关）。
+    var searchEnabled: (() -> Bool)?
+    /// ⌥Space 那个键（菜单项右侧显示用）。
+    var searchHotkeyProvider: (() -> (key: String, modifiers: NSEvent.ModifierFlags))?
+    var onOpenSearch: (() -> Void)?
+
     /// 「收藏当前标签」菜单项。标题/图标随当前标签的收藏状态切换。
     private let favoriteItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     /// 当前标签是否已收藏；nil = 没有当前标签（未连接），菜单项置灰。
@@ -142,7 +151,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // buildMenu 抛异常，整条语言刷新链在这里断掉，状态栏菜单、设置分页名、主菜单
         // 全都停在旧语言（2026-09-27 用户报的）。改成先把旧菜单整个清空，再加复用项也不会漏。
         statusItem.menu?.removeAllItems()
-        for item in [statusLine, favoriteItem, warningItem, addFinderFolderItem, addFolderItem, excludeAppItem] {
+        for item in [statusLine, searchItem, favoriteItem, warningItem, addFinderFolderItem, addFolderItem, excludeAppItem] {
             item.menu?.removeItem(item)
         }
 
@@ -183,6 +192,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             statusItem.menu = menu
             return
         }
+
+        searchItem.target = self
+        searchItem.action = #selector(openSearch)
+        searchItem.title = L10n.t("打开快捷搜索", "Open Quick Search")
+        searchItem.icon = Self.symbol("magnifyingglass")
+        searchItem.isEnabled = true
+        menu.addItem(searchItem)
 
         favoriteItem.target = self
         favoriteItem.action = #selector(toggleFavorite)
@@ -299,6 +315,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // 就是旁证），所以打开菜单这一刻 frontmost 还是用户正在用的 App。
         let frontApp = NSWorkspace.shared.frontmostApplication
         let front = frontApp?.bundleIdentifier
+        let searchVisible = refreshSearchItem()
         let pinVisible = refreshFavoriteItem(browserIsFront: BrowserSupport.isSupported(front))
         let finderIsFront = front == "com.apple.finder"
         addFinderFolderItem.isHidden = !finderIsFront
@@ -310,8 +327,24 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // 只在动作槽可见时要。文件夹区因「添加文件夹…」常驻而永远有内容，
         // 顶上那道分隔线不用收敛。
         if !unauthorized {
-            sepAfterPin.isHidden = !(pinVisible || finderIsFront || excludeVisible)
+            sepAfterPin.isHidden = !(searchVisible || pinVisible || finderIsFront || excludeVisible)
         }
+    }
+
+    /// 返回菜单项是否可见（设置里关了搜索面板时隐藏）。快捷键跟着设置走，改过键就显示改过的。
+    private func refreshSearchItem() -> Bool {
+        let enabled = searchEnabled?() ?? false
+        searchItem.isHidden = !enabled
+        if let hotkey = searchHotkeyProvider?() {
+            searchItem.keyEquivalent = hotkey.key
+            searchItem.keyEquivalentModifierMask = hotkey.modifiers
+        }
+        return enabled
+    }
+
+    /// 排到下一轮再开面板，让菜单先退出跟踪循环（同「添加文件夹…」之后弹菜单那条的顾虑）。
+    @objc private func openSearch() {
+        DispatchQueue.main.async { [weak self] in self?.onOpenSearch?() }
     }
 
     /// 每个已连接浏览器一行：「Chrome · 5 个标签 ▸」，行首是浏览器图标，
