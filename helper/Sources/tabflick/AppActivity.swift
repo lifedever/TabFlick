@@ -16,6 +16,9 @@ enum AppActivity {
         let bundleID: String?
         /// 最近一次从前台切走（秒）：「最近使用」行尾写的「x 前」是离开它多久了。老文件里没有，nil。
         var left: Double? = nil
+        /// 常用度：待够几秒的切到前台次数，衰减到 `usesAt` 那一刻的值（见 `AppRanking`）。老文件里没有，nil。
+        var uses: Double? = nil
+        var usesAt: Double? = nil
     }
 
     nonisolated static let retention: Double = 7 * 86_400
@@ -31,9 +34,16 @@ enum AppActivity {
             var clamped = record
             if clamped.at > now {
                 clamped = Record(key: record.key, at: now, path: record.path, name: record.name,
-                                 bundleID: record.bundleID, left: record.left)
+                                 bundleID: record.bundleID, left: record.left, uses: record.uses, usesAt: record.usesAt)
             }
             if let left = clamped.left { clamped.left = left.isFinite ? min(left, now) : nil }
+            // 次数和它的时刻要成对、是正常的数，否则两个都不要
+            if let uses = clamped.uses, let usesAt = clamped.usesAt, uses.isFinite, uses > 0, usesAt.isFinite {
+                clamped.usesAt = min(usesAt, now)
+            } else {
+                clamped.uses = nil
+                clamped.usesAt = nil
+            }
             if let existing = latest[clamped.key], existing.at >= clamped.at { continue }
             latest[clamped.key] = clamped
         }

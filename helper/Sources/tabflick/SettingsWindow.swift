@@ -860,14 +860,14 @@ private struct SearchPane: View {
 
             Section {
                 HStack {
-                    Text(L10n.t("同样的输入再搜时，上次选的那条排在前面；「最近使用」按你切换 App 的记录排。都只存在这台 Mac 上，清除时一起清掉。",
-                                "Search the same thing again and what you picked last time comes first; Recent is ordered by the apps you switch to. Both are stored only on this Mac and cleared together."))
+                    Text(L10n.t("同样的输入再搜时，上次选的那条排在前面；首页的「推荐」是你常选的；「最近使用」按你切换 App 的记录排。都只存在这台 Mac 上，清除时一起清掉。",
+                                "Search the same thing again and what you picked last time comes first; Suggestions on the home list are what you pick often; Recent is ordered by the apps you switch to. All stored only on this Mac and cleared together."))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button(L10n.t("清除", "Clear")) {
                         SearchMemory.shared.clear()
-                        // App 切换记录也是使用记录，一起清（AppCatalog 收通知清内存、删文件）
+                        // App 切换记录、首页推荐的账也是使用记录，一起清（AppCatalog、SuggestionStore 收通知清内存、删文件）
                         NotificationCenter.default.post(name: .clearUsageHistory, object: nil)
                         memoryCount = 0
                     }
@@ -876,7 +876,7 @@ private struct SearchPane: View {
             } header: {
                 Text(L10n.t("搜索记忆", "Search memory"))
             }
-            .onAppear { memoryCount = SearchMemory.shared.count + AppCatalog.storedActivityCount() }
+            .onAppear { memoryCount = SearchMemory.shared.count + SuggestionStore.shared.count + AppCatalog.storedActivityCount() }
 
         }
         .formStyle(.grouped)

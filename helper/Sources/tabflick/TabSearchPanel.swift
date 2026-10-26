@@ -20,11 +20,12 @@ struct SearchSection {
 
 /// 「全部」里一段装的是什么：决定分组头的名字，以及截断后 Tab 跳去哪个模式。
 enum SearchSectionKind: String {
-    case top, ops, apps, folders, tabs, closed, bookmarks, history, search, recent
+    case top, ops, apps, folders, tabs, closed, bookmarks, history, search, recent, suggested
 
     var title: String {
         switch self {
         case .recent:    return L10n.t("最近使用", "Recent")
+        case .suggested: return L10n.t("推荐", "Suggestions")
         case .top:       return L10n.t("最佳匹配", "Top Hit")
         case .ops:       return L10n.t("操作", "Actions")
         case .apps:      return L10n.t("应用", "Apps")
@@ -39,7 +40,7 @@ enum SearchSectionKind: String {
 
     var mode: SearchMode? {
         switch self {
-        case .top, .ops, .recent: return nil
+        case .top, .ops, .recent, .suggested: return nil
         case .search:    return .actions
         case .apps:      return .apps
         case .folders:   return .folders
@@ -96,6 +97,8 @@ enum SearchRow: Identifiable {
     case appCommand(AppCommand, AppEntry?)
     /// 某个 App 里一个具体的窗口（微信的小程序、单独弹出的聊天窗口），回车直接跳过去
     case window(AppWindow)
+    /// 「结束进程…」展开后的一行：一个 App（连同它包里的进程）或一个单独的进程
+    case process(ProcessItem)
 
     var id: String {
         switch self {
@@ -116,6 +119,7 @@ enum SearchRow: Identifiable {
         case .selectionOpener(let o, let s): return "selopener#\(o.id)#\(s.id)"
         case .appCommand(let c, _): return "appcmd#\(c.id)"
         case .window(let w):     return w.id
+        case .process(let p):    return p.id
         }
     }
 
@@ -138,6 +142,9 @@ enum SearchRow: Identifiable {
         // 命令用它那个 App 的图标（Raycast 的做法）：一眼看出是谁的命令
         case .appCommand(_, let a): return a.map { "file:" + $0.path } ?? ""
         case .window(let w):     return "file:" + w.iconPath
+        // App 画 App 图标；单独的进程都是访达里那个黑色的 exec，共用一个键 —— 按各自路径取的话，
+        // 几百个进程第一次画就是几百次同步的图标查询，压在主线程上
+        case .process(let p):    return p.isApp ? "file:" + p.path : "file:/bin/sh"
         case .command(.primary, let target): return target.favIconUrl
         case .action, .command: return ""
         }
@@ -179,6 +186,7 @@ enum SearchRow: Identifiable {
         case .selectionOpener(let o, _): return o.name
         case .appCommand(let c, _): return c.title
         case .window(let w):     return w.title
+        case .process(let p):    return p.name
         }
     }
 
@@ -211,6 +219,7 @@ enum SearchRow: Identifiable {
         case .selection:         return L10n.t("打开", "Open")
         case .appCommand(let c, _): return c.title
         case .window:            return L10n.t("切换到窗口", "Switch to window")
+        case .process(let p):    return p.isApp ? L10n.t("退出", "Quit") : L10n.t("结束", "Kill")
         }
     }
 
@@ -231,7 +240,20 @@ enum SearchRow: Identifiable {
         case .window(let w):     return w.id
         // 换个浏览器打开也是「这个输入要的就是这一页」
         case .command(.primary, let target), .openWith(_, let target): return target.memoryIdentity
-        case .action, .command, .selection, .selectionOpener: return nil
+        case .action, .command, .selection, .selectionOpener, .process: return nil
+        }
+    }
+
+    /// 首页「推荐」记账用：是哪一类、记什么标题（网页没开着时拿它画行）。窗口（id 跟着窗口标题变）、
+    /// 搜索这类一次性操作不记。身份用 `memoryIdentity`。
+    var suggestionEntry: (kind: SuggestionStore.Record.Kind, title: String)? {
+        switch self {
+        case .tab, .closed, .bookmark, .history: return (.web, displayTitle)
+        case .url(let url, _):   return (.web, url)
+        case .folder(let f), .opener(_, let f): return (.folder, f.name)
+        case .app(let a):        return (.app, a.name)
+        // 内置命令不进推荐（用户 2026-10-26：命令的权重没那么高，首页三条名额留给「东西」）
+        default:                 return nil
         }
     }
 
@@ -252,6 +274,7 @@ enum SearchRow: Identifiable {
         case .folder(let f): return f.path
         case .app(let a):    return a.path
         case .selection(let s): return s.paths.first
+        case .process(let p): return p.path
         default:             return nil
         }
     }
@@ -263,6 +286,9 @@ enum SearchRow: Identifiable {
         case .copyTitle:    return pageURL == nil ? nil : displayTitle
         case .copyMarkdown: return pageURL.map { TabSearch.markdownLink(title: displayTitle, url: $0) }
         case .copyPath:     return filePath
+        case .copyPID:      if case .process(let p) = self { return String(p.pid) } else { return nil }
+        case .copyCommandLine:
+            if case .process(let p) = self, !p.commandLine.isEmpty { return p.commandLine } else { return nil }
         default:            return nil
         }
     }
@@ -337,11 +363,14 @@ enum RowCommand: String {
     case deleteHistory
     case unfavorite
     case quitApp
+    /// 进程列表里：App 强制退出（forceTerminate）、单独的进程 SIGKILL。不管是什么都要按两次
+    case forceQuit
+    case copyPID, copyCommandLine
 
     /// 关闭 / 删除类：标红。
     var isDestructive: Bool {
         switch self {
-        case .closeTab, .closeDuplicates, .removeClosed, .deleteHistory, .unfavorite, .quitApp: return true
+        case .closeTab, .closeDuplicates, .removeClosed, .deleteHistory, .unfavorite, .quitApp, .forceQuit: return true
         default: return false
         }
     }
@@ -370,6 +399,11 @@ enum RowCommand: String {
         case .quitApp:
             if case .app(let a) = target { return L10n.t("退出 \(a.name)", "Quit \(a.name)") }
             return L10n.t("退出", "Quit")
+        case .forceQuit:
+            if case .process(let p) = target, !p.isApp { return L10n.t("强制结束", "Force Kill") }
+            return L10n.t("强制退出", "Force Quit")
+        case .copyPID:        return L10n.t("拷贝 PID", "Copy PID")
+        case .copyCommandLine: return L10n.t("拷贝命令行", "Copy command line")
         }
     }
 
@@ -386,7 +420,7 @@ enum RowCommand: String {
         case .returnToPinned: return "pin"
         // 拷贝类共用一个图标、靠字区分（Raycast / Alfred 都这样）：四个各画各的图，
         // 列表里就是四种形状抢眼，反而看不出它们是一类
-        case .copyURL, .copyTitle, .copyMarkdown, .copyPath: return "doc.on.doc"
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine: return "doc.on.doc"
         case .revealInFinder: return "folder"
         case .getInfo:        return "info.circle"
         case .showPackageContents: return "shippingbox"
@@ -395,6 +429,7 @@ enum RowCommand: String {
         case .removeClosed, .deleteHistory: return "trash"
         case .unfavorite:     return "star.slash"
         case .quitApp:        return "power"
+        case .forceQuit:      return "xmark.octagon"
         }
     }
 }
@@ -434,6 +469,8 @@ final class TabSearchModel: ObservableObject {
     @Published private(set) var folders: [FavoriteFolder] = []
     @Published private(set) var openers: [OpenerApp] = []
     @Published private(set) var apps: [AppEntry] = []
+    /// 同一份 App 按常用度稳定重排：有输入时拿它排，同分的常用的在前（见 `AppRanking.byPrior`）。换数据时排一次。
+    private var appsByPrior: [AppEntry] = []
     /// App 里的具体窗口（微信的小程序、单独弹出的聊天窗口），在「应用」段里和 App 一起排。
     @Published private(set) var windows: [AppWindow] = []
     /// 正在运行的 App（bundle id；没有 bundle id 的记 "path:" + 路径）。行上的「运行中」读它，
@@ -471,6 +508,118 @@ final class TabSearchModel: ObservableObject {
     private var savedQuery = ""
     private var savedCursorID: String?
     private var savedCursorIndex = 0
+
+    // MARK: 进程列表（「结束进程…」）
+
+    /// 「结束进程…」展开了进程列表（子状态：Esc / 输入空着按 ⌫ 退回原列表）。它里面还能 ⌘↩ 再进一层操作。
+    @Published private(set) var inProcesses = false
+    /// Tab 切换：按 CPU 还是按内存排。
+    @Published private(set) var processSort: ProcessSort = .cpu
+    /// 第一份采样到了没有（没到时列表空着写「正在读取」）。
+    @Published private(set) var processesLoaded = false
+    /// 已经退出的（还留在原位、标「已退出」，下次重排才拿掉）和正在退出的。
+    @Published private(set) var exitedProcesses: Set<String> = []
+    @Published private(set) var endingProcesses: Set<String> = []
+    /// 按了一次回车、等第二次确认的那一行（结束进程、退出 App 都要按两次）。游标一动就作废。
+    @Published private(set) var armedID: String?
+    /// 进程列表开 / 关（面板据此开停采样）。
+    var onProcessesChange: ((Bool) -> Void)?
+    private var processItems: [ProcessItem] = []
+    private var processMembers: [String: [ProcessItem]] = [:]
+    /// 列表的顺序。**只在改输入、换排序时重排**，之后采样回来只更新数字、新出现的接在末尾、退出的
+    /// 留在原位：列表要是每 2 秒按 CPU 重排一次，回车那一瞬间游标底下可能已经换了一个进程。
+    private var processOrder: [String] = []
+    private var processOrderKey: String?
+    /// 每个 id 最后一次见到的样子：退出了还要画它。
+    private var processLastSeen: [String: ProcessItem] = [:]
+    private var processSavedQuery = ""
+    private var processSavedCursorID: String?
+    private var processSavedCursorIndex = 0
+    /// 重开面板回到进程列表时，第一份采样到了再把游标（和它的操作列表）放回去。
+    private var pendingProcessRestore: (cursorID: String?, actions: SubState.Actions?)?
+
+    // MARK: 重开面板回到原来那一层
+
+    /// 关面板时停在主列表之上的哪一层：进程列表、⌘↩ 的操作列表、「打开方式…」的 App 列表，以及那一层
+    /// 的输入和选中项。90 秒内重开时原样回去（用户 2026-10-26 要的：之前只记主列表那一层）。
+    /// 等确认的那一下（`armedID`）不记：重开后按一下回车就结束进程太危险。
+    struct SubState {
+        struct Actions {
+            let targetID: String
+            let query: String
+            let cursorID: String?
+        }
+        struct Processes {
+            let query: String
+            let sort: ProcessSort
+            let cursorID: String?
+            /// 关面板那一刻的进程数据：重开时先画它，新采样到了原地更新数字。不留的话重开要等重新采样
+            /// （两次读数隔 0.3 秒才算得出 CPU），列表先空着再撑满，闪一下（用户 2026-10-26 看到的）
+            let items: [ProcessItem]
+            let members: [String: [ProcessItem]]
+        }
+        var processes: Processes?
+        var actions: Actions?
+        var openWith: (selection: FileSelection, openers: [OpenerApp], query: String, cursorID: String?)?
+    }
+
+    var subState: SubState? {
+        var state = SubState()
+        if inProcesses {
+            state.processes = SubState.Processes(query: actionTarget != nil ? savedQuery : query, sort: processSort,
+                                                 cursorID: actionTarget != nil ? savedCursorID : selectedRow?.id,
+                                                 items: processesLoaded ? processItems : [],
+                                                 members: processesLoaded ? processMembers : [:])
+        }
+        if let target = actionTarget {
+            if case .selection(let selection) = target {
+                state.openWith = (selection, selectionOpeners, query, selectedRow?.id)
+            } else {
+                state.actions = SubState.Actions(targetID: target.id, query: query, cursorID: selectedRow?.id)
+            }
+        }
+        return state.processes == nil && state.actions == nil && state.openWith == nil ? nil : state
+    }
+
+    /// 主列表已经按上次的输入和游标恢复好了，再一层层进去。对象不在了（标签关了、进程退了）就停在上一层。
+    func restore(_ state: SubState) {
+        if let openWith = state.openWith {
+            showOpenWith(openWith.selection, openers: openWith.openers)
+            restoreLayerInput(openWith.query, cursorID: openWith.cursorID)
+        } else if let processes = state.processes {
+            showProcesses()
+            processSort = processes.sort
+            if processes.items.isEmpty {
+                // 关的时候还没读到：等第一份采样到了再放游标
+                restoreLayerInput(processes.query, cursorID: nil)
+                pendingProcessRestore = (processes.cursorID, state.actions)
+            } else {
+                // 先画关面板时那份（不闪），重新采样回来走原地更新（`setProcesses`）
+                processItems = processes.items
+                processMembers = processes.members
+                processesLoaded = true
+                setQueryQuietly(processes.query)
+                refilter(keepCursorOn: processes.cursorID)
+                if let actions = state.actions { reopenActions(actions) }
+            }
+        } else if let actions = state.actions {
+            reopenActions(actions)
+        }
+    }
+
+    private func reopenActions(_ actions: SubState.Actions) {
+        guard let index = rows.firstIndex(where: { $0.id == actions.targetID }) else { return }
+        setCursor(index, source: .keyboard)
+        guard showActions() else { return }
+        restoreLayerInput(actions.query, cursorID: actions.cursorID)
+    }
+
+    private func restoreLayerInput(_ text: String, cursorID: String?) {
+        if !text.isEmpty { query = text }
+        if let cursorID, let index = rows.firstIndex(where: { $0.id == cursorID }) {
+            setCursor(index, source: .keyboard)
+        }
+    }
     /// 程序自己改输入（进出操作列表）：不重算、不去问历史，调用方自己 refilter。
     private var settingQueryQuietly = false
     /// 「全部」模式没输入时列什么（设置项，⌘E 和跨浏览器面板各一项，打开时传进来）。
@@ -479,8 +628,11 @@ final class TabSearchModel: ObservableObject {
     private var recent: [SearchRow] = []
     /// 「最近使用」每一行离开它的时间（行 id → 毫秒）：行尾「x 前」写的是离开多久了。
     private(set) var recentLeftAt: [String: Double] = [:]
-    /// 列表此刻就是「最近使用」那张混排表。
-    var showingRecent: Bool { layout.first?.kind == .recent }
+    /// 列表此刻就是「最近使用」那张混排表（上面可能还有一段「推荐」，行的画法和它一样）。
+    var showingRecent: Bool { layout.contains { $0.kind == .recent } }
+    /// 打开面板、改完输入后游标默认落在哪一行。一般是第 0 行；首页上面有「推荐」时落在「最近使用」
+    /// 第一行 —— 回车照旧回到上一个（用户 2026-09-29 定的规矩），按 ↑ 才进推荐。
+    private var defaultCursor = 0
     /// 「全部」模式下列表由哪几段拼成（按顺序），`sections` 据此切段。其他模式为空。
     private struct SectionSpec {
         let kind: SearchSectionKind
@@ -502,9 +654,10 @@ final class TabSearchModel: ObservableObject {
     @Published var query = "" {
         didSet {
             guard oldValue != query, !settingQueryQuietly else { return }
+            armedID = nil
             refilter(keepCursorOn: nil)
-            // 操作列表里的输入只是在过滤操作，不去问历史记录
-            guard actionTarget == nil else { return }
+            // 操作列表、进程列表里的输入只是在过滤它们，不去问历史记录
+            guard actionTarget == nil, !inProcesses else { return }
             onQueryChange?(query.trimmingCharacters(in: .whitespaces))
         }
     }
@@ -672,6 +825,7 @@ final class TabSearchModel: ObservableObject {
 
     /// `touched: false` 只给默认落位用，其余一律算用户选的（见 `cursorTouched`）。
     func setCursor(_ index: Int, source: CursorSource, touched: Bool = true) {
+        if index != cursor, armedID != nil { armedID = nil }
         cursorSource = source
         cursorTouched = touched
         cursor = index
@@ -679,7 +833,8 @@ final class TabSearchModel: ObservableObject {
 
     /// Tab / ⇧Tab：按设置里的顺序循环模式。
     func cycleMode(_ delta: Int) {
-        // 操作列表里 Tab 不切模式（先 Esc 退回去）
+        // 操作列表里 Tab 不切模式（先 Esc 退回去）；进程列表里点模式标签是换排序
+        if inProcesses, actionTarget == nil { toggleProcessSort(); return }
         guard actionTarget == nil, let index = modes.firstIndex(of: mode), modes.count > 1 else { return }
         select(modes[(index + delta + modes.count) % modes.count])
     }
@@ -695,6 +850,10 @@ final class TabSearchModel: ObservableObject {
     /// 时 Tab 直接进那一类看全部，游标留在同一条上；其余照常按顺序切模式。
     /// 点模式标签不走这里（那是明确的「切下一个」）。
     func tabPressed(_ delta: Int) {
+        if inProcesses, actionTarget == nil {
+            toggleProcessSort()
+            return
+        }
         if delta > 0, actionTarget == nil, mode == .all,
            let jump = sections.first(where: { $0.range.contains(cursor) })?.jump {
             select(jump, keepCursorOn: selectedRow?.id)
@@ -717,6 +876,15 @@ final class TabSearchModel: ObservableObject {
     func escape() -> Bool {
         if actionTarget != nil {
             leaveActions()
+            return true
+        }
+        if inProcesses {
+            if !query.isEmpty {
+                query = ""
+                noteUserEdit()
+            } else {
+                leaveProcesses()
+            }
             return true
         }
         if !query.isEmpty {
@@ -747,6 +915,7 @@ final class TabSearchModel: ObservableObject {
         self.bookmarks = bookmarks
         self.folders = folders
         self.apps = apps
+        appsByPrior = AppRanking.byPrior(apps, prior: \.prior)
         self.windows = windows
         self.openers = openers
         if keepCursor {
@@ -761,6 +930,8 @@ final class TabSearchModel: ObservableObject {
     /// 游标跟着鼠标）就落到同一位置的下一行。之前退回第 1 行并按键盘移动处理，列表跳回顶部
     /// （用户 2026-09-26 反馈：标签多时关一个就回到顶上）。没选过就留在新排序的默认位置。
     private func refreshInPlace(keep: String?, previousIndex: Int) {
+        // 进程列表（连同它里面的操作列表）不靠这些数据：别跟着重算，重算会挪游标、把等确认的那一下作废
+        guard !inProcesses else { return }
         let touched = cursorTouched
         refilter(keepCursorOn: nil)
         guard !rows.isEmpty else { return }
@@ -778,14 +949,15 @@ final class TabSearchModel: ObservableObject {
     /// 游标所在的那一行（没有行时 nil）。
     var selectedRow: SearchRow? { rows.indices.contains(cursor) ? rows[cursor] : nil }
 
-    /// 主列表层面的输入和选中项：在操作列表里就取展开前的那份（恢复现场用）。
-    var baseQuery: String { actionTarget != nil ? savedQuery : query }
-    var baseCursorID: String? { actionTarget != nil ? savedCursorID : selectedRow?.id }
+    /// 主列表层面的输入和选中项：在操作列表 / 进程列表里就取展开前的那份（恢复现场用）。
+    var baseQuery: String { inProcesses ? processSavedQuery : actionTarget != nil ? savedQuery : query }
+    var baseCursorID: String? { inProcesses ? processSavedCursorID : actionTarget != nil ? savedCursorID : selectedRow?.id }
 
     /// ⌘↩：展开游标那一行的操作。这一行没有二级（搜索、网址直达、操作本身）就什么都不做。
     @discardableResult
     func showActions() -> Bool {
         guard actionTarget == nil, let target = selectedRow, hasActions(target) else { return false }
+        armedID = nil
         savedQuery = query
         savedCursorID = target.id
         savedCursorIndex = cursor
@@ -813,6 +985,7 @@ final class TabSearchModel: ObservableObject {
     func leaveActions() {
         guard actionTarget != nil else { return }
         actionTarget = nil
+        armedID = nil
         setQueryQuietly(savedQuery)
         refilter(keepCursorOn: savedCursorID)
         if let savedCursorID, rows.firstIndex(where: { $0.id == savedCursorID }) == nil, !rows.isEmpty {
@@ -823,6 +996,171 @@ final class TabSearchModel: ObservableObject {
     /// 面板收起 / 重新打开：丢掉操作子状态，不恢复什么。
     func clearActions() {
         actionTarget = nil
+        closeProcesses()
+    }
+
+    /// 「结束进程…」：列表换成进程。和 ⌘↩ 的二级一个用法：打字过滤、Esc / ⌫ 退回原列表并恢复输入。
+    func showProcesses() {
+        guard actionTarget == nil, !inProcesses else { return }
+        processSavedQuery = query
+        processSavedCursorID = selectedRow?.id
+        processSavedCursorIndex = cursor
+        inProcesses = true
+        processesLoaded = false
+        processItems = []
+        processMembers = [:]
+        processOrder = []
+        processOrderKey = nil
+        processLastSeen = [:]
+        exitedProcesses = []
+        endingProcesses = []
+        pendingProcessRestore = nil
+        setQueryQuietly("")
+        refilter(keepCursorOn: nil)
+        onProcessesChange?(true)
+    }
+
+    /// 退回原列表：输入和游标都恢复。
+    func leaveProcesses() {
+        guard inProcesses else { return }
+        closeProcesses()
+        setQueryQuietly(processSavedQuery)
+        refilter(keepCursorOn: processSavedCursorID)
+        if let processSavedCursorID, rows.firstIndex(where: { $0.id == processSavedCursorID }) == nil, !rows.isEmpty {
+            setCursor(min(processSavedCursorIndex, rows.count - 1), source: .keyboard)
+        }
+    }
+
+    /// 停掉进程列表（面板关了也走这里：不在看就别再采样）。
+    func closeProcesses() {
+        guard inProcesses else { return }
+        inProcesses = false
+        armedID = nil
+        pendingProcessRestore = nil
+        onProcessesChange?(false)
+    }
+
+    /// 采样回来了。第一份按当前输入排一次；之后只更新数字（顺序见 `processOrder`）。
+    func setProcesses(_ items: [ProcessItem], members: [String: [ProcessItem]]) {
+        guard inProcesses else { return }
+        processItems = items
+        processMembers = members
+        let alive = Set(items.map(\.id) + members.values.flatMap { $0.map(\.id) })
+        endingProcesses = endingProcesses.filter { alive.contains($0) }
+        if !processesLoaded {
+            processesLoaded = true
+            refilter(keepCursorOn: nil)
+            if let pending = pendingProcessRestore {
+                pendingProcessRestore = nil
+                if let id = pending.cursorID, let index = rows.firstIndex(where: { $0.id == id }) {
+                    setCursor(index, source: .keyboard)
+                }
+                if let actions = pending.actions { reopenActions(actions) }
+            }
+            return
+        }
+        guard actionTarget == nil else { return }   // 在某个进程的操作列表里：回来时再刷
+        let keep = selectedRow?.id
+        let touched = cursorTouched
+        let previous = cursor
+        rows = processRows(query.trimmingCharacters(in: .whitespaces))
+        if touched, let keep, let index = rows.firstIndex(where: { $0.id == keep }) {
+            setCursor(index, source: .mouse)
+        } else if !rows.isEmpty {
+            setCursor(min(previous, rows.count - 1), source: .mouse, touched: touched)
+        }
+    }
+
+    /// Tab：换排序，游标留在同一个进程上。
+    func toggleProcessSort() {
+        let all = ProcessSort.allCases
+        processSort = all[((all.firstIndex(of: processSort) ?? 0) + 1) % all.count]
+        processOrderKey = nil
+        armedID = nil
+        refilter(keepCursorOn: selectedRow?.id)
+    }
+
+    func markProcessEnding(_ id: String) { endingProcesses.insert(id) }
+    func unmarkProcessEnding(_ id: String) { endingProcesses.remove(id) }
+    func markProcessExited(_ id: String) {
+        endingProcesses.remove(id)
+        exitedProcesses.insert(id)
+    }
+
+    /// 这一行是不是「结束某个进程」，强不强制。进程行本身和它操作列表里的「退出 / 结束」「强制…」都算。
+    func processRequest(_ row: SearchRow) -> (item: ProcessItem, force: Bool)? {
+        switch row {
+        case .process(let item):                       return (item, false)
+        case .command(.primary, .process(let item)):   return (item, false)
+        case .command(.forceQuit, .process(let item)): return (item, true)
+        default:                                       return nil
+        }
+    }
+
+    /// 结束进程一律按两次（用户 2026-10-26：先定「只对非 App 进程确认」，用过之后改成 App 退出也确认）。
+    /// 返回 true = 可以动手了；false = 这一下只是「上膛」。
+    func confirmProcessRequest(_ row: SearchRow) -> Bool {
+        if armedID == row.id {
+            armedID = nil
+            return true
+        }
+        // ⌘ 数字直选、点的不是游标那一行：游标先挪过去，接着按回车确认的就是亮着的这一行
+        if let index = rows.firstIndex(where: { $0.id == row.id }), index != cursor {
+            setCursor(index, source: .keyboard)
+        }
+        armedID = row.id
+        return false
+    }
+
+    /// 进程列表的行：按输入过滤（名字认拼音；命令行、端口、pid 也算），App 没命中但它名下某个进程
+    /// 命中的，那个进程单独列出来。顺序见 `processOrder`。
+    private func processRows(_ trimmed: String) -> [SearchRow] {
+        let matched = filterProcesses(trimmed)
+        let key = processSort.rawValue + "\u{1F}" + trimmed
+        if processOrderKey != key {
+            processOrderKey = key
+            processOrder = ProcessCatalog.sorted(matched, by: processSort).map(\.id)
+            exitedProcesses = []
+        } else {
+            let known = Set(processOrder)
+            processOrder += ProcessCatalog.sorted(matched.filter { !known.contains($0.id) }, by: processSort).map(\.id)
+        }
+        // 还活着的取最新的数；不在了的用最后一次见到的样子、标「已退出」
+        var live: [String: ProcessItem] = [:]
+        for item in processItems { live[item.id] = item }
+        for members in processMembers.values { for item in members where live[item.id] == nil { live[item.id] = item } }
+        var out: [SearchRow] = []
+        var exited = exitedProcesses
+        for id in processOrder {
+            if let item = live[id] {
+                processLastSeen[id] = item
+                out.append(.process(item))
+            } else if let last = processLastSeen[id] {
+                exited.insert(id)
+                out.append(.process(last))
+            }
+        }
+        if exited != exitedProcesses { exitedProcesses = exited }
+        if processLastSeen.count > 4_000 {
+            let keep = Set(processOrder)
+            processLastSeen = processLastSeen.filter { keep.contains($0.key) }
+        }
+        return out
+    }
+
+    private func filterProcesses(_ trimmed: String) -> [ProcessItem] {
+        guard !trimmed.isEmpty else { return processItems }
+        func hits(_ items: [ProcessItem]) -> [ProcessItem] {
+            let candidates = items.map { candidate(title: $0.name, url: ProcessCatalog.searchText($0), identity: $0.id) }
+            return TabSearch.rank(candidates, query: trimmed).map { items[$0] }
+        }
+        let direct = hits(processItems)
+        let matchedIDs = Set(direct.map(\.id))
+        var out = direct
+        for item in processItems where item.isApp && !matchedIDs.contains(item.id) {
+            if let members = processMembers[item.id] { out += hits(members) }
+        }
+        return out
     }
 
     private func setQueryQuietly(_ text: String) {
@@ -868,6 +1206,10 @@ final class TabSearchModel: ObservableObject {
         // 窗口行没有二级：它本身就是「跳过去」这一个动作，App 的「退出」放这里会把整个微信退掉
         case .selection(let selection):
             return selectionOpeners.map { .selectionOpener($0, selection) }
+        case .process(let item):
+            // 默认动作 → 拷贝类 → 在访达中显示 → 强制（标红垫底）
+            return ([.primary, .copyPID] + (item.commandLine.isEmpty ? [] : [.copyCommandLine])
+                    + [.copyPath, .revealInFinder, .forceQuit]).map { .command($0, target) }
         case .url, .action, .opener, .command, .openWith, .selectionOpener, .appCommand, .window:
             return []
         }
@@ -932,6 +1274,8 @@ final class TabSearchModel: ObservableObject {
 
     /// 「搜什么选了什么」的记忆（面板注入 `SearchMemory.shared`）。
     var memory: SearchMemory?
+    /// 首页「推荐」的账（MRUController 接 `SuggestionStore.shared`；样例程序不接，就没有推荐）。
+    var suggestions: SuggestionStore?
     /// 这一轮输入的记忆加分（身份 → 分），`refilter` 开头取一次，各段排序共用。
     private var boosts: [String: Int] = [:]
 
@@ -948,8 +1292,11 @@ final class TabSearchModel: ObservableObject {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         boosts = trimmed.isEmpty || actionTarget != nil ? [:] : (memory?.boosts(for: trimmed) ?? [:])
         layout = []
+        defaultCursor = 0
         let next: [SearchRow]
-        if let target = actionTarget {
+        if inProcesses, actionTarget == nil {
+            next = processRows(trimmed)
+        } else if let target = actionTarget {
             // 操作列表：输入过滤操作名（同样认拼音）
             let all = commandRows(for: target)
             let candidates = all.map { row -> SearchCandidate in
@@ -966,7 +1313,7 @@ final class TabSearchModel: ObservableObject {
         if let keep, let index = rows.firstIndex(where: { $0.id == keep }) {
             setCursor(index, source: .keyboard)
         } else {
-            setCursor(0, source: .keyboard, touched: false)
+            setCursor(rows.indices.contains(defaultCursor) ? defaultCursor : 0, source: .keyboard, touched: false)
         }
     }
 
@@ -1054,8 +1401,19 @@ final class TabSearchModel: ObservableObject {
             let rows: [SearchRow]
             let kind: SearchSectionKind?
             if allEmptyContent == .recent {
-                rows = placingCurrentSecond(recent)
-                kind = .recent
+                let recentRows = placingCurrentSecond(recent)
+                let suggested = suggestionRows(above: recentRows)
+                guard !suggested.isEmpty else {
+                    if !recentRows.isEmpty { layout = [SectionSpec(kind: .recent, count: recentRows.count)] }
+                    return recentRows
+                }
+                // 推出来的从「最近使用」里挪上来（行的 id 在一张表里只能出现一次）
+                let lifted = Set(suggested.map(\.id))
+                let rest = recentRows.filter { !lifted.contains($0.id) }
+                layout = [SectionSpec(kind: .suggested, count: suggested.count)]
+                    + (rest.isEmpty ? [] : [SectionSpec(kind: .recent, count: rest.count)])
+                defaultCursor = rest.isEmpty ? 0 : suggested.count
+                return suggested + rest
             } else if let content = allEmptyContent.mode {
                 rows = modeRows(content, "")
                 kind = SearchSectionKind(content: content)
@@ -1208,10 +1566,58 @@ final class TabSearchModel: ObservableObject {
         return body
     }
 
-    /// 有输入时命中的内置命令，按得分排。只列装了的 App 的（同一个 bundle id 装了两份只算第一份）。
-    /// 不输入时一条都不列：命令只在找它的时候出现（一级别变成 Raycast 那样满屏命令）。
-    private func commandHits(_ trimmed: String) -> [SearchRow] {
-        guard !trimmed.isEmpty else { return [] }
+    /// 「最近使用」前面这几行不推：回车回到上一个的就是它们，推了等于重复。
+    static let suggestionSkipsRecent = 5
+
+    /// 首页「推荐」那几行（最多 `SuggestionStore.limit` 条）：按推荐分从高到低，把账上的身份认回此刻
+    /// 能打开的一行 —— 在「最近使用」里的用那一行（随后从那里挪上来），App 要还装着、文件夹要还收藏着、
+    /// 网页开着就切过去、没开着照最近关闭或历史那样新开。当前那一项、「最近使用」最前面几行不推。
+    private func suggestionRows(above recentRows: [SearchRow]) -> [SearchRow] {
+        guard let ranked = suggestions?.ranked(), !ranked.isEmpty else { return [] }
+        let skipped = Set(recentRows.prefix(Self.suggestionSkipsRecent).map(\.id) + [currentID].compactMap { $0 })
+        var closedByURL: [String: ClosedTab]?
+        var out: [SearchRow] = []
+        var taken = Set<String>()
+        for record in ranked {
+            let row: SearchRow?
+            switch record.kind {
+            case .app:
+                row = recentRows.first { if case .app(let a) = $0 { return a.path == record.identity } else { return false } }
+                    ?? apps.first { $0.path == record.identity }.map { .app($0) }
+            case .web:
+                if let open = recentRows.first(where: { $0.pageURL == record.identity && { if case .tab = $0 { return true } else { return false } }($0) })
+                    ?? all.first(where: { $0.tab.url == record.identity }).map({ SearchRow.tab($0) }) {
+                    row = open
+                } else if let entry = {
+                    if closedByURL == nil {
+                        // 最近关闭有上千条，按网址建一次表（按时间倒序，同网址留最近关的）
+                        var table: [String: ClosedTab] = [:]
+                        for entry in closed where table[entry.url] == nil { table[entry.url] = entry }
+                        closedByURL = table
+                    }
+                    return closedByURL?[record.identity]
+                }() {
+                    row = .closed(entry)
+                } else {
+                    row = .history(HistoryInfo(title: record.title.isEmpty ? record.identity : record.title,
+                                               url: record.identity, lastVisitTime: record.last * 1000))
+                }
+            case .folder:
+                row = folders.first { $0.path == record.identity }.map { .folder($0) }
+            case .command:
+                row = nil   // 内置命令不推（老账里可能还有，见 `SearchRow.suggestionEntry`）
+            }
+            guard let row, !skipped.contains(row.id), !taken.contains(row.id) else { continue }
+            taken.insert(row.id)
+            out.append(row)
+            if out.count == SuggestionStore.limit { break }
+        }
+        return out
+    }
+
+    /// 此刻能用的内置命令：装了的 App 的（同一个 bundle id 装了两份只算第一份），加系统命令、
+    /// 前台 App 的窗口命令、访达在前台时的「打开方式…」。
+    private func availableCommands() -> [(command: AppCommand, app: AppEntry?)] {
         let commands = AppCommands.all
         var table: [String: [AppCommand]] = [:]
         for command in commands { if let id = command.bundleID { table[id, default: []].append(command) } }
@@ -1225,6 +1631,14 @@ final class TabSearchModel: ObservableObject {
         // 系统命令不看装没装；窗口命令看打开面板时前台是谁
         pairs += (commands.filter { $0.bundleID == nil } + WindowCommands.commands(for: windowTarget)
                   + (finderFront ? [OpenWithCommand.command(selection: finderSelection)] : [])).map { ($0, nil) }
+        return pairs
+    }
+
+    /// 有输入时命中的内置命令，按得分排。
+    /// 不输入时一条都不列：命令只在找它的时候出现（一级别变成 Raycast 那样满屏命令）。
+    private func commandHits(_ trimmed: String) -> [SearchRow] {
+        guard !trimmed.isEmpty else { return [] }
+        let pairs = availableCommands()
         let candidates = pairs.map { commandCandidate($0.command, $0.app) }
         return TabSearch.rank(candidates, query: trimmed, boosts: boosts).map { SearchRow.appCommand(pairs[$0].command, pairs[$0].app) }
     }
@@ -1257,8 +1671,10 @@ final class TabSearchModel: ObservableObject {
     /// 「应用」段：App 和 App 里的具体窗口一起按得分排（打「豌豆」时小程序和同名的 App 比分），
     /// 同分 App 在前。没输入时只列 App（窗口只在找它的时候出现）。
     private func appAndWindowHits(_ trimmed: String) -> [SearchRow] {
-        let appScored = TabSearch.rankScored(apps.map { appCandidate($0) }, query: trimmed, boosts: boosts)
-            .map { (row: SearchRow.app(apps[$0.index]), score: $0.score) }
+        // 有输入时同分先看常用度（`AppRanking.byPrior`），没输入按 `apps` 原来的顺序（最近用过的在前）
+        let source = trimmed.isEmpty ? apps : appsByPrior
+        let appScored = TabSearch.rankScored(source.map { appCandidate($0) }, query: trimmed, boosts: boosts)
+            .map { (row: SearchRow.app(source[$0.index]), score: $0.score) }
         guard !trimmed.isEmpty, !windows.isEmpty else { return appScored.map(\.row) }
         let windowScored = TabSearch.rankScored(windows.map { windowCandidate($0) }, query: trimmed, boosts: boosts)
             .map { (row: SearchRow.window(windows[$0.index]), score: $0.score) }
@@ -1562,7 +1978,7 @@ private struct TabSearchView: View {
             HStack(spacing: kSearchIconGap) {
                 // 在 ⌘↩ 的二级里换成「‹」：一眼看出在第几层，点它返回（点击由面板的鼠标监视器
                 // 处理 —— 这一格同时是拖面板的把手，见 TabSearchPanel.isDragHandle）
-                Image(systemName: model.actionTarget != nil ? "chevron.left" : "magnifyingglass")
+                Image(systemName: model.actionTarget != nil || model.inProcesses ? "chevron.left" : "magnifyingglass")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: kSearchRowIconSize)
@@ -1577,8 +1993,8 @@ private struct TabSearchView: View {
                             onCancel: { if !model.escape() { onCancel() } },
                             onTab: { model.tabPressed($0) },
                             onDeleteWhenEmpty: {
-                                // 只有二级才有「上一级」；一级里空着按 ⌫ 什么都不做
-                                guard model.actionTarget != nil else { return false }
+                                // 只有二级（操作、进程列表）才有「上一级」；一级里空着按 ⌫ 什么都不做
+                                guard model.actionTarget != nil || model.inProcesses else { return false }
                                 return model.escape()
                             })
                     .frame(maxWidth: .infinity)
@@ -1641,6 +2057,9 @@ private struct TabSearchView: View {
             inRecent: model.showingRecent,
             recentAgo: model.showingRecent ? relativeTime(msEpoch: model.recentLeftAt[row.id]) : nil,
             appRunning: { if case .app(let app) = row { return model.isRunning(app) } else { return false } }(),
+            armed: model.armedID == row.id,
+            processExited: model.exitedProcesses.contains(row.id),
+            processEnding: model.endingProcesses.contains(row.id),
             onHover: { model.setCursor(index, source: .mouse) },
             onPick: { model.onPick?(row) },
             onClose: { model.onCloseTab?(row.id) },
@@ -1758,7 +2177,8 @@ private struct TabSearchView: View {
     private var modeIndicator: some View {
         HStack(spacing: 6) {
             // 胶囊，和底栏同一种形状语言
-            Text(model.mode.label)
+            // 进程列表里是排序（CPU / 内存），Tab 或点一下换
+            Text(model.inProcesses && model.actionTarget == nil ? model.processSort.label : model.mode.label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.75))
                 .padding(.horizontal, 10)
@@ -1769,8 +2189,11 @@ private struct TabSearchView: View {
         .fixedSize()
         .contentShape(Rectangle())
         .onTapGesture { model.cycleMode(1) }
-        .help(L10n.t("Tab 切换：\(model.modes.map(\.label).joined(separator: " → "))",
-                     "Tab cycles: \(model.modes.map(\.label).joined(separator: " → "))"))
+        .help(model.inProcesses && model.actionTarget == nil
+              ? L10n.t("Tab 切换排序：\(ProcessSort.allCases.map(\.label).joined(separator: " → "))",
+                       "Tab changes sort: \(ProcessSort.allCases.map(\.label).joined(separator: " → "))")
+              : L10n.t("Tab 切换：\(model.modes.map(\.label).joined(separator: " → "))",
+                       "Tab cycles: \(model.modes.map(\.label).joined(separator: " → "))"))
     }
 
     /// 输入框占位跟着模式走（用户点名：写死「搜索标签」和列表对不上）。
@@ -1781,6 +2204,7 @@ private struct TabSearchView: View {
             if case .selection = target { return L10n.t("「\(short)」的打开方式", "Open “\(short)” with…") }
             return L10n.t("「\(short)」的操作", "Actions for “\(short)”")
         }
+        if model.inProcesses { return L10n.t("按名称、端口或 PID 过滤", "Filter by name, port or PID") }
         switch model.mode {
         case .all:       return L10n.t("搜索全部", "Search everything")
         case .tabs:      return L10n.t("搜索浏览器标签", "Search browser tabs")
@@ -1801,6 +2225,10 @@ private struct TabSearchView: View {
                            : L10n.t("没有匹配的应用", "No matching apps")
         }
         if model.actionTarget != nil { return L10n.t("没有匹配的操作", "No matching actions") }
+        if model.inProcesses {
+            if !model.processesLoaded { return L10n.t("正在读取进程", "Loading processes") }
+            return noQuery ? L10n.t("没有可以结束的进程", "No processes to kill") : L10n.t("没有匹配的进程", "No matching processes")
+        }
         switch model.mode {
         case .all, .tabs: return model.all.isEmpty ? L10n.t("还没有浏览器标签", "No browser tabs yet") : L10n.t("没有匹配的浏览器标签", "No matching browser tabs")
         case .actions:   return L10n.t("输入要搜的内容", "Type something to search for")
@@ -1855,12 +2283,29 @@ private struct TabSearchView: View {
                 .contentShape(Capsule())
                 .onTapGesture { _ = model.escape() }
                 .layoutPriority(-1)
+            } else if model.inProcesses {
+                // 进程列表：左边写在哪一层（同操作列表的对象胶囊），点它返回
+                HStack(spacing: kSearchIconGap) {
+                    Image(systemName: ProcessesCommand.symbol)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.7))
+                        .frame(width: kSearchRowIconSize)
+                    Text(ProcessesCommand.title)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.primary.opacity(0.75))
+                        .lineLimit(1)
+                }
+                .modifier(GlassCapsule(leading: kSearchRowInset))
+                .contentShape(Capsule())
+                .onTapGesture { _ = model.escape() }
+                .layoutPriority(-1)
             }
             Spacer(minLength: 8)
             if model.selectedRow != nil || model.actionTarget != nil {
                 HStack(spacing: 10) {
                     if let row = model.selectedRow {
-                        footerAction(row.enterTitle(defaultOpener: model.openers.first), keys: ["↩"], primary: true) {
+                        footerAction(model.armedID == row.id ? L10n.t("确认", "Confirm") : row.enterTitle(defaultOpener: model.openers.first),
+                                     keys: ["↩"], primary: true) {
                             model.onPick?(row)
                         }
                     }
@@ -2042,7 +2487,7 @@ private struct SearchRowIcon: View {
             Image(systemName: command.symbol)
                 .font(.system(size: symbolSize, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.7))
-        case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window:
+        case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window, .process:
             // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标
             if let icon {
                 let isApp: Bool = {
@@ -2058,6 +2503,7 @@ private struct SearchRowIcon: View {
                     switch row {
                     case .folder:    return "folder"
                     case .selection: return "doc"
+                    case .process(let p) where !p.isApp: return "terminal"
                     default:         return "app"
                     }
                 }())
@@ -2170,6 +2616,11 @@ private struct SearchRowView: View {
     var recentAgo: String? = nil
     /// App 行：正在运行（模型缓存的结果，见 `TabSearchModel.runningApps`）。
     var appRunning = false
+    /// 按了一次回车、等第二次确认（结束进程、退出 App）：字标红，行尾写「再按 ↩ 确认」。
+    var armed = false
+    /// 进程行：已经退出了（留在原位、压暗）/ 正在退出。
+    var processExited = false
+    var processEnding = false
     let onHover: () -> Void
     let onPick: () -> Void
     let onClose: () -> Void
@@ -2193,8 +2644,9 @@ private struct SearchRowView: View {
 
     private var title: String { row.displayTitle }
 
-    /// 删除类操作：图标和字标红。
+    /// 删除类操作、等确认的那一行：图标和字标红。
     private var destructive: Bool {
+        if armed { return true }
         if case .command(let command, _) = row { return command.isDestructive }
         return false
     }
@@ -2228,13 +2680,22 @@ private struct SearchRowView: View {
         // 英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）
         case .appCommand(let c, let a): return c.subtitle ?? a?.name ?? "macOS"
         case .window(let w):     return w.subtitle
+        // App：「应用 · 18 个进程」；单独的进程：「PID 123 · 命令行」——十几个 node 时只看名字分不出谁是谁，
+        // 命令行是认它的依据。端口不在这里，在名字旁边的胶囊上（`PortBadge`）
+        case .process(let p):
+            if p.isApp {
+                return [L10n.t("应用", "App"), p.memberCount > 1 ? L10n.t("\(p.memberCount) 个进程", "\(p.memberCount) processes") : nil]
+                    .compactMap { $0 }.joined(separator: " · ")
+            }
+            return ["PID \(p.pid)", p.commandLine.isEmpty ? (p.path as NSString).abbreviatingWithTildeInPath : p.commandLine]
+                .joined(separator: " · ")
         case .command, .openWith, .selection, .selectionOpener: return ""
         }
     }
 
     /// 曾把已关闭 / 历史的行压成灰字以示「找回」；有了模式标签和分组头之后是双重标记，
-    /// 只剩可读性变差，2026-09-26 和其他行统一。留着这个开关是为了以后要区分时有地方改。
-    private var dimmed: Bool { false }
+    /// 只剩可读性变差，2026-09-26 和其他行统一。现在只有退出了的进程压暗（留在原位，下次重排才拿掉）。
+    private var dimmed: Bool { processExited }
 
     private var isTab: Bool {
         if case .tab = row { return true }
@@ -2266,6 +2727,9 @@ private struct SearchRowView: View {
                         Image(systemName: "star.fill")
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.20))
+                    }
+                    if case .process(let p) = row, !p.ports.isEmpty {
+                        PortBadge(ports: p.ports)
                     }
                 }
                 if !compact, !subtitle.isEmpty {
@@ -2344,7 +2808,11 @@ private struct SearchRowView: View {
 
     @ViewBuilder
     private var trailing: some View {
-        if let quickKey {
+        if armed {
+            Text(L10n.t("再按 ↩ 确认", "Press ↩ again to confirm"))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color(nsColor: .systemRed))
+        } else if let quickKey {
             Keycap(label: "⌘\(quickKey)")
         } else if hovering, isTab, closable {
             // hover 到活标签：行尾的时间换成 ✕，点它关掉这个标签，面板不关
@@ -2452,10 +2920,63 @@ private struct SearchRowView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
+            case .process(let p):
+                if processExited {
+                    Text(L10n.t("已退出", "Exited"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.45))
+                } else if processEnding {
+                    Text(p.isApp ? L10n.t("正在退出", "Quitting") : L10n.t("正在结束", "Killing"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.45))
+                } else {
+                    // 照活动监视器 / Raycast：CPU 和内存两列，数字等宽、右对齐，上下行对得齐
+                    HStack(spacing: 12) {
+                        ProcessMetric(symbol: "cpu", text: ProcessCatalog.formatCPU(p.cpu), width: 46)
+                        ProcessMetric(symbol: "memorychip", text: ProcessCatalog.formatMemory(p.memory), width: 62)
+                    }
+                }
             case .command, .openWith, .selection, .selectionOpener:
                 EmptyView()
             }
         }
+    }
+}
+
+/// 进程在监听的端口：名字旁边一个胶囊「端口 8086」（用户 2026-10-26：原来副标题里一个「:8086」，
+/// 搜 8086 搜得到却看不出哪里写着端口）。最多写 3 个，多的「+N」。样子同标签行尾的「重复」。
+private struct PortBadge: View {
+    let ports: [UInt16]
+
+    var body: some View {
+        let shown = ports.prefix(3).map(String.init).joined(separator: L10n.listSeparator)
+            + (ports.count > 3 ? " +\(ports.count - 3)" : "")
+        Text(ports.count == 1 ? L10n.t("端口 \(shown)", "Port \(shown)") : L10n.t("端口 \(shown)", "Ports \(shown)"))
+            .font(.system(size: 10, weight: .medium).monospacedDigit())
+            .foregroundStyle(Color.primary.opacity(0.6))
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .frame(height: 16)
+            .background(Capsule().fill(Color.primary.opacity(0.08)))
+            .fixedSize()
+    }
+}
+
+/// 进程行尾的一列数：小图标 + 等宽数字，固定宽度右对齐（上下行的数对得齐）。
+private struct ProcessMetric: View {
+    let symbol: String
+    let text: String
+    let width: CGFloat
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 10))
+            Text(text)
+                .font(.system(size: 11).monospacedDigit())
+                .frame(minWidth: width, alignment: .trailing)
+        }
+        .foregroundStyle(Color.primary.opacity(0.55))
     }
 }
 
@@ -2662,6 +3183,8 @@ final class TabSearchPanel {
         let mode: SearchMode
         let cursorID: String?
         let scrollY: CGFloat
+        /// 停在主列表之上的哪一层（进程列表、操作列表、打开方式），nil = 主列表
+        let subState: TabSearchModel.SubState?
     }
     private var lastSession: Session?
     private var closingAfterPick = false
@@ -2685,6 +3208,63 @@ final class TabSearchPanel {
     var openSettingsHandler: (() -> Void)?
     /// 选了「打开方式…」命令：面板还开着，MRUController 去读访达选中项，读回来调 `showOpenWith`。
     var openWithHandler: (() -> Void)?
+    /// 「结束进程…」的采样（列表开着才跑）。
+    private let processMonitor = ProcessMonitor()
+
+    /// 结束一个进程 / 退出一个 App（已经确认过了）。
+    ///
+    /// App：面板关掉，退没退用 toast 说（用户 2026-10-26 要的）。等它真退了才说「已退出」——
+    /// 它可能在问要不要保存，提前说是撒谎（同「打开」的 toast 等 completion 那条）；5 秒还没退就照实说。
+    ///
+    /// 单独的进程：面板不关（一次清掉几个 node 不用反复开），结果在那一行上看：发出去了写「正在结束」，
+    /// 下一次采样不见了就「已退出」；5 秒后还活着给提示去用强制结束。
+    private func endProcess(_ item: ProcessItem, force: Bool) {
+        if item.isApp {
+            closingAfterPick = true
+            close()
+            Self.quitApp(item, force: force)
+            return
+        }
+        switch ProcessEnder.end(item, force: force) {
+        case .sent:
+            model.markProcessEnding(item.id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self, self.model.endingProcesses.contains(item.id) else { return }
+                self.model.unmarkProcessEnding(item.id)
+                guard !item.isApp, ProcessEnder.isAlive(item) else { return }
+                Toast.show(L10n.t("「\(item.name)」还没退出", "“\(item.name)” is still running"),
+                           detail: L10n.t("⌘↩ 里可以强制结束。", "Use Force Kill in the ⌘↩ actions."), kind: .info)
+            }
+        case .gone:
+            model.markProcessExited(item.id)
+        case .denied:
+            Toast.show(L10n.t("没有权限结束「\(item.name)」", "No permission to kill “\(item.name)”"), kind: .failure)
+        case .failed:
+            Toast.show(L10n.t("没能结束「\(item.name)」", "Couldn't kill “\(item.name)”"), kind: .failure)
+        }
+    }
+
+    /// 退出 App（面板已经关了），结果全走 toast。
+    private static func quitApp(_ item: ProcessItem, force: Bool) {
+        switch ProcessEnder.end(item, force: force) {
+        case .sent:
+            ProcessEnder.waitForExit(item, timeout: 5) { exited in
+                if exited {
+                    Toast.show(L10n.t("已退出「\(item.name)」", "“\(item.name)” has quit"))
+                } else {
+                    Toast.show(L10n.t("「\(item.name)」还没退出", "“\(item.name)” is still running"),
+                               detail: force ? nil : L10n.t("可能在等你保存文档。", "It may be waiting for you to save a document."),
+                               kind: .info)
+                }
+            }
+        case .gone:
+            Toast.show(L10n.t("「\(item.name)」已经退出了", "“\(item.name)” had already quit"), kind: .info)
+        case .denied:
+            Toast.show(L10n.t("没有权限结束「\(item.name)」", "No permission to kill “\(item.name)”"), kind: .failure)
+        case .failed:
+            Toast.show(L10n.t("没能结束「\(item.name)」", "Couldn't kill “\(item.name)”"), kind: .failure)
+        }
+    }
 
     /// 列表换成能打开访达选中项目的 App（面板已经收起就不管了）。
     func showOpenWith(_ selection: FileSelection, openers: [OpenerApp]) {
@@ -2710,6 +3290,14 @@ final class TabSearchPanel {
     init() {
         model.onPick = { [weak self] row in
             guard let self else { return }
+            // 进程列表里的行和它操作里的「退出 / 结束」「强制…」：第一下只「上膛」，再按一次才动手；
+            // 在操作列表里的先退回进程列表。App 退出后关面板走 toast，单独的进程结果在那一行上看
+            if let request = self.model.processRequest(row) {
+                guard self.model.confirmProcessRequest(row) else { return }
+                if self.model.actionTarget != nil { self.model.leaveActions() }
+                self.endProcess(request.item, force: request.force)
+                return
+            }
             // 操作列表里的一项：默认动作等于选定那一行本身；删除类留在面板里（先退回
             // 原列表再执行，数据刷新后列表原地收缩）；其余关面板再执行。
             if case .command(let command, let target) = row {
@@ -2725,13 +3313,21 @@ final class TabSearchPanel {
                 }
                 return
             }
-            // 记住「这个输入选了它」，下次同样的输入它往前排
+            // 记住「这个输入选了它」，下次同样的输入它往前排；首页「推荐」另记一份（没输入时点的也算）
             if let identity = row.memoryIdentity {
                 SearchMemory.shared.record(query: self.model.baseQuery, identity: identity)
+                if let entry = row.suggestionEntry {
+                    self.model.suggestions?.record(identity: identity, kind: entry.kind, title: entry.title)
+                }
             }
             // 「打开方式…」：面板不关，去读访达里选中的项目，读回来列表换成能打开它的 App
             if case .appCommand(let command, _) = row, case .openWith = command.action {
                 self.openWithHandler?()
+                return
+            }
+            // 「结束进程…」：面板不关，列表换成进程
+            if case .appCommand(let command, _) = row, case .processes = command.action {
+                self.model.showProcesses()
                 return
             }
             // 先关面板再切：关面板会把 key 还给浏览器，切换命令随后到达时
@@ -2756,9 +3352,20 @@ final class TabSearchPanel {
             case .appCommand(let c, let a): pick?(.appCommand(c, a))
             case .window(let w):     pick?(.window(w))
             case .command:           break   // 上面已处理
+            case .process:           break   // 上面已处理
             }
         }
         model.memory = SearchMemory.shared
+        // 推荐的账（model.suggestions）由 MRUController 接：官网素材的样例程序也建这个面板，
+        // 不该读写、更不该画出本机真实的推荐
+        // 进程列表开着才采样，关了就停
+        model.onProcessesChange = { [weak self] open in
+            guard let self else { return }
+            if open { self.processMonitor.start() } else { self.processMonitor.stop() }
+        }
+        processMonitor.onUpdate = { [weak self] items, members in
+            self?.model.setProcesses(items, members: members)
+        }
         model.onCloseTab = { [weak self] itemID in self?.closeHandler?(itemID) }
         model.onExtensionUpdateTap = { [weak self] in
             self?.closingAfterPick = true
@@ -2844,6 +3451,8 @@ final class TabSearchPanel {
            let index = model.rows.firstIndex(where: { $0.id == id }) {
             model.setCursor(index, source: .mouse)   // 不触发自动滚动，滚动位置下面单独还原
         }
+        // 上次停在更深的一层：一层层进去（滚动位置记的就是那一层的）
+        if let sub = restore?.subState { model.restore(sub) }
         // 面板常驻，列表底下那个 NSScrollView 还停在上一轮滚到的位置；游标重算后若刚好和
         // 上一轮同一个下标（都是第 1 行），「游标变了才滚」那条不触发，选中项就在视野外
         setListScrollOffset(restore?.scrollY ?? 0)
@@ -2851,9 +3460,9 @@ final class TabSearchPanel {
         model.commandHeld = NSEvent.modifierFlags.contains(.command)
         present(inputSource: inputSource)
         if let restore {
-            // 输入整段选中：接着找按方向键，重新搜直接打字就覆盖掉
-            if !restore.query.isEmpty, let field = fieldHandle.field {
-                field.stringValue = restore.query
+            // 输入整段选中：接着找按方向键，重新搜直接打字就覆盖掉。显示的是停在的那一层的输入
+            if !model.query.isEmpty, let field = fieldHandle.field {
+                field.stringValue = model.query
                 field.currentEditor()?.selectAll(nil)
             }
             // 新数据的行要等下一轮布局才排好，滚动位置那时再还原一次
@@ -2886,10 +3495,13 @@ final class TabSearchPanel {
     func close() {
         guard shown, let panel else { return }
         shown = false
+        // 现场记的是主列表那一层（baseQuery）；先拿了再停进程列表
+        defer { model.closeProcesses() }
         lastSession = Session(closedAt: Date(), completed: closingAfterPick, global: isGlobal,
                               query: model.baseQuery, mode: model.mode,
                               cursorID: model.baseCursorID,
-                              scrollY: listScrollView?.contentView.bounds.minY ?? 0)
+                              scrollY: listScrollView?.contentView.bounds.minY ?? 0,
+                              subState: model.subState)
         closingAfterPick = false
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors = []
@@ -2979,6 +3591,13 @@ final class TabSearchPanel {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
+        // 鼠标移动事件自己收、整块面板不透鼠标（2026-10-26 用户报的：鼠标在面板上移动，后面 Muxy 里
+        // 跟着出悬浮效果）。面板不激活 App，后面那个 App 还是活跃的、它的窗口还当自己是 key；Tauri /
+        // Electron 这类 App 会开「收鼠标移动事件」，WebKit 拿到坐标就画 hover，不管上面盖没盖着东西。
+        // 这里两条是试探：鼠标移动事件优先给光标下面肯收的那个窗口的话，后面就收不到了。
+        // ignoresMouseEvents 默认 false 但没显式设过时，透明像素那里鼠标事件会漏下去，显式设一次整块挡住
+        panel.acceptsMouseMovedEvents = true
+        panel.ignoresMouseEvents = false
         panel.contentView = OverlayPanel.makeBackdrop(size: size, content: hosting)
 
         self.panel = panel
@@ -3050,7 +3669,7 @@ final class TabSearchPanel {
                   self.isDragHandle(event.locationInWindow) else { return event }
             let onIcon = self.isLeftOfField(event.locationInWindow)
             if self.trackDrag() { return nil }
-            if onIcon, self.model.actionTarget != nil {
+            if onIcon, self.model.actionTarget != nil || self.model.inProcesses {
                 // 二级里那一格是「‹」：点一下返回（拖动照样拖面板）
                 _ = self.model.escape()
             } else if let editor = self.fieldHandle.field?.currentEditor() as? NSTextView, !editor.hasMarkedText() {

@@ -729,6 +729,7 @@ final class MRUController {
             self?.pinnedHomeURL(tabID: item.tab.id, clientID: item.clientID)
         }
         search.model.webOpenerProvider = { WebOpeners.current }
+        search.model.suggestions = SuggestionStore.shared
         search.model.badgeProvider = { [weak self] row in
             guard let self else { return (nil, nil) }
             @MainActor func of(_ id: UUID?) -> (browser: String?, profile: String?) {
@@ -1353,6 +1354,17 @@ final class MRUController {
             if !wechatMiniOnTop { miniPrograms.forEach { append(.window($0), entry.leftAt) } }
             otherWindows.forEach { append(.window($0), entry.leftAt) }
         }
+        // 首页「推荐」会把不在这张表里的 App 推上来（没在运行、24 小时内没用过）：也给它们备一个时间，
+        // 不然推荐里从这张表挪上去的写着「x 前」、别的空着（用户 2026-10-26 问的）。口径同上，是「离开它
+        // 多久了」：切走的时间；没有、或者比切进去还早（那是更早一次的）就取切到前台和 Spotlight 上次打开里新的
+        for entry in appCatalog.entries {
+            let id = SearchRow.app(entry).id
+            guard leftAt[id] == nil else { continue }
+            let entered = [appCatalog.lastActivated(entry.usageKey), entry.lastUsed].compactMap { $0 }.max()
+            var left = appCatalog.lastDeactivated(entry.usageKey)
+            if let l = left, let e = entered, l < e { left = nil }
+            if let time = left ?? entered { leftAt[id] = time.timeIntervalSince1970 * 1000 }
+        }
         return (rows, leftAt)
     }
 
@@ -1426,7 +1438,8 @@ final class MRUController {
             log("🔍 open bookmark → \(bookmark.title.prefix(50))")
             server.send(["type": "reopen", "url": bookmark.url], to: clientID)
         case .history(let entry):
-            guard let clientID = target(entry.clientID ?? fallbackClient) else { return }
+            // 首页「推荐」里没开着的网页也走这里：一个浏览器都没连着时交给系统默认浏览器（同网址直达）
+            guard let clientID = target(entry.clientID ?? fallbackClient) else { openInDefaultBrowser(entry.url); return }
             log("🔍 open history → \(entry.title.prefix(50))")
             server.send(["type": "reopen", "url": entry.url], to: clientID)
         case .action(.webSearch(let text)):
@@ -1527,7 +1540,7 @@ final class MRUController {
         switch command {
         case .primary:
             return
-        case .copyURL, .copyTitle, .copyMarkdown, .copyPath:
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine:
             guard let text = target.copyText(for: command) else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -1536,6 +1549,8 @@ final class MRUController {
             case .copyURL:      title = L10n.t("已拷贝网址", "URL copied")
             case .copyTitle:    title = L10n.t("已拷贝标题", "Title copied")
             case .copyMarkdown: title = L10n.t("已拷贝 Markdown 链接", "Markdown link copied")
+            case .copyPID:      title = L10n.t("已拷贝 PID", "PID copied")
+            case .copyCommandLine: title = L10n.t("已拷贝命令行", "Command line copied")
             default:            title = L10n.t("已拷贝路径", "Path copied")
             }
             Toast.show(title, detail: text)
@@ -1601,6 +1616,8 @@ final class MRUController {
                 ?? NSWorkspace.shared.runningApplications.filter { $0.bundleURL?.standardizedFileURL.path == app.path }
             // 普通退出：有没存的文档由那个 App 自己问，不强退
             running.forEach { $0.terminate() }
+        case .forceQuit:
+            return   // 进程列表里的，面板自己接（要确认、不关面板），走不到这里
         }
     }
 

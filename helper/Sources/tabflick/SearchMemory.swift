@@ -4,9 +4,11 @@ import Foundation
 /// 同一个输入再搜时，上次选的那条往前排；「最佳匹配」也吃这个分。
 ///
 /// 按「输入 → 身份（网址 / 路径）→ 次数 + 最后一次」记账。输入是规范化的小写串，查的时候
-/// 存的输入和现在的输入互为前缀就算（打过「github」选了某条，再打「git」也认）。次数随时间
-/// 衰减（半衰期 30 天）、加分封顶，免得一条老记录永远霸榜。加分只加在本来就命中了的项上
-///（`TabSearch.rankScored`），不会把不相干的东西拉进结果。
+/// 存的输入和现在的输入互为前缀就算（打过「github」选了某条，再打「git」也认），但只有一字不差
+/// 才拿全分，前缀按短的占长的几成打折（2026-10-26：打过一次「down」选了下载工具，打「d」时它
+/// 拿全分压过了天天用的钉钉）。次数随时间衰减（半衰期 30 天），加分按对数涨、封顶，免得一条
+/// 老记录永远霸榜；按对数而不是线性封顶，是为了选过 28 次和选过 4 次分得出来。加分只加在本来
+/// 就命中了的项上（`TabSearch.rankScored`），不会把不相干的东西拉进结果。
 ///
 /// 这也是一份浏览记录：存本机 Application Support，设置里能一键清除。
 /// 纯逻辑是 `nonisolated static`（checks/search-memory-check.swift 校验），实例只管存盘。
@@ -92,9 +94,17 @@ final class SearchMemory {
         entry.count * pow(0.5, max(0, now - entry.last) / halfLife)
     }
 
-    /// 选过一次刚好 3 分（够把「标题含词」的顶到「标题开头」前面），封顶 12。
-    nonisolated static func boost(_ entry: Entry, now: Double) -> Int {
-        Int((min(effective(entry, now: now), 4) * 3).rounded())
+    /// 一字不差时的加分：选过一次刚好 3 分（够把「标题含词」的顶到「标题开头」前面），
+    /// 之后按对数涨（3 次 6 分、7 次 9 分），15 次封顶 12。
+    nonisolated static func boost(_ entry: Entry, now: Double) -> Double {
+        min(3 * log2(1 + effective(entry, now: now)), Double(maxBoost))
+    }
+
+    /// 存的输入和现在的输入互为前缀时打几折：短的占长的几成（按字算）；一字不差是 1。
+    nonisolated static func prefixWeight(stored: String, query: String) -> Double {
+        let a = stored.count, b = query.count
+        guard a > 0, b > 0 else { return 0 }
+        return Double(min(a, b)) / Double(max(a, b))
     }
 
     nonisolated static func recording(_ table: Table, query: String, identity: String, now: Double) -> Table {
@@ -125,8 +135,9 @@ final class SearchMemory {
         guard !key.isEmpty else { return [:] }
         var result: [String: Int] = [:]
         for (stored, entries) in table where stored.hasPrefix(key) || key.hasPrefix(stored) {
+            let weight = prefixWeight(stored: stored, query: key)
             for (identity, entry) in entries {
-                let value = boost(entry, now: now)
+                let value = Int((boost(entry, now: now) * weight).rounded())
                 if value > (result[identity] ?? 0) { result[identity] = value }
             }
         }

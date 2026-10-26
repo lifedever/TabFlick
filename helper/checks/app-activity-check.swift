@@ -73,7 +73,31 @@ struct AppActivityCheck {
             print("✗ left 不是有效数字没丢掉")
         }
 
-        let total = 12
+        // 常用度（uses / usesAt）：老文件没有照常读；成对才留；时刻在将来夹到现在；夹 at 时不丢
+        if legacyRead.first.map({ $0.uses == nil && $0.usesAt == nil }) != true {
+            failures += 1
+            print("✗ 老文件没有 uses：读到 \(legacyRead)")
+        }
+        var counted = rec("a", now - 10); counted.uses = 3.5; counted.usesAt = now + 50
+        let countedOut = AppActivity.pruned([counted], now: now).first
+        if countedOut?.uses != 3.5 || countedOut?.usesAt != now {
+            failures += 1
+            print("✗ uses 没留住或 usesAt 没夹到现在：\(String(describing: countedOut))")
+        }
+        var half = rec("a", now - 10); half.uses = 2
+        var negative = rec("b", now - 10); negative.uses = -1; negative.usesAt = now - 10
+        var nanUses = rec("c", now - 10); nanUses.uses = .nan; nanUses.usesAt = now - 10
+        if AppActivity.pruned([half, negative, nanUses], now: now).contains(where: { $0.uses != nil || $0.usesAt != nil }) {
+            failures += 1
+            print("✗ 不成对 / 负数 / 非数字的 uses 没丢掉")
+        }
+        var futureAt = rec("a", now + 100); futureAt.uses = 4; futureAt.usesAt = now - 20
+        if AppActivity.pruned([futureAt], now: now).first?.uses != 4 {
+            failures += 1
+            print("✗ at 在将来时夹到现在把 uses 丢了")
+        }
+
+        let total = 16
         print(failures == 0 ? "全部通过（\(total) 组）" : "\(failures) 项失败（共 \(total) 组）")
         if failures > 0 { fatalError("AppActivity 校验未通过") }
     }

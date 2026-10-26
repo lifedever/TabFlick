@@ -17,6 +17,10 @@ struct AppEntry: Identifiable, Equatable {
     /// 菜单栏小工具这类没有 Dock 图标的（Info.plist 里 `LSUIElement` / `LSBackgroundOnly`）。
     /// 「最近使用」不列它们：Spotlight 的「上次打开」会把刚退出的小工具带进来。
     var isAgent = false
+    /// Spotlight 记的打开次数（`kMDItemUseCount`，装上以来的总数）：常用度的来源之一，见 `AppRanking`。
+    var useCount: Int? = nil
+    /// 常用度（0–2 档），`AppCatalog.ordered` 填；有输入时同分的 App 按它排先后（`AppRanking.byPrior`）。
+    var prior = 0
 
     var id: String { path }
     /// 最近切到时间的记账 key：有 bundle id 用它，没有用路径。
@@ -54,6 +58,8 @@ final class AppCatalog {
     /// 每个 App 最近一次从前台切走的时间（key 同上）：「最近使用」行尾的「x 前」是离开多久了，
     /// 不是切到它多久了（10:00 切进微信聊到 10:29，10:30 看列表该写 1 分钟前，不是 30 分钟前）。
     private var deactivatedAt: [String: Date] = [:]
+    /// 常用度：每个 App 待够几秒的切到前台次数（衰减到 at 那一刻），key 同上。和切换记录存在一起。
+    private var sessions: [String: (uses: Double, at: Double)] = [:]
     /// 最近一周切到过前台的普通 App（key 同上）：退出之后「最近使用」还要列它，得记住它在哪、叫什么。
     /// 装在扫描目录以外的 App 只能靠这份。
     private var seen: [String: AppEntry] = [:]
@@ -71,6 +77,7 @@ final class AppCatalog {
         for record in AppActivity.decode(activityFile.flatMap { try? Data(contentsOf: $0) }, now: now) {
             activatedAt[record.key] = Date(timeIntervalSince1970: record.at)
             if let left = record.left { deactivatedAt[record.key] = Date(timeIntervalSince1970: left) }
+            if let uses = record.uses, let usesAt = record.usesAt { sessions[record.key] = (uses, usesAt) }
             seen[record.key] = AppEntry(name: record.name, alternateName: nil, path: record.path,
                                         bundleID: record.bundleID)
         }
@@ -105,6 +112,7 @@ final class AppCatalog {
         saveTimer?.invalidate()
         activatedAt = [:]
         deactivatedAt = [:]
+        sessions = [:]
         seen = [:]
         guard let file = activityFile else { return }
         Self.writeQueue.async { try? FileManager.default.removeItem(at: file) }
@@ -127,8 +135,16 @@ final class AppCatalog {
                   let key = app.bundleIdentifier ?? app.bundleURL?.standardizedFileURL.path else { return }
             let now = Date()
             MainActor.assumeIsolated {
-                self?.deactivatedAt[key] = now
-                self?.scheduleSave()
+                guard let self else { return }
+                self.deactivatedAt[key] = now
+                // 在前台待够几秒才算用了一次（⌘Tab 路过的不算）
+                if let start = self.activatedAt[key],
+                   let next = AppRanking.recordingSession(uses: self.sessions[key]?.uses, usesAt: self.sessions[key]?.at,
+                                                          activatedAt: start.timeIntervalSince1970,
+                                                          now: now.timeIntervalSince1970) {
+                    self.sessions[key] = next
+                }
+                self.scheduleSave()
             }
         }
     }
@@ -151,12 +167,14 @@ final class AppCatalog {
                     guard let at = self.activatedAt[key] else { return nil }
                     return AppActivity.Record(key: key, at: at.timeIntervalSince1970, path: entry.path,
                                               name: entry.name, bundleID: entry.bundleID,
-                                              left: self.deactivatedAt[key]?.timeIntervalSince1970)
+                                              left: self.deactivatedAt[key]?.timeIntervalSince1970,
+                                              uses: self.sessions[key]?.uses, usesAt: self.sessions[key]?.at)
                 }
                 let kept = AppActivity.pruned(records, now: Date().timeIntervalSince1970)
                 // 过期的顺手从内存里也清掉，免得常开几个月越攒越多
                 let keys = Set(kept.map(\.key))
                 self.seen = self.seen.filter { keys.contains($0.key) }
+                self.sessions = self.sessions.filter { keys.contains($0.key) }
                 guard let data = try? JSONEncoder().encode(kept) else { return }
                 Self.writeQueue.async { try? data.write(to: file, options: .atomic) }
             }
@@ -193,29 +211,24 @@ final class AppCatalog {
         return Array(result.values)
     }
 
-    /// 面板里的默认顺序（2026-09-27 用户定的）：运行中的在前，两组里都按最近用过排
-    ///（最近切到前台和 Spotlight 记的上次打开，取新的那个），都没有记录的按名字。
+    /// 面板里的默认顺序：最近用过的在前，一样新的看常用度，都没有记录的按名字（`AppRanking.precedes`）。
     /// 有输入时 `TabSearch.rank` 先按匹配度、同分保持这里的顺序（它的排序是稳定的）。
-    /// TabFlick 自己不算运行中：它永远在跑，排第一没意义。
+    /// 顺手把常用度（`AppEntry.prior`）填上，有输入时同分的按它排先后。
+    /// 运行中的不再整组排前面（2026-10-26 用户定的，原因见 `AppRanking.precedes`）。
     var ordered: [AppEntry] {
-        let running = NSWorkspace.shared.runningApplications
-        let runningIDs = Set(running.compactMap(\.bundleIdentifier))
-        let runningPaths = Set(running.compactMap { $0.bundleURL?.standardizedFileURL.path })
-        let own = Bundle.main.bundleIdentifier
-        let keyed = entries.map { entry -> (entry: AppEntry, running: Bool, used: Date?) in
-            let isRunning = entry.bundleID.map { $0 != own && runningIDs.contains($0) }
-                ?? runningPaths.contains(entry.path)
+        let now = Date().timeIntervalSince1970
+        let keyed = entries.map { entry -> (entry: AppEntry, used: Double?) in
+            var entry = entry
+            let session = sessions[entry.usageKey]
+            entry.prior = AppRanking.prior(level: AppRanking.level(
+                sessions: session?.uses, sessionsAt: session?.at,
+                spotlightUses: entry.useCount, spotlightLastUsed: entry.lastUsed?.timeIntervalSince1970, now: now))
             let used = [activatedAt[entry.usageKey], entry.lastUsed].compactMap { $0 }.max()
-            return (entry, isRunning, used)
+            return (entry, used?.timeIntervalSince1970)
         }
         return keyed.sorted { a, b in
-            if a.running != b.running { return a.running }
-            switch (a.used, b.used) {
-            case let (x?, y?) where x != y: return x > y
-            case (.some, nil): return true
-            case (nil, .some): return false
-            default: return a.entry.name.localizedStandardCompare(b.entry.name) == .orderedAscending
-            }
+            AppRanking.precedes(usedA: a.used, priorA: a.entry.prior, nameA: a.entry.name,
+                                usedB: b.used, priorB: b.entry.prior, nameB: b.entry.name)
         }.map(\.entry)
     }
 
@@ -299,7 +312,8 @@ final class AppCatalog {
                                        bundleID: bundle?.bundleIdentifier,
                                        lastUsed: meta.lastUsed,
                                        comment: meta.comment,
-                                       isAgent: Self.flag(info["LSUIElement"]) || Self.flag(info["LSBackgroundOnly"])))
+                                       isAgent: Self.flag(info["LSUIElement"]) || Self.flag(info["LSBackgroundOnly"]),
+                                       useCount: meta.useCount))
             }
         }
         return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -312,14 +326,16 @@ final class AppCatalog {
         return false
     }
 
-    /// Spotlight 记的上次打开时间。一个 App 一次元数据读取，后台线程上跑，百来个 App 几十毫秒。
-    /// Spotlight 记的上次打开时间和访达注释：同一个元数据对象取两样，后台线程上跑。
-    private nonisolated static func metadata(of url: URL) -> (lastUsed: Date?, comment: String?) {
-        guard let item = MDItemCreateWithURL(kCFAllocatorDefault, url as CFURL) else { return (nil, nil) }
+    /// Spotlight 记的上次打开时间、打开次数和访达注释：一个 App 一次元数据读取、取三样，
+    /// 后台线程上跑，百来个 App 几十毫秒。
+    private nonisolated static func metadata(of url: URL) -> (lastUsed: Date?, comment: String?, useCount: Int?) {
+        guard let item = MDItemCreateWithURL(kCFAllocatorDefault, url as CFURL) else { return (nil, nil, nil) }
         let comment = (MDItemCopyAttribute(item, kMDItemFinderComment) as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // 键名没进 Swift 的常量表，字面量照写（mdls 里叫这个）
+        let useCount = (MDItemCopyAttribute(item, "kMDItemUseCount" as CFString) as? NSNumber)?.intValue
         return (MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date,
-                comment?.isEmpty == false ? comment : nil)
+                comment?.isEmpty == false ? comment : nil, useCount)
     }
 }
 

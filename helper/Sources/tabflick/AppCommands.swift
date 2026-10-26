@@ -24,6 +24,8 @@ struct AppCommand: Identifiable {
         case window(WindowAction, WindowTarget)
         /// 「打开方式…」：面板不关，列表换成能打开访达里选中项目的 App（`OpenWithCommand`）
         case openWith
+        /// 「结束进程…」：面板不关，列表换成进程（`ProcessesCommand`）
+        case processes
     }
 
     let id: String
@@ -76,6 +78,7 @@ enum AppCommands {
                 keywords: ["Lock Screen", "锁定屏幕", "锁屏", "lock", "suoping"],
                 symbol: "lock.fill",
                 action: .native { lockScreen() }),
+            ProcessesCommand.command,
         ]
     }
 
@@ -119,7 +122,7 @@ enum AppCommands {
         case .window(let action, let target):
             WindowMover.perform(action, on: target)
             return
-        case .openWith:
+        case .openWith, .processes:
             return   // 面板自己接（选中它不关面板），走不到这里
         case .appleScript(let source, let reporter):
             script = source
@@ -183,5 +186,22 @@ enum OpenWithCommand {
                    symbol: "arrow.up.forward.app",
                    subtitle: ([L10n.t("访达", "Finder")] + [selection?.name].compactMap { $0 }).joined(separator: " · "),
                    action: .openWith)
+    }
+}
+
+/// 「结束进程…」（2026-10-26 用户要的，照 Raycast 的 Kill Process）：打「kill」「进程」「端口」命中，
+/// 回车列表换成你自己的进程（`ProcessList.swift`）。系统命令，和锁屏一样列在「应用」段末尾。
+enum ProcessesCommand {
+    static let symbol = "xmark.octagon"
+    @MainActor static var title: String { L10n.t("结束进程…", "Kill Process…") }
+
+    @MainActor static var command: AppCommand {
+        AppCommand(id: "system.processes", bundleID: nil,
+                   title: title,
+                   // 打端口号也该想到它：「3000 被谁占了」
+                   keywords: ["Kill Process", "结束进程", "kill", "process", "进程", "port", "端口",
+                              "force quit", "强制退出", "Activity Monitor", "活动监视器"],
+                   symbol: symbol,
+                   action: .processes)
     }
 }
