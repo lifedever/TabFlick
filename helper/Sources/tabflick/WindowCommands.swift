@@ -49,7 +49,7 @@ enum WindowAction: String, CaseIterable {
         case .rightHalf:   return "rectangle.righthalf.inset.filled"
         case .restore:     return "arrow.uturn.backward"
         case .nextDisplay: return "display.2"
-        case .minimize:    return "minus.rectangle"
+        case .minimize:    return "minus.rectangle.fill"
         case .fullScreen:  return "arrow.up.left.and.arrow.down.right"
         }
     }

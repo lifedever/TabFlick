@@ -192,7 +192,7 @@ enum OpenWithCommand {
 /// 「结束进程…」（2026-10-26 用户要的，照 Raycast 的 Kill Process）：打「kill」「进程」「端口」命中，
 /// 回车列表换成你自己的进程（`ProcessList.swift`）。系统命令，和锁屏一样列在「应用」段末尾。
 enum ProcessesCommand {
-    static let symbol = "xmark.octagon"
+    static let symbol = "xmark.octagon.fill"
     @MainActor static var title: String { L10n.t("结束进程…", "Kill Process…") }
 
     @MainActor static var command: AppCommand {

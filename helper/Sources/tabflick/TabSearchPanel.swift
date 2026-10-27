@@ -407,29 +407,42 @@ enum RowCommand: String {
         }
     }
 
+    /// 方块里的白色符号（`ActionTile`），所以一律用实心的那一版。
     func symbol(for target: SearchRow) -> String {
         switch self {
         case .primary:
             switch target {
-            case .tab:    return "arrow.right.square"
+            case .tab:    return "arrow.right.square.fill"
             case .closed: return "arrow.uturn.backward"
-            case .app:    return "arrow.up.forward.app"
-            default:      return "plus.square.on.square"
+            case .app:    return "arrow.up.forward.app.fill"
+            default:      return "plus.square.fill.on.square.fill"
             }
         case .reloadTab:      return "arrow.clockwise"
-        case .returnToPinned: return "pin"
+        case .returnToPinned: return "pin.fill"
         // 拷贝类共用一个图标、靠字区分（Raycast / Alfred 都这样）：四个各画各的图，
         // 列表里就是四种形状抢眼，反而看不出它们是一类
-        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine: return "doc.on.doc"
-        case .revealInFinder: return "folder"
-        case .getInfo:        return "info.circle"
-        case .showPackageContents: return "shippingbox"
-        case .closeTab:       return "xmark"
-        case .closeDuplicates: return "square.on.square.dashed"
-        case .removeClosed, .deleteHistory: return "trash"
-        case .unfavorite:     return "star.slash"
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine: return "doc.on.doc.fill"
+        case .revealInFinder: return "folder.fill"
+        case .getInfo:        return "info"
+        case .showPackageContents: return "shippingbox.fill"
+        case .closeTab, .forceQuit: return "xmark"
+        case .closeDuplicates: return "square.fill.on.square.fill"
+        case .removeClosed, .deleteHistory: return "trash.fill"
+        case .unfavorite:     return "star.slash.fill"
         case .quitApp:        return "power"
-        case .forceQuit:      return "xmark.octagon"
+        }
+    }
+
+    /// 方块的颜色：拷贝灰、显示蓝、重新加载绿、置顶 / 收藏橙、删除和退出类红（用户 2026-10-26 选的方案 B）。
+    /// 收藏原想用黄，白色符号压在系统黄上浅色模式下几乎看不见，改橙。
+    var tint: ActionTint {
+        if isDestructive { return .red }
+        switch self {
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine: return .gray
+        case .revealInFinder, .getInfo, .showPackageContents: return .blue
+        case .reloadTab:      return .green
+        case .returnToPinned, .unfavorite: return .orange
+        default:              return .gray
         }
     }
 }
@@ -2286,9 +2299,7 @@ private struct TabSearchView: View {
             } else if model.inProcesses {
                 // 进程列表：左边写在哪一层（同操作列表的对象胶囊），点它返回
                 HStack(spacing: kSearchIconGap) {
-                    Image(systemName: ProcessesCommand.symbol)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.primary.opacity(0.7))
+                    ActionTile(symbol: ProcessesCommand.symbol, tint: .gray, side: 17)
                         .frame(width: kSearchRowIconSize)
                     Text(ProcessesCommand.title)
                         .font(.system(size: 12))
@@ -2456,6 +2467,9 @@ private struct SearchRowIcon: View {
     /// 格子不变、文字不动；紧凑行里行高只有 34，放大就顶到上下边了，按格子画。
     private var appSide: CGFloat { compact ? imageSide * 1.15 : box * 28 / 22 }
     private var symbolSize: CGFloat { box * (compact ? 0.62 : 0.68) }
+    /// 操作方块的边长：和同一种行里 App 图标看上去的大小一样（App 图标自带透明边距，
+    /// 紧凑行画 18.4 实际约 17，两行的行画 28 实际约 22）。
+    private var tileSide: CGFloat { compact ? 17 : 22 }
     /// 站点图标画多大。紧凑行里别撑满格子：旁边几行是 14pt 的线性符号，满格的彩色图标
     /// 显大一圈（用户 2026-09-27 截图）；缩到 16，格子宽度不变、文字不动。
     private var imageSide: CGFloat { compact ? min(box, 16) : box }
@@ -2468,9 +2482,7 @@ private struct SearchRowIcon: View {
                 // 默认动作用对象自己的图标：动作和对象在视觉上连在一起（Raycast 的做法）
                 SearchRowIcon(row: target, icon: icon, searchBrowser: searchBrowser, box: box, compact: compact)
             } else {
-                Image(systemName: command.symbol(for: target))
-                    .font(.system(size: symbolSize, weight: .medium))
-                    .foregroundStyle(command.isDestructive ? Color(nsColor: .systemRed) : Color.primary.opacity(0.7))
+                ActionTile(symbol: command.symbol(for: target), tint: command.tint, side: tileSide)
             }
         case .bookmark, .history:
             // 图标由 helper 按域名向扩展要（Chrome 缓存的），还没到就先用类型图标占位
@@ -2483,10 +2495,8 @@ private struct SearchRowIcon: View {
                     .foregroundStyle(.secondary)
             }
         case .appCommand(let command, nil):
-            // 系统命令没有 App 图标，画它自己的符号
-            Image(systemName: command.symbol)
-                .font(.system(size: symbolSize, weight: .medium))
-                .foregroundStyle(Color.primary.opacity(0.7))
+            // 系统命令没有 App 图标：灰色方块里画它自己的符号，和旁边的 App 图标一个形状
+            ActionTile(symbol: command.symbol, tint: .gray, side: tileSide)
         case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window, .process:
             // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标
             if let icon {
@@ -2940,6 +2950,39 @@ private struct SearchRowView: View {
                 EmptyView()
             }
         }
+    }
+}
+
+/// 操作图标的颜色。四种主色：拷贝灰、显示蓝、重新加载绿、删除和退出类红；置顶 / 收藏橙。
+enum ActionTint {
+    case gray, blue, green, orange, red
+
+    var color: Color {
+        switch self {
+        case .gray:   return Color(nsColor: .systemGray)
+        case .blue:   return Color(nsColor: .systemBlue)
+        case .green:  return Color(nsColor: .systemGreen)
+        case .orange: return Color(nsColor: .systemOrange)
+        case .red:    return Color(nsColor: .systemRed)
+        }
+    }
+}
+
+/// 操作图标：圆角方块 + 白色实心符号，照系统设置侧栏（用户 2026-10-26 选的方案 B）。原来是灰色细线符号，
+/// 和彩色实心的 App 图标排在同一列，一个有体积一个没有，用户原话「和 App icon 一起对比的时候更显得丑」。
+/// 方块和 App 图标同形状、同大小，整列读起来是一样的东西。
+struct ActionTile: View {
+    let symbol: String
+    let tint: ActionTint
+    let side: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: side * 0.27, style: .continuous)
+            .fill(LinearGradient(colors: [tint.color.opacity(0.85), tint.color], startPoint: .top, endPoint: .bottom))
+            .frame(width: side, height: side)
+            .overlay(Image(systemName: symbol)
+                .font(.system(size: side * 0.56, weight: .semibold))
+                .foregroundStyle(.white))
     }
 }
 
