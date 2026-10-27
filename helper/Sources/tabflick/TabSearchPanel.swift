@@ -1496,9 +1496,14 @@ final class TabSearchModel: ObservableObject {
         // 比一次分，最高的那条比现在排最前的那条分高，就单独提到最前；同分不动。
         // 只比段首：历史段按最近访问排，拿它段里第 5 条出来会让人看不懂为什么是它。
         // 输入像网址时不挑：回车落点已经定了（开着的同站标签，或「在新标签打开」）。
+        // 有开着的标签命中时，最近关闭 / 书签 / 历史不参与（2026-10-27 用户截图）：它们回车是新开一个标签，
+        // 从这里打开过的又攒了记忆分，越点越靠前，打「mack」每回车一次就多一个重复的 MacKed。
         var topHit: SearchRow?
         if sitePrefix == nil {
-            let leaders = [appHits, liveHits, closedHits, bookmarkHits, historyHits].enumerated()
+            let contenders = liveHits.isEmpty
+                ? [appHits, liveHits, closedHits, bookmarkHits, historyHits]
+                : [appHits, liveHits]
+            let leaders = contenders.enumerated()
                 .compactMap { group, rows -> (group: Int, row: SearchRow, score: Int)? in
                     guard let row = rows.first, let score = score(of: row, query: trimmed) else { return nil }
                     return (group, row, score)
