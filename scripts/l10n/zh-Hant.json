@@ -361,5 +361,11 @@
  "“{0}” had already quit": "「{0}」已經結束了",
  "It may be waiting for you to save a document.": "可能在等你儲存文件。",
  "Port {0}": "連接埠 {0}",
- "Ports {0}": "連接埠 {0}"
+ "Ports {0}": "連接埠 {0}",
+ "Copy result": "拷貝結果",
+ "Result copied": "已拷貝結果",
+ "Copy calculation": "拷貝算式和結果",
+ "Calculation copied": "已拷貝算式和結果",
+ "Paste into {0}": "貼到 {0}",
+ "Continue with result": "用結果接著算"
 }

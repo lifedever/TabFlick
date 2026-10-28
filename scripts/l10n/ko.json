@@ -361,5 +361,11 @@
  "“{0}” had already quit": "「{0}」은(는) 이미 종료됨",
  "It may be waiting for you to save a document.": "문서 저장을 기다리고 있을 수 있습니다.",
  "Port {0}": "포트 {0}",
- "Ports {0}": "포트 {0}"
+ "Ports {0}": "포트 {0}",
+ "Copy result": "결과 복사",
+ "Result copied": "결과 복사됨",
+ "Copy calculation": "식과 결과 복사",
+ "Calculation copied": "식과 결과 복사됨",
+ "Paste into {0}": "{0}에 붙여넣기",
+ "Continue with result": "결과로 계속 계산"
 }

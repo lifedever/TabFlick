@@ -1541,7 +1541,7 @@ final class MRUController {
         switch command {
         case .primary:
             return
-        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine:
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine, .copyResult, .copyCalculation:
             guard let text = target.copyText(for: command) else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -1552,6 +1552,8 @@ final class MRUController {
             case .copyMarkdown: title = L10n.t("已拷贝 Markdown 链接", "Markdown link copied")
             case .copyPID:      title = L10n.t("已拷贝 PID", "PID copied")
             case .copyCommandLine: title = L10n.t("已拷贝命令行", "Command line copied")
+            case .copyResult:   title = L10n.t("已拷贝结果", "Result copied")
+            case .copyCalculation: title = L10n.t("已拷贝算式和结果", "Calculation copied")
             default:            title = L10n.t("已拷贝路径", "Path copied")
             }
             Toast.show(title, detail: text)
@@ -1619,6 +1621,17 @@ final class MRUController {
             running.forEach { _ = ProcessEnder.quit($0, force: false) }
         case .forceQuit:
             return   // 进程列表里的，面板自己接（要确认、不关面板），走不到这里
+        case .pasteResult:
+            // 贴回打开面板前在用的那个 App（光标原来在哪就贴到哪）。剪贴板换成结果，和拷贝一样；
+            // 成功不弹 toast，字自己会出现
+            guard case .calculation(let calculation, _) = target, let pid = search.model.windowTarget?.pid else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(calculation.plain, forType: .string)
+            log("🔢 paste calculation result into pid \(pid)")
+            // 面板刚收起，留一拍让它真的下屏
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { Keystroke.commandV(to: pid) }
+        case .continueCalculation:
+            return   // 面板自己接（不关面板，输入框换成结果），走不到这里
         }
     }
 

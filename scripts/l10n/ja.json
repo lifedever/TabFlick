@@ -361,5 +361,11 @@
  "“{0}” had already quit": "「{0}」はすでに終了しています",
  "It may be waiting for you to save a document.": "書類の保存を待っている可能性があります。",
  "Port {0}": "ポート {0}",
- "Ports {0}": "ポート {0}"
+ "Ports {0}": "ポート {0}",
+ "Copy result": "結果をコピー",
+ "Result copied": "結果をコピーしました",
+ "Copy calculation": "式と結果をコピー",
+ "Calculation copied": "式と結果をコピーしました",
+ "Paste into {0}": "{0}にペースト",
+ "Continue with result": "結果で計算を続ける"
 }

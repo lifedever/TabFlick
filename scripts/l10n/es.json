@@ -361,5 +361,11 @@
  "“{0}” had already quit": "“{0}” ya estaba cerrada",
  "It may be waiting for you to save a document.": "Puede que esté esperando a que guardes un documento.",
  "Port {0}": "Puerto {0}",
- "Ports {0}": "Puertos {0}"
+ "Ports {0}": "Puertos {0}",
+ "Copy result": "Copiar resultado",
+ "Result copied": "Resultado copiado",
+ "Copy calculation": "Copiar operación y resultado",
+ "Calculation copied": "Operación copiada",
+ "Paste into {0}": "Pegar en {0}",
+ "Continue with result": "Seguir calculando con el resultado"
 }

@@ -361,5 +361,11 @@
  "“{0}” had already quit": "„{0}“ war bereits beendet",
  "It may be waiting for you to save a document.": "Möglicherweise wartet die App darauf, dass du ein Dokument sicherst.",
  "Port {0}": "Port {0}",
- "Ports {0}": "Ports {0}"
+ "Ports {0}": "Ports {0}",
+ "Copy result": "Ergebnis kopieren",
+ "Result copied": "Ergebnis kopiert",
+ "Copy calculation": "Rechnung kopieren",
+ "Calculation copied": "Rechnung kopiert",
+ "Paste into {0}": "In {0} einsetzen",
+ "Continue with result": "Mit Ergebnis weiterrechnen"
 }

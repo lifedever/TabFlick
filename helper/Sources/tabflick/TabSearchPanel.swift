@@ -20,10 +20,12 @@ struct SearchSection {
 
 /// 「全部」里一段装的是什么：决定分组头的名字，以及截断后 Tab 跳去哪个模式。
 enum SearchSectionKind: String {
-    case top, ops, apps, folders, tabs, closed, bookmarks, history, search, recent, suggested
+    case calc, top, ops, apps, folders, tabs, closed, bookmarks, history, search, recent, suggested
 
-    var title: String {
+    /// 分组头写什么。计算结果那一段没有头：它本身就是一眼看得出的答案（示意图 C）。
+    var title: String? {
         switch self {
+        case .calc:      return nil
         case .recent:    return L10n.t("最近使用", "Recent")
         case .suggested: return L10n.t("推荐", "Suggestions")
         case .top:       return L10n.t("最佳匹配", "Top Hit")
@@ -40,7 +42,7 @@ enum SearchSectionKind: String {
 
     var mode: SearchMode? {
         switch self {
-        case .top, .ops, .recent, .suggested: return nil
+        case .calc, .top, .ops, .recent, .suggested: return nil
         case .search:    return .actions
         case .apps:      return .apps
         case .folders:   return .folders
@@ -99,6 +101,9 @@ enum SearchRow: Identifiable {
     case window(AppWindow)
     /// 「结束进程…」展开后的一行：一个 App（连同它包里的进程）或一个单独的进程
     case process(ProcessItem)
+    /// 输入是一道算式时的结果（`Calculator`），回车拷贝。pasteInto 是打开面板前在用的 App 名
+    ///（⌘↩ 里「粘贴到 X」），前台是 TabFlick 自己时 nil
+    case calculation(Calculation, pasteInto: String?)
 
     var id: String {
         switch self {
@@ -120,6 +125,8 @@ enum SearchRow: Identifiable {
         case .appCommand(let c, _): return "appcmd#\(c.id)"
         case .window(let w):     return w.id
         case .process(let p):    return p.id
+        // 一张表里最多一行；不带算式，打字时游标留在它上面
+        case .calculation:       return "calc"
         }
     }
 
@@ -145,6 +152,7 @@ enum SearchRow: Identifiable {
         // App 画 App 图标；单独的进程都是访达里那个黑色的 exec，共用一个键 —— 按各自路径取的话，
         // 几百个进程第一次画就是几百次同步的图标查询，压在主线程上
         case .process(let p):    return p.isApp ? "file:" + p.path : "file:/bin/sh"
+        case .calculation:       return "file:" + kCalculatorAppPath
         case .command(.primary, let target): return target.favIconUrl
         case .action, .command: return ""
         }
@@ -187,6 +195,7 @@ enum SearchRow: Identifiable {
         case .appCommand(let c, _): return c.title
         case .window(let w):     return w.title
         case .process(let p):    return p.name
+        case .calculation(let c, _): return c.display
         }
     }
 
@@ -220,6 +229,7 @@ enum SearchRow: Identifiable {
         case .appCommand(let c, _): return c.title
         case .window:            return L10n.t("切换到窗口", "Switch to window")
         case .process(let p):    return p.isApp ? L10n.t("退出", "Quit") : L10n.t("结束", "Kill")
+        case .calculation:       return L10n.t("拷贝结果", "Copy result")
         }
     }
 
@@ -240,7 +250,7 @@ enum SearchRow: Identifiable {
         case .window(let w):     return w.id
         // 换个浏览器打开也是「这个输入要的就是这一页」
         case .command(.primary, let target), .openWith(_, let target): return target.memoryIdentity
-        case .action, .command, .selection, .selectionOpener, .process: return nil
+        case .action, .command, .selection, .selectionOpener, .process, .calculation: return nil
         }
     }
 
@@ -289,6 +299,9 @@ enum SearchRow: Identifiable {
         case .copyPID:      if case .process(let p) = self { return String(p.pid) } else { return nil }
         case .copyCommandLine:
             if case .process(let p) = self, !p.commandLine.isEmpty { return p.commandLine } else { return nil }
+        case .copyResult:   if case .calculation(let c, _) = self { return c.plain } else { return nil }
+        case .copyCalculation:
+            if case .calculation(let c, _) = self { return c.expression + " = " + c.plain } else { return nil }
         default:            return nil
         }
     }
@@ -366,6 +379,8 @@ enum RowCommand: String {
     /// 进程列表里：App 强制退出（forceTerminate）、单独的进程 SIGKILL。不管是什么都要按两次
     case forceQuit
     case copyPID, copyCommandLine
+    /// 计算结果的四条：拷贝结果、拷贝「算式 = 结果」、粘贴到打开面板前在用的 App、输入框换成结果接着算
+    case copyResult, copyCalculation, pasteResult, continueCalculation
 
     /// 关闭 / 删除类：标红。
     var isDestructive: Bool {
@@ -377,7 +392,8 @@ enum RowCommand: String {
 
     /// 执行完不关面板、退回主列表，列表原地收缩（同悬停 ✕ 关标签）——
     /// 清理几条历史 / 关几个标签不用反复开面板。退出 App 例外：关面板，退没退看 Dock。
-    var staysInPanel: Bool { isDestructive && self != .quitApp }
+    /// 「用结果接着算」也不关：接着在输入框里打。
+    var staysInPanel: Bool { (isDestructive && self != .quitApp) || self == .continueCalculation }
 
     func title(for target: SearchRow) -> String {
         switch self {
@@ -404,6 +420,12 @@ enum RowCommand: String {
             return L10n.t("强制退出", "Force Quit")
         case .copyPID:        return L10n.t("拷贝 PID", "Copy PID")
         case .copyCommandLine: return L10n.t("拷贝命令行", "Copy command line")
+        case .copyResult:     return L10n.t("拷贝结果", "Copy result")
+        case .pasteResult:
+            if case .calculation(_, let app?) = target { return L10n.t("粘贴到 \(app)", "Paste into \(app)") }
+            return L10n.t("粘贴", "Paste")
+        case .copyCalculation: return L10n.t("拷贝算式和结果", "Copy calculation")
+        case .continueCalculation: return L10n.t("用结果接着算", "Continue with result")
         }
     }
 
@@ -421,7 +443,10 @@ enum RowCommand: String {
         case .returnToPinned: return "pin.fill"
         // 拷贝类共用一个图标、靠字区分（Raycast / Alfred 都这样）：四个各画各的图，
         // 列表里就是四种形状抢眼，反而看不出它们是一类
-        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine: return "doc.on.doc.fill"
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine,
+             .copyResult, .copyCalculation: return "doc.on.doc.fill"
+        case .pasteResult:    return "doc.on.clipboard.fill"
+        case .continueCalculation: return "plus.forwardslash.minus"
         case .revealInFinder: return "folder.fill"
         case .getInfo:        return "info"
         case .showPackageContents: return "shippingbox.fill"
@@ -438,7 +463,8 @@ enum RowCommand: String {
     var tint: ActionTint {
         if isDestructive { return .red }
         switch self {
-        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine: return .gray
+        case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine,
+             .copyResult, .copyCalculation: return .gray
         case .revealInFinder, .getInfo, .showPackageContents: return .blue
         case .reloadTab:      return .green
         case .returnToPinned, .unfavorite: return .orange
@@ -1226,6 +1252,12 @@ final class TabSearchModel: ObservableObject {
             // 默认动作 → 拷贝类 → 在访达中显示 → 强制（标红垫底）
             return ([.primary, .copyPID] + (item.commandLine.isEmpty ? [] : [.copyCommandLine])
                     + [.copyPath, .revealInFinder, .forceQuit]).map { .command($0, target) }
+        case .calculation(let calculation, let pasteInto):
+            // 拷贝结果（= 回车）→ 拷贝「算式 = 结果」→ 粘贴到打开面板前在用的 App → 接着算（拷贝类挨着，
+            // 用户 2026-10-28 定的顺序）。科学计数法的结果（1.6e60）填回去算不了，不给「接着算」
+            let continues = calculation.plain.contains("e") ? [] : [RowCommand.continueCalculation]
+            return ([.copyResult, .copyCalculation] + (pasteInto == nil ? [] : [.pasteResult]) + continues)
+                .map { .command($0, target) }
         case .url, .action, .opener, .command, .openWith, .selectionOpener, .appCommand, .window:
             return []
         }
@@ -1553,6 +1585,11 @@ final class TabSearchModel: ObservableObject {
             specs.append(SectionSpec(kind: .ops, count: rows.count))
             body += rows
         }
+        // 输入是一道算式：结果排最前、默认选中，回车拷贝（2026-10-28 用户要的）；下面的照常列
+        if let calculation = Calculator.evaluate(trimmed) {
+            specs.append(SectionSpec(kind: .calc, count: 1))
+            body.append(.calculation(calculation, pasteInto: windowTarget?.name))
+        }
         if sitePrefix != nil && !siteOpen { placeURL() }
 
         if let topHit {
@@ -1755,8 +1792,10 @@ final class TabSearchModel: ObservableObject {
         setCursor(next, source: .keyboard)
     }
 
-    /// 当前的行高：操作列表是紧凑单行，其余是两行。
-    var rowHeight: CGFloat { actionTarget != nil ? kSearchCompactRowHeight : kSearchRowHeight }
+    /// 某一行的高度（见 `searchRowHeight`）。
+    func rowHeight(at index: Int) -> CGFloat {
+        rows.indices.contains(index) ? searchRowHeight(rows[index], compact: actionTarget != nil) : kSearchRowHeight
+    }
 
     /// 列表区需要的内容高度（不含输入框和底栏），面板据此定高、超过上限就滚动。
     var contentHeight: CGFloat {
@@ -1787,7 +1826,7 @@ final class TabSearchModel: ObservableObject {
                 let first = index == section.range.lowerBound
                 if !first { y += kSearchRowSpacing }
                 visit(index, y, first, section.title != nil)
-                y += rowHeight
+                y += rowHeight(at: index)
             }
             if position + 1 < sections.count { y += searchSectionGap(before: sections[position + 1]) }
         }
@@ -1804,6 +1843,18 @@ private let kSearchFieldHeight: CGFloat = 54
 private let kSearchRowHeight: CGFloat = 44
 /// ⌘↩ 操作列表的行：只有动作名，本质是菜单，单行紧凑。
 private let kSearchCompactRowHeight: CGFloat = 34
+/// 计算结果那一行：小字算式 + 26pt 的结果，比普通行高 20（照 Spotlight，用户 2026-10-28 从四套示意图里选的 C）。
+private let kSearchCalcRowHeight: CGFloat = 64
+/// 计算结果那一行画「计算器」的图标。
+private let kCalculatorAppPath = "/System/Applications/Calculator.app"
+
+/// 一行多高：操作列表是紧凑单行，计算结果那一行加高，其余是两行。视图和版面（`layoutWalk`）都从这里取，
+/// 两边不一致的话面板底部裁掉半行、键盘滚动停错位置。
+private func searchRowHeight(_ row: SearchRow, compact: Bool) -> CGFloat {
+    if compact { return kSearchCompactRowHeight }
+    if case .calculation = row { return kSearchCalcRowHeight }
+    return kSearchRowHeight
+}
 /// 选中底的圆角 = 面板圆角 14 − 列表内边距 6：同心圆角（Liquid Glass 的基本规则），
 /// 不同心时选中底的四角和面板的四角看着是两套东西。
 private let kSearchHighlightRadius: CGFloat = 8
@@ -2174,7 +2225,7 @@ private struct TabSearchView: View {
         let offset = clip.bounds.minY          // 文档视图是翻转的：y 就是离顶的距离
         // 底栏那条带子里的行是渐隐、被胶囊压着的，不算看得见
         let viewport = clip.bounds.height - kSearchFooterZone
-        let rowHeight = model.rowHeight
+        let rowHeight = model.rowHeight(at: index)
         let cover = place.titled ? kSearchStickyHeaderHeight : 0
         // 最后一行连底部内边距一起露出来
         let bottom = place.top + rowHeight + (index == model.rows.count - 1 ? kSearchListInset : 0)
@@ -2505,8 +2556,9 @@ private struct SearchRowIcon: View {
         case .appCommand(let command, nil):
             // 系统命令没有 App 图标：灰色方块里画它自己的符号，和旁边的 App 图标一个形状
             ActionTile(symbol: command.symbol, tint: .gray, side: tileSide)
-        case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window, .process:
-            // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标
+        case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window, .process, .calculation:
+            // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标，
+            // 计算结果画「计算器」的
             if let icon {
                 let isApp: Bool = {
                     switch row {
@@ -2522,6 +2574,7 @@ private struct SearchRowIcon: View {
                     case .folder:    return "folder"
                     case .selection: return "doc"
                     case .process(let p) where !p.isApp: return "terminal"
+                    case .calculation: return "plus.forwardslash.minus"
                     default:         return "app"
                     }
                 }())
@@ -2707,7 +2760,7 @@ private struct SearchRowView: View {
             }
             return ["PID \(p.pid)", p.commandLine.isEmpty ? (p.path as NSString).abbreviatingWithTildeInPath : p.commandLine]
                 .joined(separator: " · ")
-        case .command, .openWith, .selection, .selectionOpener: return ""
+        case .command, .openWith, .selection, .selectionOpener, .calculation: return ""
         }
     }
 
@@ -2732,67 +2785,18 @@ private struct SearchRowView: View {
                           browserBadge: compact ? nil : browserBadge)
                 .opacity(dimmed ? 0.55 : 1)
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 5) {
-                    Text(title)
-                        .font(.system(size: compact ? 13 : 13.5, weight: selected ? .semibold : .regular))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundStyle(destructive ? Color(nsColor: .systemRed)
-                                         : dimmed ? Color.primary.opacity(0.55)
-                                         : (selected ? Color.primary : Color.primary.opacity(0.85)))
-                    if case .tab(let item) = row, item.tab.pinned == true {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.20))
-                    }
-                    if case .process(let p) = row, !p.ports.isEmpty {
-                        PortBadge(ports: p.ports)
-                    }
-                }
-                if !compact, !subtitle.isEmpty {
-                    if inRecent, case .app(let app) = row, appRunning {
-                        // 「最近使用」里开着的 App：「应用 · 运行中 ●」，灰点「·」分隔、绿点在最后（用户 2026-09-29 定的，
-                        // 试过「应用 · ● 运行中」两个点挨着、「应用 ● 运行中」都不要）。有访达注释放中间，绿点总在行尾。
-                        // 5pt 和小字的小写高度相当；不呼吸：这张表里开着的 App 有十来个，一起呼吸太抢眼
-                        HStack(spacing: 4) {
-                            Text([L10n.t("应用", "App"), app.comment, L10n.t("运行中", "Running")]
-                                .compactMap { $0 }.joined(separator: " · "))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Circle()
-                                .fill(Color(nsColor: .systemGreen))
-                                .frame(width: 5, height: 5)
-                        }
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
-                    } else if case .window(let window) = row, window.kind == .miniProgram {
-                        // 小程序开着才有窗口：和开着的 App 一个写法「小程序 · 运行中 ●」
-                        HStack(spacing: 4) {
-                            Text(window.subtitle + " · " + L10n.t("运行中", "Running"))
-                            Circle()
-                                .fill(Color(nsColor: .systemGreen))
-                                .frame(width: 5, height: 5)
-                        }
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
-                    } else {
-                        Text(subtitle)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
+            if case .calculation(let calculation, _) = row, !compact {
+                calculationText(calculation)
+            } else {
+                textColumn
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             trailing
                 .fixedSize(horizontal: true, vertical: false)
                 .layoutPriority(1)
         }
         .padding(.horizontal, kSearchRowInset)
-        .frame(height: compact ? kSearchCompactRowHeight : kSearchRowHeight)
+        .frame(height: searchRowHeight(row, compact: compact))
         .background {
             RoundedRectangle(cornerRadius: kSearchHighlightRadius, style: .continuous)
                 .fill(selected ? (scheme == .dark ? Color.white.opacity(0.20)
@@ -2822,6 +2826,82 @@ private struct SearchRowView: View {
                 break
             }
         }
+    }
+
+    /// 标题 + 副标题两行（操作列表里只有标题）。
+    private var textColumn: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(.system(size: compact ? 13 : 13.5, weight: selected ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(destructive ? Color(nsColor: .systemRed)
+                                     : dimmed ? Color.primary.opacity(0.55)
+                                     : (selected ? Color.primary : Color.primary.opacity(0.85)))
+                if case .tab(let item) = row, item.tab.pinned == true {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.20))
+                }
+                if case .process(let p) = row, !p.ports.isEmpty {
+                    PortBadge(ports: p.ports)
+                }
+            }
+            if !compact, !subtitle.isEmpty {
+                if inRecent, case .app(let app) = row, appRunning {
+                    // 「最近使用」里开着的 App：「应用 · 运行中 ●」，灰点「·」分隔、绿点在最后（用户 2026-09-29 定的，
+                    // 试过「应用 · ● 运行中」两个点挨着、「应用 ● 运行中」都不要）。有访达注释放中间，绿点总在行尾。
+                    // 5pt 和小字的小写高度相当；不呼吸：这张表里开着的 App 有十来个，一起呼吸太抢眼
+                    HStack(spacing: 4) {
+                        Text([L10n.t("应用", "App"), app.comment, L10n.t("运行中", "Running")]
+                            .compactMap { $0 }.joined(separator: " · "))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Circle()
+                            .fill(Color(nsColor: .systemGreen))
+                            .frame(width: 5, height: 5)
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
+                } else if case .window(let window) = row, window.kind == .miniProgram {
+                    // 小程序开着才有窗口：和开着的 App 一个写法「小程序 · 运行中 ●」
+                    HStack(spacing: 4) {
+                        Text(window.subtitle + " · " + L10n.t("运行中", "Running"))
+                        Circle()
+                            .fill(Color(nsColor: .systemGreen))
+                            .frame(width: 5, height: 5)
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
+                } else {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 计算结果那一行：上面小字是算式，下面大字是结果（照 Spotlight）。算式太长省略中间、留住末尾的「=」，
+    /// 结果太长缩小字号；数字等宽，边打边算时不左右跳。
+    private func calculationText(_ calculation: Calculation) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(calculation.expression + " =")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.primary.opacity(0.45))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(calculation.display)
+                .font(.system(size: 26, weight: .semibold).monospacedDigit())
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -2954,7 +3034,7 @@ private struct SearchRowView: View {
                         ProcessMetric(symbol: "memorychip", text: ProcessCatalog.formatMemory(p.memory), width: 62)
                     }
                 }
-            case .command, .openWith, .selection, .selectionOpener:
+            case .command, .openWith, .selection, .selectionOpener, .calculation:
                 EmptyView()
             }
         }
@@ -3317,6 +3397,17 @@ final class TabSearchPanel {
         }
     }
 
+    /// 输入框换成这段文字、光标放到最后，当用户自己改的输入（列表回到顶）。先改输入框再改模型：
+    /// 模型一变 SwiftUI 会把它写回输入框，那时两边已经一样，不会再动光标。
+    private func replaceQuery(with text: String) {
+        if let field = fieldHandle.field {
+            field.stringValue = text
+            (field.currentEditor() as? NSTextView)?.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+        }
+        model.query = text
+        model.noteUserEdit()
+    }
+
     /// 列表换成能打开访达选中项目的 App（面板已经收起就不管了）。
     func showOpenWith(_ selection: FileSelection, openers: [OpenerApp]) {
         guard shown else { return }
@@ -3353,6 +3444,12 @@ final class TabSearchPanel {
             // 原列表再执行，数据刷新后列表原地收缩）；其余关面板再执行。
             if case .command(let command, let target) = row {
                 if command == .primary { self.model.onPick?(target); return }
+                // 用结果接着算：面板不关，输入框换成结果、光标放到最后
+                if command == .continueCalculation, case .calculation(let calculation, _) = target {
+                    self.model.leaveActions()
+                    self.replaceQuery(with: calculation.plain)
+                    return
+                }
                 if command.staysInPanel {
                     self.model.leaveActions()
                     self.commandHandler?(command, target)
@@ -3362,6 +3459,14 @@ final class TabSearchPanel {
                     self.close()
                     handler?(command, target)
                 }
+                return
+            }
+            // 计算结果：回车就是拷贝（和 ⌘↩ 里的「拷贝结果」同一条路）
+            if case .calculation = row {
+                let handler = self.commandHandler
+                self.closingAfterPick = true
+                self.close()
+                handler?(.copyResult, row)
                 return
             }
             // 记住「这个输入选了它」，下次同样的输入它往前排；首页「推荐」另记一份（没输入时点的也算）
@@ -3404,6 +3509,7 @@ final class TabSearchPanel {
             case .window(let w):     pick?(.window(w))
             case .command:           break   // 上面已处理
             case .process:           break   // 上面已处理
+            case .calculation:       break   // 上面已处理
             }
         }
         model.memory = SearchMemory.shared
