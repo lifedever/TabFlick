@@ -1269,7 +1269,7 @@ final class MRUController {
 
     /// 前台是普通 App（不是浏览器）时，它在「最近使用」里那一行：和当前标签一样放第二行、标「当前」。
     private func frontAppRow(in recent: [SearchRow]) -> String? {
-        guard let path = NSWorkspace.shared.frontmostApplication?.bundleURL?.standardizedFileURL.path else { return nil }
+        guard let front = NSWorkspace.shared.frontmostApplication, let path = AppPaths.installed(front) else { return nil }
         return recent.first { row in
             if case .app(let app) = row { return app.path == path }
             return false
@@ -1312,12 +1312,13 @@ final class MRUController {
         // 下面换成各个小程序、跟着微信排
         let hasMiniPrograms = wechatWindows.contains { $0.kind == .miniProgram }
         for app in NSWorkspace.shared.runningApplications {
-            guard app.activationPolicy == .regular, let url = app.bundleURL?.standardizedFileURL,
+            guard app.activationPolicy == .regular, let path = AppPaths.installed(app),
                   !(hasMiniPrograms && app.bundleIdentifier == WeChatWindows.miniProgramBundleID) else { continue }
-            // 装在扫描目录里的用清单那份（带访达注释、英文原名），装在别处的现造一个
-            let entry = appCatalog.entry(atPath: url.path)
-                ?? AppEntry(name: app.localizedName ?? url.deletingPathExtension().lastPathComponent,
-                            alternateName: nil, path: url.path, bundleID: app.bundleIdentifier)
+            // 装在扫描目录里的用清单那份（带访达注释、英文原名），装在别处的现造一个。
+            // iOS App 的 bundleURL 是运行时挂载里的那份，`AppPaths.installed` 换回装的位置才对得上清单
+            let entry = appCatalog.entry(atPath: path)
+                ?? AppEntry(name: app.localizedName ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent,
+                            alternateName: nil, path: path, bundleID: app.bundleIdentifier)
             add(entry, extra: [app.launchDate])
         }
         for entry in appCatalog.used(since: Date().addingTimeInterval(-Self.recentQuitWindow))
@@ -1613,9 +1614,9 @@ final class MRUController {
             log("🔍 quit app → \(app.name)")
             if app.bundleID == Bundle.main.bundleIdentifier { NSApp.terminate(nil); return }
             let running = app.bundleID.map { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
-                ?? NSWorkspace.shared.runningApplications.filter { $0.bundleURL?.standardizedFileURL.path == app.path }
+                ?? NSWorkspace.shared.runningApplications.filter { AppPaths.installed($0) == app.path }
             // 普通退出：有没存的文档由那个 App 自己问，不强退
-            running.forEach { $0.terminate() }
+            running.forEach { _ = ProcessEnder.quit($0, force: false) }
         case .forceQuit:
             return   // 进程列表里的，面板自己接（要确认、不关面板），走不到这里
         }

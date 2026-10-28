@@ -2,7 +2,7 @@
 //
 //   cd helper && CFFIXED_USER_HOME=/tmp/tabflick-check swiftc -parse-as-library \
 //     Sources/tabflick/AppCatalog.swift Sources/tabflick/AppActivity.swift Sources/tabflick/Pinyin.swift \
-//     Sources/tabflick/Log.swift checks/app-folder-watch-check.swift -o /tmp/appwatchcheck && \
+//     Sources/tabflick/AppPaths.swift Sources/tabflick/AppRanking.swift Sources/tabflick/Log.swift checks/app-folder-watch-check.swift -o /tmp/appwatchcheck && \
 //     CFFIXED_USER_HOME=/tmp/tabflick-check /tmp/appwatchcheck
 
 import Foundation

@@ -32,7 +32,7 @@ struct AppEntry: Identifiable, Equatable {
         if let bundleID {
             return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
         }
-        return NSWorkspace.shared.runningApplications.contains { $0.bundleURL?.path == path }
+        return NSWorkspace.shared.runningApplications.contains { AppPaths.installed($0) == path }
     }
 }
 
@@ -78,20 +78,21 @@ final class AppCatalog {
             activatedAt[record.key] = Date(timeIntervalSince1970: record.at)
             if let left = record.left { deactivatedAt[record.key] = Date(timeIntervalSince1970: left) }
             if let uses = record.uses, let usesAt = record.usesAt { sessions[record.key] = (uses, usesAt) }
-            seen[record.key] = AppEntry(name: record.name, alternateName: nil, path: record.path,
-                                        bundleID: record.bundleID)
+            // 0.23.1 及之前记下的 iOS App 是运行时挂载里的路径（见 AppPaths），换回装的位置
+            let path = record.path.contains("/Wrapper/") ? AppPaths.installed(record.path) : record.path
+            seen[record.key] = AppEntry(name: record.name, alternateName: nil, path: path, bundleID: record.bundleID)
         }
         let own = Bundle.main.bundleIdentifier
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let key = app.bundleIdentifier ?? app.bundleURL?.standardizedFileURL.path else { return }
+                  let key = app.bundleIdentifier ?? AppPaths.installed(app) else { return }
             let now = Date()
             // 普通 App 才记下来（菜单栏小工具弹个窗也会切到前台）；TabFlick 自己开设置窗口时也是普通 App，不算
             let entry = app.activationPolicy == .regular && app.bundleIdentifier != own ? app.bundleURL.map { url in
                 AppEntry(name: app.localizedName ?? url.deletingPathExtension().lastPathComponent,
-                         alternateName: nil, path: url.standardizedFileURL.path, bundleID: app.bundleIdentifier)
+                         alternateName: nil, path: AppPaths.installed(url.path), bundleID: app.bundleIdentifier)
             } : nil
             MainActor.assumeIsolated {
                 self?.activatedAt[key] = now
@@ -132,7 +133,7 @@ final class AppCatalog {
         ) { [weak self] note in
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.activationPolicy == .regular, app.bundleIdentifier != own,
-                  let key = app.bundleIdentifier ?? app.bundleURL?.standardizedFileURL.path else { return }
+                  let key = app.bundleIdentifier ?? AppPaths.installed(app) else { return }
             let now = Date()
             MainActor.assumeIsolated {
                 guard let self else { return }

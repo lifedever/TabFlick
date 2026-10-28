@@ -2,7 +2,7 @@
 // CPU 占用、命令行的显示。
 //
 // 跑法（在 helper/ 下）：
-//   swiftc -parse-as-library Sources/tabflick/ProcessList.swift Sources/tabflick/L10n.swift \
+//   swiftc -parse-as-library Sources/tabflick/ProcessList.swift Sources/tabflick/AppPaths.swift Sources/tabflick/L10n.swift \
 //          Sources/tabflick/L10nTables.swift Sources/tabflick/Log.swift \
 //          checks/process-catalog-check.swift -o /tmp/processcheck && CFFIXED_USER_HOME=/tmp/x /tmp/processcheck
 //
@@ -103,6 +103,32 @@ struct ProcessCatalogCheck {
                                apps: [RunningAppInfo(pid: 999, bundlePath: "/Applications/TabFlick.app", name: "TabFlick", bundleID: nil)],
                                ownPID: 999)
         check("自己的包里的进程不列", packaged.items.isEmpty)
+
+        // 运行中 App 的两种路径口径（AppPaths）。iOS App 跑在 /private/var/folders/…/Wrapper 里：归组要对上
+        // libproc 给的（带 /private），显示和对清单要换回装的位置。这里拿 /tmp（指向 /private/tmp 的符号链接）
+        // 造一个包复现 /private 那一半；挂载那一半（statfs 认 nullfs）造不出来，本机开着 iOS App 时实测过
+        let root = "/tmp/processcheck-\(getpid())"
+        let bundle = root + "/Wrapper/Foo.app"
+        try? FileManager.default.createDirectory(atPath: bundle, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        check("真实路径：解开符号链接、去掉结尾斜杠", AppPaths.real(bundle + "/") == "/private" + bundle, AppPaths.real(bundle + "/"))
+        check("真实路径：包不在了原样去掉结尾斜杠",
+              AppPaths.real("/Applications/NoSuch-\(getpid()).app/") == "/Applications/NoSuch-\(getpid()).app")
+        let wrapped = C.build([sample(20, "/private" + bundle + "/Foo", name: "Foo")],
+                              apps: [RunningAppInfo(pid: 20, bundlePath: AppPaths.real(bundle),
+                                                    installedPath: "/Applications/富.app", name: "富", bundleID: nil)],
+                              ownPID: 0)
+        check("跑在 /private 下的 App 归得上组", wrapped.items.count == 1 && wrapped.items.first?.isApp == true
+              && wrapped.items.first?.name == "富", "\(wrapped.items.map(\.id))")
+        check("App 行的路径是装的位置（拷贝路径、在访达中显示用它）", wrapped.items.first?.path == "/Applications/富.app",
+              "\(String(describing: wrapped.items.first?.path))")
+        check("装的位置：直接从包里的 Wrapper 跑的换回外面那个 .app",
+              AppPaths.installed("/Applications/新浪财经.app/Wrapper/SinaFinance.app") == "/Applications/新浪财经.app")
+        check("装的位置：包里的扩展也归外面那个 .app",
+              AppPaths.installed("/Applications/X.app/Wrapper/Y.app/PlugIns/W.appex") == "/Applications/X.app")
+        check("装的位置：普通 App 原样", AppPaths.installed("/Applications/Google Chrome.app") == "/Applications/Google Chrome.app")
+        check("装的位置：写成清单的口径（/private/tmp → /tmp）", AppPaths.installed("/private" + bundle) == bundle,
+              AppPaths.installed("/private" + bundle))
 
         // 排序
         func item(_ name: String, cpu: Double, memory: UInt64) -> ProcessItem {

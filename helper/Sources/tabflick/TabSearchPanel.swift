@@ -504,8 +504,11 @@ final class TabSearchModel: ObservableObject {
     private func refreshRunningApps() {
         var next = Set<String>()
         for app in NSWorkspace.shared.runningApplications {
-            if let id = app.bundleIdentifier { next.insert(id) }
-            if let path = app.bundleURL?.path { next.insert("path:" + path) }
+            if let id = app.bundleIdentifier {
+                next.insert(id)
+            } else if let path = AppPaths.installed(app) {
+                next.insert("path:" + path)
+            }
         }
         if next != runningApps { runningApps = next }
     }

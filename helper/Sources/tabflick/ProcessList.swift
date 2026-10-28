@@ -53,10 +53,27 @@ struct ProcessItem: Equatable {
 /// 正在运行的 App（主线程从 NSWorkspace 读好再交给后台）。
 struct RunningAppInfo: Equatable {
     let pid: Int32
-    /// 标准化的 bundle 路径，不带结尾的斜杠。
+    /// bundle 的真实路径（`AppPaths.real`，和 libproc 读到的可执行文件路径同一个口径），归组用。
     let bundlePath: String
+    /// 装在哪（`AppPaths.installed`）：列表行的路径（图标、拷贝路径、在访达中显示、动手前核对）。
+    /// 只有 iOS App 和 `bundlePath` 不一样。
+    let installedPath: String
     let name: String
     let bundleID: String?
+
+    init(pid: Int32, bundlePath: String, installedPath: String? = nil, name: String, bundleID: String?) {
+        self.pid = pid
+        self.bundlePath = bundlePath
+        self.installedPath = installedPath ?? bundlePath
+        self.name = name
+        self.bundleID = bundleID
+    }
+
+    /// 把 `bundlePath` 换成两种口径（`AppPaths`）。要碰文件系统（本机 78 个 App 约 1.6ms），在后台队列上调。
+    nonisolated func resolvingPaths() -> RunningAppInfo {
+        RunningAppInfo(pid: pid, bundlePath: AppPaths.real(bundlePath), installedPath: AppPaths.installed(bundlePath),
+                       name: name, bundleID: bundleID)
+    }
 }
 
 enum ProcessSort: String, CaseIterable {
@@ -115,7 +132,7 @@ enum ProcessCatalog {
                   let group = grouped[app.bundlePath], !group.isEmpty else { continue }
             let main = group.first { $0.pid == app.pid }
             let id = "app:" + app.bundlePath
-            items.append(ProcessItem(id: id, path: app.bundlePath, pid: app.pid, start: main?.start ?? 0,
+            items.append(ProcessItem(id: id, path: app.installedPath, pid: app.pid, start: main?.start ?? 0,
                                      name: app.name, commandLine: "", bundleID: app.bundleID,
                                      cpu: group.reduce(0) { $0 + $1.cpu },
                                      memory: group.reduce(0) { $0 + $1.memory },
@@ -365,7 +382,7 @@ final class ProcessMonitor {
             sampler.reset()
             _ = sampler.sample()
             Thread.sleep(forTimeInterval: 0.3)
-            let built = ProcessCatalog.build(sampler.sample(), apps: apps, ownPID: own)
+            let built = ProcessCatalog.build(sampler.sample(), apps: apps.map { $0.resolvingPaths() }, ownPID: own)
             Task { @MainActor in
                 guard current == self.generation else { return }
                 self.onUpdate?(built.items, built.members)
@@ -390,7 +407,7 @@ final class ProcessMonitor {
         let sampler = self.sampler
         let own = getpid()
         queue.async {
-            let built = ProcessCatalog.build(sampler.sample(), apps: apps, ownPID: own)
+            let built = ProcessCatalog.build(sampler.sample(), apps: apps.map { $0.resolvingPaths() }, ownPID: own)
             Task { @MainActor in
                 guard current == self.generation else { return }
                 self.onUpdate?(built.items, built.members)
@@ -398,13 +415,12 @@ final class ProcessMonitor {
         }
     }
 
-    /// 普通 App 和菜单栏 App（有 bundle 的）。
+    /// 普通 App 和菜单栏 App（有 bundle 的）。主线程上只读 NSWorkspace，路径在后台队列上解。
     private static func runningApps() -> [RunningAppInfo] {
         NSWorkspace.shared.runningApplications.compactMap { app in
             guard app.activationPolicy != .prohibited, let url = app.bundleURL else { return nil }
-            var path = url.standardizedFileURL.path
-            while path.count > 1, path.hasSuffix("/") { path.removeLast() }
-            return RunningAppInfo(pid: app.processIdentifier, bundlePath: path,
+            // 路径先放原样的，到后台队列上再 `resolvingPaths`
+            return RunningAppInfo(pid: app.processIdentifier, bundlePath: url.path,
                                   name: app.localizedName ?? url.deletingPathExtension().lastPathComponent,
                                   bundleID: app.bundleIdentifier)
         }
@@ -427,8 +443,8 @@ enum ProcessEnder {
     @MainActor static func end(_ item: ProcessItem, force: Bool) -> Outcome {
         if item.isApp {
             guard let app = NSRunningApplication(processIdentifier: item.pid), !app.isTerminated,
-                  app.bundleURL?.standardizedFileURL.path == item.path else { return .gone }
-            let accepted = force ? app.forceTerminate() : app.terminate()
+                  AppPaths.installed(app) == item.path else { return .gone }
+            let accepted = quit(app, force: force)
             log("💀 \(force ? "force-quit" : "quit") app \(item.name) (pid \(item.pid)) → \(accepted)")
             return accepted ? .sent : .failed
         }
@@ -444,6 +460,14 @@ enum ProcessEnder {
         case EPERM: return .denied
         default:    return .failed
         }
+    }
+
+    /// 退出一个 App，返回请求发没发出去（退没退另说）。iOS App 不接 `terminate()` 也不接退出的 Apple Event
+    /// （`AppPaths.isIOSApp`），只能发信号：SIGTERM 它就正常退了（iOS App 本来就按随时会被系统结束设计，
+    /// 切到后台时已经存好状态），强制是 SIGKILL。搜索面板「应用」行的「退出」也走这里。
+    @MainActor static func quit(_ app: NSRunningApplication, force: Bool) -> Bool {
+        guard AppPaths.isIOSApp(app) else { return force ? app.forceTerminate() : app.terminate() }
+        return kill(app.processIdentifier, force ? SIGKILL : SIGTERM) == 0
     }
 
     /// 等它退出：每 0.2 秒看一次，退了回调 true，到时间还活着回调 false。
