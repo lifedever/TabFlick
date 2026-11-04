@@ -90,6 +90,7 @@ window.TABFLICK_I18N = {
   "TabFlick — Installing the extension": "TabFlick — 擴充功能安裝說明",
   "Installing the extension": "擴充功能安裝說明",
   "The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.": "TabFlick Bridge 擴充功能還沒上架 Chrome 線上應用程式商店，需要透過開發人員模式安裝，只要設定一次。",
+  "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.": "已經裝了 TabFlick：打開它的「設定 → 瀏覽器」，按一下瀏覽器那一列的「安裝擴充功能」，在打開的擴充功能頁面開啟「開發人員模式」，把小視窗裡的資料夾拖到頁面上。下面是手動安裝。",
   "Download and unzip": "下載並解壓縮",
   "Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.": "下載 TabFlick-Extension.zip，按兩下解壓縮出 TabFlick-Extension 資料夾。把它放在不會誤刪的位置（例如「文件」）—— Chrome 會一直從這個資料夾載入擴充功能，刪掉資料夾，擴充功能就會失效。",
   "Download the extension": "下載擴充功能",
@@ -101,7 +102,7 @@ window.TABFLICK_I18N = {
   "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.": "點「載入未封裝項目」，選擇第 1 步解壓縮出的 TabFlick-Extension 資料夾。列表裡出現 TabFlick Bridge 就完成了。",
   "Confirm the connection": "確認連線",
   "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "保持 TabFlick 執行中，選單列圖示變亮、選單裡列出瀏覽器和分頁數，就是兩端接通了。之後按住 ⌃ 點 ⇥ 就能叫出切換器。",
-  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "升級：TabFlick 發新版時，如果版本說明提到擴充功能有更新，下載新的 zip，取代資料夾裡的內容，再到 chrome://extensions 點 TabFlick Bridge 卡片上的重新載入按鈕（↻）。",
+  "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.": "升級：擴充功能會跟著 TabFlick 自動更新。以前裝的擴充功能，TabFlick 更新後到 chrome://extensions 的 TabFlick Bridge 卡片上點一次重新載入按鈕（↻），之後就不用管了。選單列一直提示擴充功能需要更新，表示 TabFlick 找不到擴充功能資料夾：下載新的 zip，取代資料夾裡的內容，再點 ↻。",
   "← Back to home": "← 返回首頁"
  },
  "ja": {
@@ -194,6 +195,7 @@ window.TABFLICK_I18N = {
   "TabFlick — Installing the extension": "TabFlick — 拡張機能のインストール",
   "Installing the extension": "拡張機能のインストール",
   "The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.": "TabFlick Bridge拡張機能はまだChrome ウェブストアで公開されていないため、デベロッパー モードでインストールします。設定は一度だけです。",
+  "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.": "TabFlickをお使いなら：「設定 → ブラウザ」でブラウザの行にある「拡張機能をインストール」をクリックし、開いた拡張機能ページで「デベロッパー モード」をオンにして、小さなウインドウのフォルダをページにドラッグします。以下は手動でインストールする手順です。",
   "Download and unzip": "ダウンロードして解凍",
   "Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.": "TabFlick-Extension.zipをダウンロードし、ダブルクリックで解凍してTabFlick-Extensionフォルダを取り出します。Chromeはこのフォルダから拡張機能を読み込むため、削除しない場所（「書類」など）に置いてください。フォルダを削除すると拡張機能は無効になります。",
   "Download the extension": "拡張機能をダウンロード",
@@ -205,7 +207,7 @@ window.TABFLICK_I18N = {
   "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.": "「パッケージ化されていない拡張機能を読み込む」をクリックし、手順1のTabFlick-Extensionフォルダを選択します。一覧にTabFlick Bridgeが表示されれば完了です。",
   "Confirm the connection": "接続を確認",
   "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "TabFlick を起動しておくと、メニューバーのアイコンが明るくなり、メニューにブラウザ名とタブ数が表示されます。これで接続完了です。⌃ を押したまま ⇥ を押すとスイッチャーが開きます。",
-  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "アップデート：TabFlickのリリースノートに拡張機能の更新が記載されていたら、新しいzipをダウンロードしてフォルダの中身を置き換え、chrome://extensionsのTabFlick Bridgeカードにある再読み込みボタン（↻）をクリックします。",
+  "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.": "アップデート：拡張機能はTabFlickと一緒に自動でアップデートされます。以前にインストールした拡張機能は、TabFlickのアップデート後にchrome://extensionsのTabFlick Bridgeカードにある再読み込みボタン（↻）を一度クリックすれば、以降は操作不要です。メニューバーに拡張機能のアップデートが必要と表示され続ける場合は、TabFlickが拡張機能のフォルダを見つけられていません。新しいzipをダウンロードしてフォルダの中身を置き換え、↻をクリックします。",
   "← Back to home": "← ホームに戻る"
  },
  "ko": {
@@ -298,6 +300,7 @@ window.TABFLICK_I18N = {
   "TabFlick — Installing the extension": "TabFlick — 확장 프로그램 설치",
   "Installing the extension": "확장 프로그램 설치",
   "The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.": "TabFlick Bridge 확장 프로그램은 아직 Chrome 웹 스토어에 없으므로 개발자 모드로 설치합니다. 한 번만 설정하면 됩니다.",
+  "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.": "TabFlick을 이미 설치했다면: ‘설정 → 브라우저’에서 브라우저 행의 ‘확장 프로그램 설치’를 클릭하고, 열린 확장 프로그램 페이지에서 ‘개발자 모드’를 켠 다음 작은 창의 폴더를 페이지로 드래그하세요. 아래는 직접 설치하는 방법입니다.",
   "Download and unzip": "다운로드 및 압축 해제",
   "Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.": "TabFlick-Extension.zip을 다운로드하고 더블 클릭해 압축을 풀면 TabFlick-Extension 폴더가 생깁니다. 이 폴더는 계속 둘 위치(예: ‘문서’)에 보관하세요. Chrome이 이 폴더에서 확장 프로그램을 불러오므로 폴더를 삭제하면 확장 프로그램이 작동하지 않습니다.",
   "Download the extension": "확장 프로그램 다운로드",
@@ -309,7 +312,7 @@ window.TABFLICK_I18N = {
   "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.": "‘압축해제된 확장 프로그램을 로드합니다’를 클릭하고 1단계에서 압축을 푼 TabFlick-Extension 폴더를 선택하세요. 목록에 TabFlick Bridge가 나타나면 설치가 끝난 것입니다.",
   "Confirm the connection": "연결 확인",
   "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "TabFlick이 실행 중이면 메뉴 막대 아이콘이 밝아지고 메뉴에 브라우저와 탭 수가 표시됩니다. 이제 ⌃를 누른 채 ⇥를 누르면 전환기가 열립니다.",
-  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "업그레이드: TabFlick 릴리스 노트에 확장 프로그램 업데이트가 있으면 새 zip을 다운로드해 폴더 내용을 교체한 다음, chrome://extensions의 TabFlick Bridge 카드에서 새로고침 버튼(↻)을 클릭하세요.",
+  "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.": "업그레이드: 확장 프로그램은 TabFlick과 함께 자동으로 업데이트됩니다. 이전에 설치한 확장 프로그램은 TabFlick이 업데이트된 뒤 chrome://extensions의 TabFlick Bridge 카드에서 새로고침 버튼(↻)을 한 번 클릭하면 이후에는 할 일이 없습니다. 메뉴 막대에 확장 프로그램 업데이트가 필요하다는 표시가 계속되면 TabFlick이 확장 프로그램 폴더를 찾지 못한 것입니다. 새 zip을 다운로드해 폴더 내용을 교체한 다음 ↻를 클릭하세요.",
   "← Back to home": "← 홈으로 돌아가기"
  },
  "es": {
@@ -402,6 +405,7 @@ window.TABFLICK_I18N = {
   "TabFlick — Installing the extension": "TabFlick — Instalación de la extensión",
   "Installing the extension": "Instalación de la extensión",
   "The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.": "La extensión TabFlick Bridge aún no está en Chrome Web Store, así que se instala con el Modo de desarrollador. Solo hay que hacerlo una vez.",
+  "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.": "¿Ya tienes TabFlick? En Ajustes → Navegadores, hacer clic en Instalar extensión junto al navegador. En la página de extensiones que se abre, activar el Modo de desarrollador y arrastrar la carpeta de la ventana pequeña a la página. Los pasos de abajo son la instalación manual.",
   "Download and unzip": "Descargar y descomprimir",
   "Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.": "Descargar TabFlick-Extension.zip y hacer doble clic para obtener la carpeta TabFlick-Extension. Conviene guardarla en un sitio fijo (p. ej., Documentos): Chrome carga la extensión desde esa carpeta y, si se borra, la extensión deja de funcionar.",
   "Download the extension": "Descargar la extensión",
@@ -413,7 +417,7 @@ window.TABFLICK_I18N = {
   "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.": "Hacer clic en Cargar descomprimida y seleccionar la carpeta TabFlick-Extension del paso 1. Cuando TabFlick Bridge aparece en la lista, ya está instalada.",
   "Confirm the connection": "Comprobar la conexión",
   "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "Con TabFlick en marcha, el icono de la barra de menús se ilumina y su menú muestra el navegador con el número de pestañas. Mantener ⌃ y pulsar ⇥ abre el selector.",
-  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "Actualización: cuando las notas de una versión de TabFlick mencionan una actualización de la extensión, descargar el zip nuevo, reemplazar el contenido de la carpeta y pulsar el botón de recargar (↻) en la tarjeta de TabFlick Bridge en chrome://extensions.",
+  "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.": "Actualización: la extensión se actualiza junto con TabFlick. Si se instaló antes, pulsar una vez el botón de recargar (↻) en la tarjeta de TabFlick Bridge en chrome://extensions después de que TabFlick se actualice; a partir de ahí no hay que hacer nada. Si la barra de menús sigue indicando que la extensión necesita actualizarse, TabFlick no encontró la carpeta de la extensión: descargar el zip nuevo, reemplazar el contenido de la carpeta y pulsar ↻.",
   "← Back to home": "← Volver al inicio"
  },
  "fr": {
@@ -506,6 +510,7 @@ window.TABFLICK_I18N = {
   "TabFlick — Installing the extension": "TabFlick — Installation de l'extension",
   "Installing the extension": "Installation de l'extension",
   "The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.": "L'extension TabFlick Bridge n'est pas encore sur le Chrome Web Store : elle s'installe via le Mode développeur, une seule fois.",
+  "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.": "Vous avez déjà TabFlick ? Dans Réglages → Navigateurs, cliquez sur Installer l'extension à côté du navigateur. Dans la page des extensions qui s'ouvre, activez le Mode développeur et faites glisser le dossier de la petite fenêtre sur la page. Les étapes ci-dessous décrivent l'installation manuelle.",
   "Download and unzip": "Télécharger et décompresser",
   "Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.": "Téléchargez TabFlick-Extension.zip et double-cliquez dessus pour obtenir le dossier TabFlick-Extension. Rangez-le à un endroit durable (par ex. Documents) — Chrome charge l'extension depuis ce dossier : le supprimer désactive l'extension.",
   "Download the extension": "Télécharger l'extension",
@@ -517,7 +522,7 @@ window.TABFLICK_I18N = {
   "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.": "Cliquez sur Charger l'extension non empaquetée et sélectionnez le dossier TabFlick-Extension de l'étape 1. Quand TabFlick Bridge apparaît dans la liste, c'est terminé.",
   "Confirm the connection": "Vérifier la connexion",
   "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "Lorsque TabFlick est ouvert, l'icône de la barre des menus s'allume et son menu affiche votre navigateur avec le nombre d'onglets. Maintenez ⌃ et appuyez sur ⇥ pour afficher le sélecteur.",
-  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "Mise à jour : quand les notes d'une version de TabFlick signalent une mise à jour de l'extension, téléchargez le nouveau zip, remplacez le contenu du dossier, puis cliquez sur le bouton d'actualisation (↻) de la carte TabFlick Bridge dans chrome://extensions.",
+  "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.": "Mise à jour : l'extension se met à jour avec TabFlick. Si vous l'avez installée avant, cliquez une fois sur le bouton d'actualisation (↻) de la carte TabFlick Bridge dans chrome://extensions après la mise à jour de TabFlick ; ensuite, il n'y a plus rien à faire. Si la barre des menus indique toujours que l'extension doit être mise à jour, TabFlick n'a pas trouvé le dossier de l'extension : téléchargez le nouveau zip, remplacez le contenu du dossier, puis cliquez sur ↻.",
   "← Back to home": "← Retour à l'accueil"
  },
  "de": {
@@ -610,6 +615,7 @@ window.TABFLICK_I18N = {
   "TabFlick — Installing the extension": "TabFlick – Erweiterung installieren",
   "Installing the extension": "Erweiterung installieren",
   "The TabFlick Bridge extension isn't on the Chrome Web Store yet, so it installs via Developer mode — a one-time setup.": "Die Erweiterung TabFlick Bridge ist noch nicht im Chrome Web Store, daher erfolgt die Installation über den Entwicklermodus – einmalig.",
+  "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.": "TabFlick schon installiert? In Einstellungen → Browser neben dem Browser auf „Erweiterung installieren“ klicken. Auf der Erweiterungsseite, die sich öffnet, den Entwicklermodus einschalten und den Ordner aus dem kleinen Fenster auf die Seite ziehen. Die Schritte unten beschreiben die manuelle Installation.",
   "Download and unzip": "Herunterladen und entpacken",
   "Download TabFlick-Extension.zip and double-click to unzip the TabFlick-Extension folder. Keep it somewhere permanent (e.g. Documents) — Chrome loads the extension from this folder, so deleting it disables the extension.": "TabFlick-Extension.zip herunterladen und per Doppelklick zum Ordner TabFlick-Extension entpacken. Den Ordner an einem dauerhaften Ort ablegen (z. B. „Dokumente“) – Chrome lädt die Erweiterung aus diesem Ordner; wird er gelöscht, funktioniert die Erweiterung nicht mehr.",
   "Download the extension": "Erweiterung herunterladen",
@@ -621,7 +627,7 @@ window.TABFLICK_I18N = {
   "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.": "Auf „Entpackte Erweiterung laden“ klicken und den Ordner TabFlick-Extension aus Schritt 1 wählen. Erscheint TabFlick Bridge in der Liste, ist die Installation fertig.",
   "Confirm the connection": "Verbindung prüfen",
   "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "Solange TabFlick läuft, leuchtet das Symbol in der Menüleiste und das Menü zeigt den Browser mit der Anzahl der Tabs. ⌃ gedrückt halten und ⇥ drücken öffnet den Umschalter.",
-  "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "Aktualisieren: Nennen die Versionshinweise von TabFlick ein Update der Erweiterung, die neue ZIP-Datei herunterladen, den Ordnerinhalt ersetzen und in chrome://extensions auf der Karte von TabFlick Bridge auf „Neu laden“ (↻) klicken.",
+  "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.": "Aktualisieren: Die Erweiterung wird zusammen mit TabFlick aktualisiert. Wurde sie früher installiert, nach dem Update von TabFlick einmal in chrome://extensions auf der Karte von TabFlick Bridge auf „Neu laden“ (↻) klicken; danach ist nichts mehr zu tun. Meldet die Menüleiste weiterhin, dass die Erweiterung aktualisiert werden muss, hat TabFlick den Ordner der Erweiterung nicht gefunden: die neue ZIP-Datei herunterladen, den Ordnerinhalt ersetzen und auf ↻ klicken.",
   "← Back to home": "← Zur Startseite"
  }
 };

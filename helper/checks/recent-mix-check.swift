@@ -11,9 +11,11 @@ import Foundation
 private typealias App = RecentMix.App
 
 /// 标签：默认单 Profile、连接 0；mru 是它在连接 MRU 里的位置。
+/// inMRU = false：不在扩展的 MRU 里（从没激活过，排在末尾凑数）。
 private func tab(_ time: Double?, _ browser: String = chrome, mru: Int, client: Int = 0,
-                 front: Bool = true) -> RecentMix.Tab {
-    RecentMix.Tab(lastAccessed: time, browser: browser, client: client, mruIndex: mru, frontProfile: front)
+                 front: Bool = true, inMRU: Bool = true) -> RecentMix.Tab {
+    RecentMix.Tab(lastAccessed: time, browser: browser, client: client, mruIndex: mru, frontProfile: front,
+                  inMRU: inMRU)
 }
 
 private struct Case {
@@ -96,6 +98,20 @@ private let cases: [Case] = [
          apps: [],
          activated: [:],
          want: [.tab(1), .tab(2), .tab(0)]),
+    // 用过的 A（100）、B（50），别处脚本 / 扩展在后台开的 U 从没激活过，浏览器给的是创建时间（900），
+    // 扩展把它排在末尾凑数。末尾 = MRU 最旧，原来的单调校正从它往新走，A、B 都被抬到 900，
+    // 整个浏览器压过 500 时用过的 VS Code。U 只用自己的时间，不抬别的
+    Case(name: "不在 MRU 里的标签不抬高同一浏览器的别的标签",
+         tabs: [tab(100, mru: 0), tab(50, mru: 1), tab(900, mru: 2, inMRU: false)],
+         apps: [App(usedAt: 500, bundleID: "com.microsoft.VSCode")],
+         activated: [:],
+         want: [.tab(2), .app(0), .tab(0), .tab(1)]),
+    // 扩展刚重载、MRU 是空的：全部不在 MRU 里，各按浏览器给的时间排（这时它们是真的用过的时间）
+    Case(name: "全不在 MRU 里时各按自己的时间",
+         tabs: [tab(100, mru: 0, inMRU: false), tab(300, mru: 1, inMRU: false)],
+         apps: [App(usedAt: 200, bundleID: "a")],
+         activated: [chrome: 400],
+         want: [.tab(1), .app(0), .tab(0)]),
     // 同一个浏览器两个 Profile：不在前台的那个 Profile 的当前标签不沾浏览器切到前台的时间
     Case(name: "不在前台的 Profile 不沾浏览器的时间",
          tabs: [tab(100, mru: 0, client: 0, front: false), tab(150, mru: 0, client: 1, front: true)],
@@ -132,6 +148,10 @@ struct RecentMixCheck {
              [tab(100, mru: 0), tab(50, mru: 1)], [App(usedAt: 180, bundleID: "slack")],
              [chrome: 150], [chrome: 170],
              [E(ref: .app(0), leftAt: 180), E(ref: .tab(0), leftAt: 170), E(ref: .tab(1), leftAt: 150)]),
+            // MRU 空着（扩展刚重载）时排第一的不一定是正显示的，不拿浏览器切走的时间
+            ("不在 MRU 里的第一个不认浏览器切走的时间",
+             [tab(100, mru: 0, inMRU: false)], [], [:], [chrome: 170],
+             [E(ref: .tab(0), leftAt: 100)]),
             ("没有时间的只看记下来的",
              [], [App(usedAt: nil, leftAt: 40, bundleID: "a"), App(usedAt: nil, bundleID: "b")], [:], [:],
              [E(ref: .app(0), leftAt: 40), E(ref: .app(1), leftAt: nil)]),
@@ -145,7 +165,22 @@ struct RecentMixCheck {
             }
         }
 
-        let total = cases.count + leftCases.count
+        // 全局切换器给浏览器分组排先后：取在 MRU 里的标签里最新的；一个都不在才看全部
+        let latestCases: [(String, [(lastAccessed: Double?, inMRU: Bool)], Double)] = [
+            ("不在 MRU 里的创建时间不算", [(100, true), (50, true), (900, false)], 100),
+            ("一个都不在 MRU 里时看全部", [(100, false), (300, false)], 300),
+            ("没有时间是 0", [(nil, true)], 0),
+            ("空组是 0", [], 0),
+        ]
+        for (name, group, want) in latestCases {
+            let got = RecentMix.latestUse(group)
+            if got != want {
+                failures += 1
+                print("✗ \(name)：期望 \(want)，实际 \(got)")
+            }
+        }
+
+        let total = cases.count + leftCases.count + latestCases.count
         print(failures == 0 ? "全部通过（\(total) 组）" : "\(failures) 项失败（共 \(total) 组）")
         if failures > 0 { fatalError("RecentMix 校验未通过") }
     }

@@ -1264,6 +1264,31 @@ final class TabSearchModel: ObservableObject {
         return head.map { .command($0, target) } + openWithRows(for: target) + tail.map { .command($0, target) }
     }
 
+    /// 打开方式列表打了字时，常用的那份之外再从所有装着的 App 里找（用户 2026-10-31 要的，同访达「打开方式 →
+    /// 其他… → 所有应用程序」）：Muxy 这类没向 Launch Services 登记能打开什么、也不在终端名单里的 App，
+    /// 默认列表里没有，搜得到就能用。交过去走的还是 `NSWorkspace.open`，App 接不接由它自己。
+    /// 没输入时不列：默认列表只放常用的。
+    private func otherOpeners(for target: SearchRow, listed: [SearchRow]) -> [(row: SearchRow, app: AppEntry)] {
+        let make: (OpenerApp) -> SearchRow
+        switch target {
+        case .folder(let folder):       make = { .opener($0, folder) }
+        case .selection(let selection): make = { .selectionOpener($0, selection) }
+        default: return []
+        }
+        let shown = Set(listed.compactMap { row -> String? in
+            switch row {
+            case .opener(let o, _), .selectionOpener(let o, _): return o.path
+            default: return nil
+            }
+        })
+        let own = Bundle.main.bundleIdentifier
+        // 同分按常用度排（`appsByPrior`，同「应用」段有输入时）
+        return appsByPrior.compactMap { app in
+            guard !shown.contains(app.path), app.bundleID == nil || app.bundleID != own else { return nil }
+            return (make(OpenerApp(name: app.name, url: app.url)), app)
+        }
+    }
+
     /// 「用 X 打开」：换个浏览器打开这一页，它自己所在的浏览器不列（回车开的就是它）。
     /// 只给 http(s)：chrome:// 这类页面别家打不开。
     private func openWithRows(for target: SearchRow) -> [SearchRow] {
@@ -1346,13 +1371,25 @@ final class TabSearchModel: ObservableObject {
             next = processRows(trimmed)
         } else if let target = actionTarget {
             // 操作列表：输入过滤操作名（同样认拼音）
-            let all = commandRows(for: target)
-            let candidates = all.map { row -> SearchCandidate in
+            let listed = commandRows(for: target)
+            let others = trimmed.isEmpty ? [] : otherOpeners(for: target, listed: listed)
+            let all = listed + others.map(\.row)
+            let candidates = listed.map { row -> SearchCandidate in
                 // 内置命令带着别名过滤（二级里打「end」也要能找到「结束当前会话」）
                 if case .appCommand(let command, let app) = row { return commandCandidate(command, app) }
                 return candidate(title: row.displayTitle, url: "")
+            } + others.map { app in
+                // 只比名字（显示名、英文原名、访达注释）：带上 bundle id 的话打「com」所有 App 都命中
+                candidate(title: [app.app.name, app.app.comment].compactMap { $0 }.joined(separator: " "), url: "",
+                          identity: app.app.path, name: app.app.name, alias: app.app.alternateName, abbreviations: true)
             }
-            next = TabSearch.rank(candidates, query: trimmed).map { all[$0] }
+            // 同分时列表里本来就有的排前；别的 App 最多列 soloLimit 个（打一个字母能命中上百个）
+            var extra = 0
+            next = TabSearch.rank(candidates, query: trimmed).compactMap { index in
+                guard index >= listed.count else { return all[index] }
+                extra += 1
+                return extra <= Self.soloLimit ? all[index] : nil
+            }
         } else {
             next = mode == .all ? allRows(trimmed) : modeRows(mode, trimmed)
         }
@@ -1448,9 +1485,10 @@ final class TabSearchModel: ObservableObject {
         if trimmed.isEmpty {
             let rows: [SearchRow]
             let kind: SearchSectionKind?
+            let context = finderContextRows
             if allEmptyContent == .recent {
                 let recentRows = placingCurrentSecond(recent)
-                let suggested = suggestionRows(above: recentRows)
+                let suggested = context + suggestionRows(above: recentRows, limit: SuggestionStore.limit - context.count)
                 guard !suggested.isEmpty else {
                     if !recentRows.isEmpty { layout = [SectionSpec(kind: .recent, count: recentRows.count)] }
                     return recentRows
@@ -1460,18 +1498,23 @@ final class TabSearchModel: ObservableObject {
                 let rest = recentRows.filter { !lifted.contains($0.id) }
                 layout = [SectionSpec(kind: .suggested, count: suggested.count)]
                     + (rest.isEmpty ? [] : [SectionSpec(kind: .recent, count: rest.count)])
-                defaultCursor = rest.isEmpty ? 0 : suggested.count
+                // 回车默认回到上一个（「最近使用」第一行）；访达在前台时默认选中「打开方式…」
+                defaultCursor = rest.isEmpty || !context.isEmpty ? 0 : suggested.count
                 return suggested + rest
             } else if let content = allEmptyContent.mode {
                 rows = modeRows(content, "")
                 kind = SearchSectionKind(content: content)
             } else {
-                return []
+                rows = []
+                kind = nil
             }
             if let kind, !rows.isEmpty {
                 layout = [SectionSpec(kind: kind, count: rows.count)]
             }
-            return rows
+            if !context.isEmpty {
+                layout = [SectionSpec(kind: .suggested, count: context.count)] + layout
+            }
+            return context + rows
         }
 
         // 各段先拿全量命中（段内排好序），最后统一截断：截掉几条要写在分组头上，
@@ -1627,11 +1670,17 @@ final class TabSearchModel: ObservableObject {
     /// 「最近使用」前面这几行不推：回车回到上一个的就是它们，推了等于重复。
     static let suggestionSkipsRecent = 5
 
+    /// 访达在前台时首页第一行的「打开方式…」，默认选中：再敲一次回车就进打开方式列表选 App（2026-11-04
+    /// 用户要的）。对象是选中项，没选就是当前窗口的文件夹，副标题在预读到之后写上名字。占「推荐」的一个位置。
+    private var finderContextRows: [SearchRow] {
+        finderFront ? [.appCommand(OpenWithCommand.command(selection: finderSelection), nil)] : []
+    }
+
     /// 首页「推荐」那几行（最多 `SuggestionStore.limit` 条）：按推荐分从高到低，把账上的身份认回此刻
     /// 能打开的一行 —— 在「最近使用」里的用那一行（随后从那里挪上来），App 要还装着、文件夹要还收藏着、
     /// 网页开着就切过去、没开着照最近关闭或历史那样新开。当前那一项、「最近使用」最前面几行不推。
-    private func suggestionRows(above recentRows: [SearchRow]) -> [SearchRow] {
-        guard let ranked = suggestions?.ranked(), !ranked.isEmpty else { return [] }
+    private func suggestionRows(above recentRows: [SearchRow], limit: Int = SuggestionStore.limit) -> [SearchRow] {
+        guard limit > 0, let ranked = suggestions?.ranked(), !ranked.isEmpty else { return [] }
         let skipped = Set(recentRows.prefix(Self.suggestionSkipsRecent).map(\.id) + [currentID].compactMap { $0 })
         var closedByURL: [String: ClosedTab]?
         var out: [SearchRow] = []
@@ -1668,7 +1717,7 @@ final class TabSearchModel: ObservableObject {
             guard let row, !skipped.contains(row.id), !taken.contains(row.id) else { continue }
             taken.insert(row.id)
             out.append(row)
-            if out.count == SuggestionStore.limit { break }
+            if out.count == limit { break }
         }
         return out
     }
@@ -3332,6 +3381,8 @@ final class TabSearchPanel {
     var pickHandler: ((SearchPick) -> Void)?
     /// 用户要在面板里关掉一个活标签（参数 item.id）。面板不关。
     var closeHandler: ((String) -> Void)?
+    /// 底栏「扩展需要更新」点下去做什么（MRUController 接：文件换好了打开扩展页，没换成去官网说明）。
+    var extensionUpdateHandler: (() -> Void)?
     /// 「操作」列表里选了一项（默认动作除外，那个走 pickHandler）。`staysInPanel` 的
     /// 那几项调用时面板还开着、已退回原列表；其余面板已关。
     var commandHandler: ((RowCommand, SearchRow) -> Void)?
@@ -3527,7 +3578,11 @@ final class TabSearchPanel {
         model.onExtensionUpdateTap = { [weak self] in
             self?.closingAfterPick = true
             self?.close()
-            NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
+            if let handler = self?.extensionUpdateHandler {
+                handler()
+            } else {
+                NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
+            }
         }
         model.onContentHeightChange = { [weak self] height in self?.resizeToContent(height) }
         fieldHandle.onCommit = { [weak self] in

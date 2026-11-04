@@ -57,6 +57,7 @@ function loadExtension({ tabs, sessionStorage = {}, lifetimeHours = 0 }) {
       },
       tabs: {
         onActivated: noopEvent(),
+        onCreated: noopEvent(),
         onRemoved: { addListener(fn) { onRemovedListener = fn; } },
         onUpdated: noopEvent(),
         onAttached: noopEvent(),
@@ -85,6 +86,7 @@ function loadExtension({ tabs, sessionStorage = {}, lifetimeHours = 0 }) {
       action: { onClicked: noopEvent() },
       alarms: { onAlarm: noopEvent(), create() {}, clear() {} },
       storage: {
+        local: { get: async () => ({}), set: async () => {}, remove: async () => {} },
         session: {
           get: async (keys) => {
             const out = {};

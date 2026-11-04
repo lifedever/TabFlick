@@ -253,6 +253,7 @@ function loadPage() {
         },
         tabs: {
           onActivated: noopEvent(),
+          onCreated: noopEvent(),
           onRemoved: { addListener(fn) { onRemoved = fn; } },
           onUpdated: noopEvent(),
           onAttached: noopEvent(),

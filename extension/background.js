@@ -15,6 +15,13 @@ const RECONNECT_ALARM = "tabflick-reconnect";
 const STORAGE_KEY = "mru";
 const META_KEY = "tabMeta";
 
+// 跟着 app 自动更新（reloadForUpdate）：重载会清空 storage.session，MRU 先暂存到 storage.local，
+// 重载后 loadMRU 接上。都在 storage.local 里，重载不清。
+const MRU_CARRY_KEY = "mruCarry";
+const MRU_CARRY_MAX_AGE_MS = 2 * 60 * 1000;
+const SELF_RELOAD_KEY = "selfReload";
+const SELF_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
+
 /// 配置的事实源在 macOS app 那边（它有原生设置窗口，且进程一直活着）。
 /// 这里的值只是内存里的一份副本：每次连上 helper 都会重新要一份，
 /// 所以 service worker 被回收也不会导致两边不一致。
@@ -58,13 +65,80 @@ let tabMeta = {};
 
 // service worker 随时可能被回收，MRU 必须能从 storage.session 恢复。
 // storage.session 存在内存里，浏览器关闭即清空，正好符合「本次浏览会话」语义。
+//
+// 只读一次，同时来的共用这一次：SW 被某个事件唤醒时，常常还有别的事件（连上 helper 后的
+// pushMRU）一起来读。各读各的话，后回来的那份是发请求时的旧值，会盖掉先回来那边刚写进去的
+// （⌘点击插到第二位的标签就这么丢过）。读失败不缓存，下次再读。
+let mruLoading = null;
 async function loadMRU() {
   if (mruLoaded) return;
-  const stored = await chrome.storage.session.get([STORAGE_KEY, META_KEY]);
-  mru = stored[STORAGE_KEY] ?? [];
-  // 影子副本一起恢复 —— SW 被回收后用户关掉的标签，元信息只能来自这里
-  tabMeta = stored[META_KEY] ?? {};
-  mruLoaded = true;
+  mruLoading ??= (async () => {
+    const stored = await chrome.storage.session.get([STORAGE_KEY, META_KEY]);
+    let order = stored[STORAGE_KEY];
+    // 影子副本一起恢复 —— SW 被回收后用户关掉的标签，元信息只能来自这里
+    let meta = stored[META_KEY];
+    if (order === undefined) {
+      const carried = await takeCarriedMRU();
+      if (carried) {
+        ({ order, meta } = carried);
+        await chrome.storage.session.set({ [STORAGE_KEY]: order, [META_KEY]: meta });
+      }
+    }
+    mru = order ?? [];
+    tabMeta = meta ?? {};
+    mruLoaded = true;
+  })().catch((error) => {
+    mruLoading = null;
+    throw error;
+  });
+  await mruLoading;
+}
+
+/// 跟着 app 更新重载之前暂存的 MRU（见 reloadForUpdate）。取一次就删；太久的不要（重载
+/// 只要一两秒，放久了多半是重载完浏览器就退了，标签 id 早换了一套）。
+async function takeCarriedMRU() {
+  const { [MRU_CARRY_KEY]: carried } = await chrome.storage.local.get(MRU_CARRY_KEY);
+  if (carried === undefined) return null;
+  await chrome.storage.local.remove(MRU_CARRY_KEY);
+  const fresh = typeof carried?.at === "number" && Date.now() - carried.at < MRU_CARRY_MAX_AGE_MS;
+  if (!fresh || !Array.isArray(carried.mru) || !carried.mru.every(Number.isInteger)) return null;
+  const meta = carried.tabMeta && typeof carried.tabMeta === "object" ? carried.tabMeta : {};
+  return { order: carried.mru, meta };
+}
+
+/// a 是否比 b 新（按数字逐段比，缺位补 0）。
+function isNewerVersion(a, b) {
+  const x = String(a).split(".").map((n) => parseInt(n, 10) || 0);
+  const y = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  }
+  return false;
+}
+
+/// helper 把这个扩展加载的那个文件夹换成了新版本（扩展随 app 一起更新）：重载自己读新文件。
+///
+/// 解压加载的扩展重载时从磁盘重读，新加的权限也直接生效（Chrome for Testing 148 实测）。
+/// 重载会清空 storage.session，MRU 先暂存到 storage.local，重载后 loadMRU 接上 ——
+/// 不然每次 app 更新 ⌃⇥ 的顺序都归零。
+///
+/// 防反复重载：同一个目标版本 10 分钟内只重载一次。重载完还是旧版本，说明 helper 换的不是
+/// 我们加载的那个文件夹，再重载也没用。
+async function reloadForUpdate(version) {
+  const current = chrome.runtime.getManifest().version;
+  if (!isNewerVersion(version, current)) return;
+  const { [SELF_RELOAD_KEY]: last } = await chrome.storage.local.get(SELF_RELOAD_KEY);
+  if (last?.version === version && Date.now() - last.at < SELF_RELOAD_COOLDOWN_MS) {
+    send({ type: "log", message: `self-reload to ${version} skipped: tried at ${new Date(last.at).toISOString()}, still ${current}` });
+    return;
+  }
+  await loadMRU();
+  await chrome.storage.local.set({
+    [SELF_RELOAD_KEY]: { version, at: Date.now() },
+    [MRU_CARRY_KEY]: { mru, tabMeta, at: Date.now() },
+  });
+  send({ type: "log", message: `self-reload ${current} → ${version}` });
+  chrome.runtime.reload();
 }
 
 async function persistMRU() {
@@ -86,6 +160,22 @@ async function forgetTab(tabId) {
   const i = mru.indexOf(tabId);
   if (i === -1) return;
   mru.splice(i, 1);
+  await persistMRU();
+  await pushMRU();
+}
+
+/// 从当前标签开到后台的新标签（⌘点击、中键、右键「在新标签页中打开链接」）排到 MRU 第二位，
+/// ⌃⇥ 按一下就到它，不用先绕到上一个用过的标签。不处理的话它从没激活过，排在列表末尾。
+///
+/// 认法：没激活、有 opener、开它的正是当前标签（`mru[0]`）—— 浏览器把它摆在当前标签旁边
+/// 用的也是 opener。会话恢复、我们自己补开的置顶标签没有 opener，别的后台标签里的脚本
+/// 开出来的 opener 不是当前标签，都照旧排末尾。MRU 还空着（扩展刚重载、还没切过标签）时
+/// 不知道谁是当前，也不动，否则它会被当成当前标签。连开几个时后开的在前。
+async function noteBackgroundOpen(tab) {
+  if (tab.active || typeof tab.openerTabId !== "number") return;
+  await loadMRU();
+  if (mru[0] !== tab.openerTabId || mru.includes(tab.id)) return;
+  mru.splice(1, 0, tab.id);
   await persistMRU();
   await pushMRU();
 }
@@ -164,6 +254,10 @@ async function pushMRU() {
         lastAccessed: typeof t.lastAccessed === "number" ? t.lastAccessed : 0,
         // 置顶态，切换器卡片的星标用
         pinned: t.pinned ?? false,
+        // 在不在 MRU 里。不在的（从没激活过、或扩展重载后还没切到过）排在末尾只是凑数，
+        // 位置不代表先后；从没激活过的 lastAccessed 还是创建时间。helper 拿 MRU 位置校正
+        // 时间、给浏览器分组排先后时要跳过它们，否则一个后台标签就把整个浏览器顶到最前。
+        inMRU: knownSet.has(t.id),
       };
     }),
   });
@@ -892,6 +986,9 @@ async function handleHelperMessage(raw) {
     case "switch":
       if (typeof msg.tabId === "number") await activateTab(msg.tabId);
       break;
+    case "extensionFilesUpdated":
+      if (typeof msg.version === "string") await reloadForUpdate(msg.version);
+      break;
     case "unpin":
       // 取消收藏：撤销该域名下所有标签的置顶（收藏核对只补不撤，
       // 撤销必须由 helper 明确指令）
@@ -1115,6 +1212,9 @@ chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
   touchTab(tabId);
   scheduleThumbnail(tabId, windowId);
 });
+
+// ⌘点击开到后台的标签排在当前标签后面（返回 promise 给测试等）
+chrome.tabs.onCreated.addListener((tab) => noteBackgroundOpen(tab));
 
 // 顺序是关键：recordClosed 要从影子副本里读元信息，而 forgetTab 会触发
 // pushMRU 把这条从副本里清掉。两个都 async，不 await 串起来的话就是在赌

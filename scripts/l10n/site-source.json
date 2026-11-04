@@ -445,6 +445,11 @@
   "page": "docs/install-extension.html"
  },
  {
+  "key": "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.",
+  "zh": "已经装了 TabFlick：打开它的设置 → 浏览器，点浏览器那一行的「安装扩展」，在打开的扩展页开启开发者模式，把小窗里的文件夹拖到页面上。下面是手动安装。",
+  "page": "docs/install-extension.html"
+ },
+ {
   "key": "Download and unzip",
   "zh": "下载并解压扩展包",
   "page": "docs/install-extension.html"
@@ -500,8 +505,8 @@
   "page": "docs/install-extension.html"
  },
  {
-  "key": "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.",
-  "zh": "升级说明：TabFlick 应用发新版时，如果发版说明提到扩展有更新，下载新的扩展包解压覆盖原文件夹，然后在 chrome://extensions 点击 TabFlick Bridge 卡片上的刷新按钮（↻）即可。",
+  "key": "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.",
+  "zh": "升级说明：扩展跟着 TabFlick 自动更新。以前装的扩展，TabFlick 更新后在 chrome://extensions 的 TabFlick Bridge 卡片上点一次刷新按钮（↻），之后就不用管了。菜单栏一直提示扩展需要更新，说明 TabFlick 找不到扩展文件夹：下载新的扩展包覆盖原文件夹，再点 ↻。",
   "page": "docs/install-extension.html"
  },
  {

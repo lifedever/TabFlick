@@ -12,6 +12,9 @@ struct TabInfo: Decodable {
     let lastAccessed: Double?
     /// 是否置顶。切换器卡片的置顶标记用；旧版扩展没有该字段。
     let pinned: Bool?
+    /// 在不在扩展的 MRU 里（老扩展不报，nil 当在）。不在的排在末尾只是凑数、位置不代表先后，
+    /// 从没激活过的 `lastAccessed` 还是创建时间 —— 拿时间比「最近」的地方要跳过它们，见 `RecentMix`。
+    var inMRU: Bool? = nil
 }
 
 extension TabInfo {
@@ -417,7 +420,7 @@ final class MRUController {
     /// 全局切换器的条目：所有已连接浏览器的标签，**按浏览器分组**。
     ///
     /// 组内保持该浏览器自己的 MRU 顺序；组间按「最近用过」排 —— 取组内
-    /// 最大的 lastAccessed，不额外记账。人在别的应用里想切标签时，脑子里
+    /// 最大的 lastAccessed（只看在 MRU 里的），不额外记账。人在别的应用里想切标签时，脑子里
     /// 先定「去哪个浏览器」再找标签，所以分组比一条纯 MRU 更好使。
     ///
     /// 「只切换当前窗口」在这里不适用：前台不是浏览器时根本没有「当前窗口」
@@ -437,7 +440,8 @@ final class MRUController {
         }
         return groups.values
             .map { group -> (group: Group, recency: Double) in
-                (group, group.entries.compactMap(\.tab.lastAccessed).max() ?? 0)
+                // 不在 MRU 里的标签（后台打开、从没激活过）时间是创建时间，不算，见 latestUse
+                (group, RecentMix.latestUse(group.entries.map { ($0.tab.lastAccessed, $0.tab.inMRU ?? true) }))
             }
             .sorted { a, b in
                 a.recency != b.recency ? a.recency > b.recency
@@ -524,6 +528,8 @@ final class MRUController {
     /// 扩展版本与 app 不配套（major.minor 不同）。参数 (扩展版本, 应用版本)。
     var onExtensionOutdated: ((String, String) -> Void)?
     private var reportedExtensionMismatch = false
+    /// 扩展跟着 app 自动更新：找到扩展加载的文件夹、换成 app 带的新文件、通知它重载（见 ExtensionUpdater）。
+    let extensionUpdater = ExtensionUpdater()
 
     /// 本版 app 要求的扩展**最低兼容版本**。
     ///
@@ -538,7 +544,7 @@ final class MRUController {
     /// 低于它不影响基本功能，但有功能用不上（操作里的重新加载 / 删除历史、多 Profile 分账），
     /// 状态栏、设置页、搜索面板给不打扰的提示（用户 2026-09-27 要的）。和上面那个
     /// `requiredExtensionVersion`（协议不兼容才提，弹窗）是两回事。
-    static let latestExtensionVersion = "0.20.0"
+    static let latestExtensionVersion = "0.25.0"
 
     /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
     private static func isOlder(_ v: String, than required: String) -> Bool {
@@ -561,6 +567,12 @@ final class MRUController {
         let connected: Bool
         let extVersion: String?
         let needsUpdate: Bool
+        /// 浏览器开着。没连上时据此分「未打开」和「开着却没连上」。
+        let running: Bool
+        /// 这个浏览器的扩展连上过（`knownBrowsers`）。没开着的浏览器连不上，拿它分「未打开」和「未安装扩展」。
+        let everConnected: Bool
+        /// 最后一次连上时扩展的版本，浏览器关着时设置页照样写版本号。
+        let lastExtVersion: String?
     }
 
     var browserStatuses: [BrowserStatus] {
@@ -583,6 +595,7 @@ final class MRUController {
             .union(settings.knownBrowsers)
             .union(pinned)
             .union(connectedByBrowser.keys)
+        let lastVersions = UserDefaults.standard.dictionary(forKey: Self.lastExtensionVersionsKey) as? [String: String] ?? [:]
         return known.sorted().map { bundleID in
             let client = connectedByBrowser[bundleID]
             // 这个浏览器任何一个 Profile 的扩展要更新都算
@@ -593,7 +606,11 @@ final class MRUController {
                                  name: BrowserSupport.displayName(bundleID),
                                  connected: client != nil,
                                  extVersion: client?.extVersion,
-                                 needsUpdate: needsUpdate)
+                                 needsUpdate: needsUpdate,
+                                 running: client != nil
+                                    || !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty,
+                                 everConnected: settings.knownBrowsers.contains(bundleID),
+                                 lastExtVersion: client?.extVersion ?? lastVersions[bundleID])
         }
     }
 
@@ -614,6 +631,53 @@ final class MRUController {
                 let name = BrowserSupport.displayName(effectiveBrowser(of: id))
                 return profileLabel(for: id).map { "\(name) · \($0)" } ?? name
             }
+    }
+
+    /// 扩展加载的文件夹换成了新版本：告诉用这个扩展的连接重载自己（多 Profile 各一条连接、装的是同一个
+    /// 文件夹，各自重载）。新扩展收到就重载；老扩展不认这条消息，状态栏的「扩展需要更新」点开改为打开扩展页。
+    private func extensionFilesUpdated(id: String, version: String) {
+        for (clientID, client) in clients where client.extensionID == id {
+            guard let current = client.extVersion, ExtensionFolder.isNewer(version, than: current) else { continue }
+            log("🧩 extension files v\(version) ready → client \(clientID.uuidString.prefix(8)) (running v\(current))")
+            server.send(["type": "extensionFilesUpdated", "version": version], to: clientID)
+        }
+        publishStatus()
+    }
+
+    /// 这条连接的扩展文件已经换成新版本、只差在扩展页点 ↻（老扩展不会自己重载）。
+    func extensionAwaitsReload(_ id: UUID) -> Bool {
+        guard extensionNeedsUpdate(id), let ext = clients[id]?.extensionID else { return false }
+        return extensionUpdater.updated[ext] != nil
+    }
+
+    /// 点「扩展需要更新」（状态栏、设置页、搜索面板底栏）：文件已经换好的，打开那个浏览器的扩展页让用户
+    /// 点 ↻；没换成的（找不到文件夹、开发目录、老得没报 ID）去官网的更新说明。browser 为 nil 时取第一个要更新的。
+    func openExtensionUpdate(browser: String? = nil) {
+        let outdated = clients.keys
+            .filter { extensionNeedsUpdate($0) && (browser == nil || clients[$0]?.browser == browser) }
+            .sorted { (clients[$0]?.connectedAt ?? .distantPast) < (clients[$1]?.connectedAt ?? .distantPast) }
+        if let id = outdated.first(where: extensionAwaitsReload),
+           let bundleID = clients[id]?.browser,
+           let version = extensionUpdater.bundledVersion {
+            ExtensionPage.open(in: bundleID)
+            Toast.show(L10n.t("在扩展页的 TabFlick Bridge 上点 ↻", "Click ↻ on TabFlick Bridge in the extensions page"),
+                       detail: L10n.t("文件已经换成 v\(version)，以后的更新不用再点",
+                                      "Files are already v\(version). Later updates won't need this."),
+                       kind: .info)
+            return
+        }
+        NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
+    }
+
+    /// 每个浏览器最后一次连上时扩展的版本（bundle id → 版本）。握手和识别出浏览器两处各记一次，
+    /// 哪个先到都行；版本没变不写。
+    private static let lastExtensionVersionsKey = "lastExtensionVersions"
+    private func rememberExtensionVersion(of id: UUID) {
+        guard let client = clients[id], let browser = client.browser, let version = client.extVersion else { return }
+        var versions = UserDefaults.standard.dictionary(forKey: Self.lastExtensionVersionsKey) as? [String: String] ?? [:]
+        guard versions[browser] != version else { return }
+        versions[browser] = version
+        UserDefaults.standard.set(versions, forKey: Self.lastExtensionVersionsKey)
     }
 
     /// 记录扩展上报的版本供状态列表展示；低于最低兼容版本时弹一次提醒。
@@ -701,6 +765,10 @@ final class MRUController {
         // 一重启就空了 —— 存档却还在，不预热的话那一整段都是 globe 占位。
         // 每个浏览器只列 20 条，取最近 60 条足够覆盖几个浏览器。
         icons.prefetch(closedTabs.entries.prefix(60).map(\.favIconUrl)) { }
+        extensionUpdater.onFilesUpdated = { [weak self] id, version in
+            self?.extensionFilesUpdated(id: id, version: version)
+        }
+        extensionUpdater.prepareManaged()
         overlay.model.onPick = { [weak self] itemID in
             self?.pick(itemID: itemID)
         }
@@ -721,6 +789,9 @@ final class MRUController {
         }
         search.closeHandler = { [weak self] itemID in
             self?.closeFromSearch(itemID: itemID)
+        }
+        search.extensionUpdateHandler = { [weak self] in
+            self?.openExtensionUpdate()
         }
         search.commandHandler = { [weak self] command, target in
             self?.runSearchCommand(command, on: target)
@@ -1394,7 +1465,8 @@ final class MRUController {
             RecentMix.Tab(lastAccessed: item.tab.lastAccessed, browser: item.browser,
                           client: clientIndex[item.clientID] ?? 0,
                           mruIndex: mruIndex[item.clientID]?[item.tab.id] ?? Int.max,
-                          frontProfile: frontProfiles.contains(item.clientID))
+                          frontProfile: frontProfiles.contains(item.clientID),
+                          inMRU: item.tab.inMRU ?? true)
         }
         var activated: [String: Double] = [:]
         var deactivated: [String: Double] = [:]
@@ -1911,13 +1983,16 @@ final class MRUController {
                 + "extensionId \((root["extensionId"] as? String).map { String($0.prefix(6)) } ?? "absent")")
             if let key = reportedKey {
                 clients[clientID]?.profileKey = key
-                if let ext = root["extensionId"] as? String, BrowserProfiles.isExtensionID(ext) {
-                    clients[clientID]?.extensionID = ext
-                }
             }
-            recordExtensionVersion(clientID, root["extVersion"] as? String ?? "0.1.0")
+            let extensionID = (root["extensionId"] as? String).flatMap { BrowserProfiles.isExtensionID($0) ? $0 : nil }
+            if let extensionID { clients[clientID]?.extensionID = extensionID }
+            let extVersion = root["extVersion"] as? String ?? "0.1.0"
+            recordExtensionVersion(clientID, extVersion)
+            rememberExtensionVersion(of: clientID)
             if reportedKey != nil { profileIdentityChanged(clientID) }
             pushSettings(to: clientID)
+            // 比 app 带的旧：把它加载的那个文件夹换成新文件，换好了通知它重载
+            if let extensionID { extensionUpdater.extensionConnected(id: extensionID, version: extVersion) }
 
         case "undoClosed":
             // ⌘Z 恢复刚关闭的标签的结果（扩展的 undo-close.js → background.js）。标签自己会冒出来，
@@ -2001,6 +2076,7 @@ final class MRUController {
         if !settings.knownBrowsers.contains(browser) {
             settings.knownBrowsers.append(browser)
         }
+        rememberExtensionVersion(of: id)
         // 用户可能此刻就站在这个浏览器里 —— 立刻重算前台判定，
         // 否则要等下一次 App 切换才生效（表现为「第一次按没反应」）
         refreshFrontmostAppState()

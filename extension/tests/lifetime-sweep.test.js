@@ -44,6 +44,7 @@ function loadExtension({ tabs, favorites, lifetimeHours, connected, favoritesKno
       },
       tabs: {
         onActivated: noopEvent(),
+        onCreated: noopEvent(),
         onRemoved: noopEvent(),
         onUpdated: noopEvent(),
         onAttached: noopEvent(),
@@ -57,7 +58,10 @@ function loadExtension({ tabs, favorites, lifetimeHours, connected, favoritesKno
       windows: { onFocusChanged: noopEvent(), update: async () => {} },
       action: { onClicked: noopEvent() },
       alarms: { onAlarm: noopEvent(), create() {}, clear() {} },
-      storage: { session: { get: async () => ({}), set: async () => {} } },
+      storage: {
+        session: { get: async () => ({}), set: async () => {} },
+        local: { get: async () => ({}), set: async () => {}, remove: async () => {} },
+      },
       offscreen: { hasDocument: async () => true, createDocument: async () => {} },
     },
   };

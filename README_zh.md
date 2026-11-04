@@ -67,10 +67,10 @@ Chrome 的 ⌃⇥ 按标签栏顺序走。TabFlick 让它按你用过的顺序�
 需要 macOS 14 以上，Chrome（或其他 Chromium 浏览器）116 以上。
 
 1. **装 App。** 从 [Releases](https://github.com/lifedever/TabFlick/releases/latest) 下载对应的 DMG（Apple 芯片选 `arm64`，Intel 选 `x86_64`），把 TabFlick 拖进「应用程序」。第一次打开如果提示无法验证开发者，在「应用程序」里右键 TabFlick 选「打开」。
-2. **装扩展。** 下载 [TabFlick-Extension.zip](https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip)，解压到不会误删的位置，打开 `chrome://extensions`，开启开发者模式，点「加载已解压的扩展程序」选中文件夹。[图文步骤](https://www.lifedever.com/TabFlick/install-extension.html)。
+2. **装扩展。** TabFlick 设置 → 浏览器，点浏览器那一行的「安装扩展」，在打开的扩展页开启开发者模式，把小窗里的文件夹拖到页面上。也可以手动装：下载 [TabFlick-Extension.zip](https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip)，解压到不会误删的位置，打开 `chrome://extensions`，开启开发者模式，点「加载已解压的扩展程序」选中文件夹。[图文步骤](https://www.lifedever.com/TabFlick/install-extension.html)。
 3. **给辅助功能权限。** 第一次启动会打开「系统设置」的「辅助功能」页，TabFlick 已经在列表里，打开它的开关，App 会自动重启。菜单栏图标变亮就是两端连上了。
 
-扩展要标签、书签、历史记录、图标、搜索这几项权限，数据只通过本机 WebSocket 交给同一台 Mac 上的 TabFlick。升级后 Chrome 提示新权限时点允许，再重新加载扩展。
+扩展要标签、书签、历史记录、图标、搜索这几项权限，数据只通过本机 WebSocket 交给同一台 Mac 上的 TabFlick。扩展跟着 App 自动更新。自动更新之前装的扩展，App 更新后在 `chrome://extensions` 里点一次它的刷新（↻）。
 
 ### 源码构建
 
@@ -145,7 +145,7 @@ cd TabFlick
 日志在 `~/Library/Logs/TabFlick/tabflick.log`，每次启动清空。
 
 - **⌃⇥ 没反应 / 还是按标签栏顺序切。** 在日志里找 `✅ Extension connected`。没有这一行说明扩展没连上 App：确认扩展在 `chrome://extensions` 里是开着的、TabFlick 在运行。没连上时 TabFlick 会故意把 ⌃⇥ 交还给 Chrome。
-- **搜索面板里没有书签或历史记录。** 扩展比 App 旧。下载最新的扩展包替换原文件夹，再重新加载。
+- **搜索面板里没有书签或历史记录。** 扩展比 App 旧。点菜单栏里扩展需要更新的那一项：TabFlick 已经换好文件的，会打开扩展页，点 ↻；找不到扩展文件夹的，下载最新的扩展包替换原文件夹，再重新加载。
 - **`CGEvent.tapCreate failed`。** 辅助功能权限没给或已失效。重新授权后完全退出 TabFlick 再打开，macOS 只在启动时读这项权限。
 - **Chrome 提示停用开发者模式扩展。** 所有未打包的扩展都会有这个提示，不影响 TabFlick。
 

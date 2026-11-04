@@ -67,10 +67,10 @@ One box for open tabs, recently closed tabs, bookmarks, history, favorite folder
 Requires macOS 14+ and Chrome (or another Chromium browser) 116+.
 
 1. **App.** Download the DMG for your Mac from [Releases](https://github.com/lifedever/TabFlick/releases/latest) (`arm64` for Apple Silicon, `x86_64` for Intel) and drag TabFlick into Applications. If macOS says the developer can't be verified, right-click TabFlick in Applications and choose Open.
-2. **Extension.** Download [TabFlick-Extension.zip](https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip), unzip it somewhere permanent, open `chrome://extensions`, turn on Developer mode and click **Load unpacked**. [Step-by-step guide](https://www.lifedever.com/TabFlick/install-extension.html).
+2. **Extension.** In TabFlick's Settings → Browsers, click **Install Extension** next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. To install by hand instead: download [TabFlick-Extension.zip](https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip), unzip it somewhere permanent, open `chrome://extensions`, turn on Developer mode and click **Load unpacked**. [Step-by-step guide](https://www.lifedever.com/TabFlick/install-extension.html).
 3. **Accessibility.** On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means both halves are connected.
 
-The extension asks for tabs, bookmarks, history, favicons and search. The data only goes to TabFlick on the same Mac over a local WebSocket. After an update, allow any new permissions Chrome asks about and reload the extension.
+The extension asks for tabs, bookmarks, history, favicons and search. The data only goes to TabFlick on the same Mac over a local WebSocket. The extension updates along with the app. If you installed it before auto-update existed, hit reload (↻) on it in `chrome://extensions` once after the app updates.
 
 ### Build from source
 
@@ -145,7 +145,7 @@ Thumbnails: `captureVisibleTab` only captures the visible tab, so TabFlick takes
 The log is at `~/Library/Logs/TabFlick/tabflick.log` and is truncated on every launch.
 
 - **⌃⇥ does nothing / Chrome switches in strip order.** Look for `✅ Extension connected` in the log. If it's missing, the extension isn't reaching the app: check it's enabled in `chrome://extensions` and TabFlick is running. TabFlick deliberately passes ⌃⇥ to Chrome while disconnected.
-- **Bookmarks or history don't show up in search.** The extension is older than the app. Download the latest extension zip, replace the folder, and reload it.
+- **Bookmarks or history don't show up in search.** The extension is older than the app. Click the extension warning in the menu bar: if TabFlick has already updated the files, it opens the extensions page and you hit ↻; if it couldn't find your extension folder, download the latest zip, replace the folder, and reload it.
 - **`CGEvent.tapCreate failed`.** Accessibility permission is missing or stale. Re-grant it and fully quit and reopen TabFlick; macOS only reads it at launch.
 - **Chrome warns about developer-mode extensions.** Chrome shows this for every unpacked extension. It doesn't affect TabFlick.
 

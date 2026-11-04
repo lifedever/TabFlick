@@ -62,6 +62,32 @@ MainActor.assumeIsolated {
         let folders = FavoriteFolderStore()
         let settingsWindow = SettingsWindowController(settings: settings, updates: updates,
                                                      folders: folders)
+        // 扩展随 app 打包：设置 → 浏览器里能直接装，装好的跟着 app 自动更新（ExtensionUpdater）
+        let installGuide = ExtensionInstallGuide(updater: controller.extensionUpdater)
+        settingsWindow.canInstallExtension = controller.extensionUpdater.isAvailable
+        settingsWindow.browserStatusProvider = {
+            MainActor.assumeIsolated { controller.browserStatuses }
+        }
+        settingsWindow.onInstallExtension = { bundleID in
+            MainActor.assumeIsolated { installGuide.show(browser: bundleID) }
+        }
+        settingsWindow.onOpenExtensionPage = { bundleID in
+            MainActor.assumeIsolated { ExtensionPage.open(in: bundleID) }
+        }
+        settingsWindow.onUpdateExtension = { bundleID in
+            MainActor.assumeIsolated { controller.openExtensionUpdate(browser: bundleID) }
+        }
+        // 设置 → 浏览器分「未打开」和「未连接」：浏览器启动、退出时跟着刷新。没装扩展的浏览器开关不会有
+        // 连接事件，不靠这个就一直停在旧状态。设置窗口关着不算
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { note in
+                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                MainActor.assumeIsolated {
+                    guard settingsWindow.isShowing, BrowserSupport.isSupported(app?.bundleIdentifier) else { return }
+                    settingsWindow.setBrowserStatuses(controller.browserStatuses)
+                }
+            }
+        }
 
         // 没有主菜单，⌘W/⌘Q/⌘, 这些 key equivalent 无处路由，
         // 设置窗口会对标准快捷键毫无反应。
@@ -101,7 +127,9 @@ MainActor.assumeIsolated {
                 statusItem.render(connected: connected, tabCount: tabCount,
                                   browserName: controller.activeBrowserDisplayName)
                 settingsWindow.setConnected(connected)
-                settingsWindow.setBrowserStatuses(controller.browserStatuses)
+                let statuses = controller.browserStatuses
+                settingsWindow.setBrowserStatuses(statuses)
+                installGuide.connectedBrowsersChanged(Set(statuses.filter(\.connected).map(\.bundleID)))
             }
         }
 
@@ -115,7 +143,7 @@ MainActor.assumeIsolated {
             }
         }
         statusItem.onExtensionWarningClick = {
-            NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
+            MainActor.assumeIsolated { controller.openExtensionUpdate() }
         }
 
         // 两个入口通向同一个窗口：菜单栏的「设置…」和浏览器工具栏的图标

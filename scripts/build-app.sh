@@ -93,6 +93,13 @@ build_one() {
         packaging/Info.plist > "$app/Contents/Info.plist"
     cp assets/TabFlick.icns "$app/Contents/Resources/TabFlick.icns"
 
+    # 扩展随 app 带一份（ExtensionUpdater）：设置 → 浏览器 →「安装扩展」从这里拷到固定目录让用户装；
+    # 连上的扩展比它旧时，app 把扩展加载的那个文件夹换成这份、通知它重载。开发文件不进包，同扩展 zip。
+    cp -R extension "$app/Contents/Resources/Extension"
+    rm -rf "$app/Contents/Resources/Extension/tests"
+    find "$app/Contents/Resources/Extension" -name .DS_Store -delete
+    [ -f "$app/Contents/Resources/Extension/manifest.json" ] || { echo "❌ [$arch] app 里没带上扩展"; exit 1; }
+
     # SPM 的 .process 资源会生成 {Package}_{Target}.bundle。必须用 glob 而
     # 不是写死名字：漏拷一个就是运行时 Bundle.module 直接 SIGTRAP，
     # 而且崩溃点离这里很远。

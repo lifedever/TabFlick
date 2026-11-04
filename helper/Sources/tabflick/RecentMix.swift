@@ -13,6 +13,17 @@ enum RecentMix {
         let mruIndex: Int
         /// 这条连接是它那个浏览器最近在前台的 Profile（只有一个 Profile 时就是它）。
         let frontProfile: Bool
+        /// 在扩展的 MRU 里。不在的（从没激活过、或扩展重载后还没切到过）排在末尾只是凑数，
+        /// 位置不代表先后；从没激活过的 `lastAccessed` 还是浏览器给的创建时间。老扩展不报，当在。
+        var inMRU: Bool = true
+    }
+
+    /// 一组标签最近用过的时间（全局切换器给浏览器分组排先后）：取在 MRU 里的标签里最新的。
+    /// 不在 MRU 里的从没激活过的话时间是创建时间，一个后台打开的标签就能把整组顶到最前。
+    /// 一个都不在 MRU 里（扩展刚重载、还没切过标签）时只能看全部，那时的时间是真用过的。
+    static func latestUse(_ tabs: [(lastAccessed: Double?, inMRU: Bool)]) -> Double {
+        let pool = tabs.contains { $0.inMRU } ? tabs.filter { $0.inMRU } : tabs
+        return pool.compactMap { $0.lastAccessed }.max() ?? 0
     }
 
     struct App {
@@ -40,6 +51,9 @@ enum RecentMix {
     /// ① **同一条连接里 MRU 说了算**：扩展的 MRU 在切窗口时也会更新，`lastAccessed` 只在切标签时更新，
     ///   两者可能打架（B 所在的窗口刚被切到前台，B 的 `lastAccessed` 却比 A 旧）。所以沿 MRU 从旧往新走，
     ///   每个标签的时间不低于比它旧的那个 —— 连接内部顺序照 MRU，时间只用来和别的来源穿插。
+    ///   **不在 MRU 里的标签不参与**（`Tab.inMRU`）：它们排在末尾只是凑数，从没激活过的时间还是创建时间，
+    ///   拿它当「最旧的」往上抬，一个后台打开的标签就把整个浏览器的标签都抬到它开出来那一刻。
+    ///   它们只用自己的时间，正显示的那一条也不认（MRU 空着时第一个不一定是正显示的）。
     /// ② **正显示的标签跟着浏览器切到前台的时间走**：从别的 App 切回浏览器窗口不算切标签，「Chrome 看 A →
     ///   VS Code → 回到 Chrome（还是 A）→ Slack」之后 A 的时间比 VS Code 旧，其实却是更近看的。
     /// 有标签的浏览器本身不列：它的标签已经代表了它，再列一行浏览器是重复。
@@ -61,6 +75,10 @@ enum RecentMix {
             for i in members.reversed() {
                 let tab = tabs[i]
                 var time = tab.lastAccessed.flatMap { $0 > 0 ? $0 : nil }
+                guard tab.inMRU else {
+                    effective[i] = time
+                    continue
+                }
                 if tab.mruIndex == 0, tab.frontProfile, let browser = tab.browser,
                    let active = browserActivatedAt[browser] {
                     time = max(time ?? active, active)
@@ -74,7 +92,8 @@ enum RecentMix {
         var keyed: [(ref: Ref, time: Double?, seq: Int, left: Double?)] = []
         for (seq, i) in byMRU.enumerated() {
             let tab = tabs[i]
-            let left = tab.mruIndex == 0 && tab.frontProfile ? tab.browser.flatMap { browserDeactivatedAt[$0] } : nil
+            let left = tab.mruIndex == 0 && tab.inMRU && tab.frontProfile
+                ? tab.browser.flatMap { browserDeactivatedAt[$0] } : nil
             keyed.append((.tab(i), effective[i], seq, left))
         }
         let browsers = Set(tabs.compactMap(\.browser))

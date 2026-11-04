@@ -284,6 +284,11 @@ private struct SwitcherPane: View {
 /// 这是多浏览器状态的唯一完整视图 —— 连接是按浏览器分账的。
 private struct BrowserPane: View {
     let browsers: [MRUController.BrowserStatus]
+    /// app 里带着扩展（打包版）才能从这里装；`swift run` 的开发版没有，退回下载 zip
+    var canInstall = false
+    var onInstall: (String) -> Void = { _ in }
+    var onUpdate: (String) -> Void = { _ in }
+    var onOpenExtensions: (String) -> Void = { _ in }
 
     var body: some View {
         Form {
@@ -304,15 +309,17 @@ private struct BrowserPane: View {
 
             Section {
                 Text(L10n.t(
-                    "未连接说明这个浏览器没装扩展，或者没开着。扩展要每个浏览器装一次。",
-                    "Not connected means no extension there, or the browser isn't running. Install it once per browser."
+                    "扩展要每个浏览器装一次。浏览器开着却显示未连接的，到它的扩展页看看扩展是不是关了。",
+                    "Install the extension once per browser. If a running browser shows Not connected, check whether the extension is turned off in its extensions page."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
 
                 HStack(spacing: 12) {
-                    Button(L10n.t("下载扩展", "Download Extension")) {
-                        NSWorkspace.shared.open(URL(string: "https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip")!)
+                    if !canInstall {
+                        Button(L10n.t("下载扩展", "Download Extension")) {
+                            NSWorkspace.shared.open(URL(string: "https://github.com/lifedever/TabFlick/releases/latest/download/TabFlick-Extension.zip")!)
+                        }
                     }
                     Link(L10n.t("安装说明", "Install Guide"),
                          destination: URL(string: "https://www.lifedever.com/TabFlick/install-extension.html")!)
@@ -330,10 +337,29 @@ private struct BrowserPane: View {
             appIcon(browser.bundleID)
             Text(browser.name)
             Spacer()
-            if !browser.connected {
+            if !browser.connected && !browser.running && browser.everConnected {
+                // 浏览器没开，扩展当然连不上；以前连上过就是装着的，别让人以为要再装一次。
+                // 版本号是最后一次连上时报的
+                Label(L10n.t("未打开", "Not running") + (browser.lastExtVersion.map { " · v\($0)" } ?? ""),
+                      systemImage: "circle.dashed")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else if !browser.connected && browser.everConnected {
+                // 开着却没连上：以前连上过就是装过，多半是扩展被关了。不给「安装扩展」：再从固定目录装一份，
+                // 扩展 ID 跟着路径变、Profile 标识丢，置顶会被重复收编、「最近关闭」看不到（2026-11-04 撞上过）
                 Label(L10n.t("未连接", "Not connected"), systemImage: "circle.dashed")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                Button(L10n.t("打开扩展页", "Open Extensions Page")) { onOpenExtensions(browser.bundleID) }
+                    .controlSize(.small)
+            } else if !browser.connected {
+                Label(L10n.t("未安装扩展", "Extension not installed"), systemImage: "circle.dashed")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                if canInstall {
+                    Button(L10n.t("安装扩展", "Install Extension")) { onInstall(browser.bundleID) }
+                        .controlSize(.small)
+                }
             } else if browser.needsUpdate {
                 // 不写「需更新到 vX」：版本号够了却没点 ↻ 的也算要更新，那时写目标版本是在讲一件假事
                 Label(L10n.t("已连接 · 扩展 v\(browser.extVersion ?? "?") 需要更新",
@@ -341,6 +367,8 @@ private struct BrowserPane: View {
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(.orange)
+                Button(L10n.t("更新", "Update")) { onUpdate(browser.bundleID) }
+                    .controlSize(.small)
             } else {
                 Label(L10n.t("已连接", "Connected") + (browser.extVersion.map { " · v\($0)" } ?? ""),
                       systemImage: "checkmark.circle.fill")
@@ -1098,6 +1126,22 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var aboutHost: NSHostingController<AboutPane>?
 
     private var browserStatuses: [MRUController.BrowserStatus] = []
+    /// 浏览器页的「安装扩展」「更新」按钮，main.swift 接。canInstallExtension = app 里带着扩展。
+    var canInstallExtension = false
+    var onInstallExtension: ((String) -> Void)?
+    var onUpdateExtension: ((String) -> Void)?
+    var onOpenExtensionPage: ((String) -> Void)?
+
+    private func makeBrowserPane() -> BrowserPane {
+        BrowserPane(browsers: browserStatuses, canInstall: canInstallExtension,
+                    onInstall: { [weak self] in self?.onInstallExtension?($0) },
+                    onUpdate: { [weak self] in self?.onUpdateExtension?($0) },
+                    onOpenExtensions: { [weak self] in self?.onOpenExtensionPage?($0) })
+    }
+
+    var isShowing: Bool { window?.isVisible == true }
+    /// 打开窗口时现取浏览器状态（main.swift 接 controller.browserStatuses）。
+    var browserStatusProvider: (() -> [MRUController.BrowserStatus])?
 
     func setBrowserStatuses(_ statuses: [MRUController.BrowserStatus]) {
         guard statuses != browserStatuses else { return }
@@ -1152,13 +1196,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func refreshContentIfVisible() {
         guard let window, window.isVisible else { return }
+        refreshContent()
+    }
+
+    private func refreshContent() {
         generalHost?.rootView = GeneralPane(settings: settings)
         switcherHost?.rootView = SwitcherPane(settings: settings)
         searchHost?.rootView = SearchPane(settings: settings)
         tabManagementHost?.rootView = TabManagementPane(settings: settings)
         foldersHost?.rootView = FoldersPane(folders: folders, settings: settings)
         openWithHost?.rootView = OpenWithPane(folders: folders)
-        browserHost?.rootView = BrowserPane(browsers: browserStatuses)
+        browserHost?.rootView = makeBrowserPane()
         aboutHost?.rootView = AboutPane(updates: updates)
     }
 
@@ -1169,6 +1217,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         settings.refreshLaunchAtLogin()   // 用户可能刚在系统设置里改过
+        // 浏览器状态现取一份：平时靠连接事件推过来，app 启动后浏览器一直没开过就一次都没推，列表是空的
+        if let provider = browserStatusProvider { browserStatuses = provider() }
 
         if window == nil {
             let general = NSHostingController(rootView: GeneralPane(settings: settings))
@@ -1177,7 +1227,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let tabManagement = NSHostingController(rootView: TabManagementPane(settings: settings))
             let foldersPane = NSHostingController(rootView: FoldersPane(folders: folders, settings: settings))
             let openWith = NSHostingController(rootView: OpenWithPane(folders: folders))
-            let browser = NSHostingController(rootView: BrowserPane(browsers: browserStatuses))
+            let browser = NSHostingController(rootView: makeBrowserPane())
             let about = NSHostingController(rootView: AboutPane(updates: updates))
             // 让 preferredContentSize 跟随 SwiftUI 内容：NSTabViewController
             // 切 tab 时按它做窗口尺寸动画（顶边锚定是 AppKit 原生行为）
@@ -1223,7 +1273,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             w.center()
             window = w
         } else {
-            refreshContentIfVisible()
+            // 重开：窗口这时还不可见，refreshContentIfVisible 会直接跳过，关着期间的变化就丢了
+            refreshContent()
         }
 
         window?.makeKeyAndOrderFront(nil)

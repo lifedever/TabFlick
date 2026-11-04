@@ -96,9 +96,10 @@
  "Load the extension": "載入擴充功能",
  "Click Load unpacked and select the TabFlick-Extension folder from step 1. When TabFlick Bridge appears in the list, you're done.": "點「載入未封裝項目」，選擇第 1 步解壓縮出的 TabFlick-Extension 資料夾。列表裡出現 TabFlick Bridge 就完成了。",
  "Confirm the connection": "確認連線",
- "Upgrading: when a TabFlick release notes an extension update, download the new zip, replace the folder's contents, then hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions.": "升級：TabFlick 發新版時，如果版本說明提到擴充功能有更新，下載新的 zip，取代資料夾裡的內容，再到 chrome://extensions 點 TabFlick Bridge 卡片上的重新載入按鈕（↻）。",
  "← Back to home": "← 返回首頁",
  "With the TabFlick app running, the menu bar icon brightens and its menu lists your browser with a tab count. Hold ⌃ and tap ⇥ to bring up the switcher.": "保持 TabFlick 執行中，選單列圖示變亮、選單裡列出瀏覽器和分頁數，就是兩端接通了。之後按住 ⌃ 點 ⇥ 就能叫出切換器。",
  "Press ⌥Space to search every browser's tabs and jump straight there. With nothing typed it lists recent tabs and apps; Enter takes you back to what you were doing.": "按 ⌥Space 搜尋所有瀏覽器的分頁，選中就切過去。沒輸入時列出最近用過的分頁和 App，按 Return 回到上一件事。",
- "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.": "第一次啟動會打開「系統設定」的「輔助使用」頁面，TabFlick 已經在列表裡，打開它的開關，App 會自動重新啟動。選單列圖像變亮就是連上了。"
+ "On first launch System Settings opens at Accessibility with TabFlick already in the list; turn it on and the app relaunches. A lit menu bar icon means it's connected.": "第一次啟動會打開「系統設定」的「輔助使用」頁面，TabFlick 已經在列表裡，打開它的開關，App 會自動重新啟動。選單列圖像變亮就是連上了。",
+ "Already have TabFlick? Open its Settings → Browsers and click Install Extension next to your browser. In the extensions page that opens, turn on Developer mode and drag the folder from the small window onto the page. The steps below are the manual way.": "已經裝了 TabFlick：打開它的「設定 → 瀏覽器」，按一下瀏覽器那一列的「安裝擴充功能」，在打開的擴充功能頁面開啟「開發人員模式」，把小視窗裡的資料夾拖到頁面上。下面是手動安裝。",
+ "Upgrading: the extension updates along with TabFlick. If you installed it before, hit the refresh button (↻) on the TabFlick Bridge card in chrome://extensions once after TabFlick updates; after that there's nothing to do. If the menu bar keeps saying the extension needs updating, TabFlick couldn't find your extension folder: download the new zip, replace the folder's contents, and hit ↻.": "升級：擴充功能會跟著 TabFlick 自動更新。以前裝的擴充功能，TabFlick 更新後到 chrome://extensions 的 TabFlick Bridge 卡片上點一次重新載入按鈕（↻），之後就不用管了。選單列一直提示擴充功能需要更新，表示 TabFlick 找不到擴充功能資料夾：下載新的 zip，取代資料夾裡的內容，再點 ↻。"
 }
