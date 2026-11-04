@@ -581,6 +581,16 @@ final class AppSettings: ObservableObject {
         return active.isEmpty ? [.all] : active
     }
 
+    /// 跨浏览器面板（⌥Space）的 Tab 循环：「应用」排在「浏览器标签」前面（2026-11-04 用户要的：
+    /// 在别的 App 里打开，要找的多半是 App）。两个都勾着、设置里标签在前时对调位置；⌘E 照设置的顺序。
+    var activeGlobalSearchModes: [SearchMode] {
+        var modes = activeSearchModes
+        if let tabs = modes.firstIndex(of: .tabs), let apps = modes.firstIndex(of: .apps), tabs < apps {
+            modes.swapAt(tabs, apps)
+        }
+        return modes
+    }
+
     static func normalizedModeOrder(_ raw: [String]?) -> [SearchMode] {
         var order = (raw ?? []).compactMap(SearchMode.init(rawValue:))
         // 「标签」是后加的（2026-09-26），老设置里没有它时插在「全部」后面而不是末尾

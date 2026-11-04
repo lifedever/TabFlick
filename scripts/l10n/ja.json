@@ -118,7 +118,7 @@
  "In any other app (all browsers)": "ほかのApp（全ブラウザを検索）",
  "“All” shows when empty": "「すべて」の未入力時の表示",
  "Nothing": "表示しない",
- "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it.": "チェックした項目が切り替えの対象です。パネルは先頭の項目で開き、Tabで次へ、⇧Tabで前へ移動します。「フォルダ」はメニューバーのお気に入りで、↩で前回のAppで開き、⌘↩で別のAppを選べます。「アプリ」はデフォルトでオフです。Raycastを使っていれば不要です。",
+ "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it. Opened with the “In any other app” key, Apps comes before Browser tabs.": "チェックした項目が切り替えの対象です。パネルは先頭の項目で開き、Tabで次へ、⇧Tabで前へ移動します。「フォルダ」はメニューバーのお気に入りで、↩で前回のAppで開き、⌘↩で別のAppを選べます。「アプリ」はデフォルトでオフです。Raycastを使っていれば不要です。「ほかのApp」のキーで開いたときは、「アプリ」が「ブラウザのタブ」より前に来ます。",
  "Tab order": "Tabキーの順序",
  "Add site…": "サイトを追加…",
  "The “Search X” rows shown under Search mode after the search engine. %s in the URL is replaced with the query.": "「検索」モードで検索エンジンの下に並ぶ「Xで検索」の行です。URL内の%sは検索語に置き換わります。",

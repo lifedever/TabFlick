@@ -118,7 +118,7 @@
  "In any other app (all browsers)": "En otras apps (todos los navegadores)",
  "“All” shows when empty": "“Todo” sin texto muestra",
  "Nothing": "Nada",
- "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it.": "Los marcados entran en el ciclo. El panel se abre en el primero; Tab baja y ⇧Tab sube. Carpetas son las favoritas de la barra de menús: ↩ abre con la última app usada y ⌘↩ permite elegir otra. Apps está desactivado por defecto; con Raycast no hace falta.",
+ "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it. Opened with the “In any other app” key, Apps comes before Browser tabs.": "Los marcados entran en el ciclo. El panel se abre en el primero; Tab baja y ⇧Tab sube. Carpetas son las favoritas de la barra de menús: ↩ abre con la última app usada y ⌘↩ permite elegir otra. Apps está desactivado por defecto; con Raycast no hace falta. Con la tecla de «En otras apps», Apps va antes que Pestañas del navegador.",
  "Tab order": "Orden de Tab",
  "Add site…": "Añadir sitio…",
  "The “Search X” rows shown under Search mode after the search engine. %s in the URL is replaced with the query.": "Las filas “Buscar en X” del modo Búsqueda, tras el buscador. El %s de la URL se sustituye por la consulta.",

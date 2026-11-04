@@ -118,7 +118,7 @@
  "In any other app (all browsers)": "其他 App 裡（搜尋所有瀏覽器）",
  "“All” shows when empty": "「全部」未輸入時顯示",
  "Nothing": "不顯示",
- "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it.": "勾選的會加入循環。面板打開時停在第一個，按 Tab 依序往下切，⇧Tab 往回。「資料夾」是選單列收藏的那些，↩ 用上次的 App 打開，⌘↩ 換一個；「App」預設關閉，有裝 Raycast 就用不到。",
+ "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it. Opened with the “In any other app” key, Apps comes before Browser tabs.": "勾選的會加入循環。面板打開時停在第一個，按 Tab 依序往下切，⇧Tab 往回。「資料夾」是選單列收藏的那些，↩ 用上次的 App 打開，⌘↩ 換一個；「App」預設關閉，有裝 Raycast 就用不到。用「其他 App 裡」那個鍵打開時，「App」排在「瀏覽器分頁」前面。",
  "Tab order": "Tab 順序",
  "Add site…": "加入網站…",
  "The “Search X” rows shown under Search mode after the search engine. %s in the URL is replaced with the query.": "「搜尋」模式裡列在搜尋引擎後面的「在 X 搜尋」。網址中的 %s 會換成關鍵字。",

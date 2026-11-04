@@ -118,7 +118,7 @@
  "In any other app (all browsers)": "다른 앱에서(모든 브라우저 검색)",
  "“All” shows when empty": "입력 전 ‘전체’에 표시할 항목",
  "Nothing": "표시 안 함",
- "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it.": "체크한 항목이 순환에 포함됩니다. 패널은 첫 번째 항목으로 열리며, Tab 키로 다음, ⇧Tab으로 이전 항목으로 이동합니다. ‘폴더’는 메뉴 막대의 즐겨찾는 폴더로, ↩ 키를 누르면 마지막으로 사용한 앱으로 열고 ⌘↩로 다른 앱을 선택합니다. ‘앱’은 기본적으로 꺼져 있으며, Raycast를 사용한다면 필요 없습니다.",
+ "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it. Opened with the “In any other app” key, Apps comes before Browser tabs.": "체크한 항목이 순환에 포함됩니다. 패널은 첫 번째 항목으로 열리며, Tab 키로 다음, ⇧Tab으로 이전 항목으로 이동합니다. ‘폴더’는 메뉴 막대의 즐겨찾는 폴더로, ↩ 키를 누르면 마지막으로 사용한 앱으로 열고 ⌘↩로 다른 앱을 선택합니다. ‘앱’은 기본적으로 꺼져 있으며, Raycast를 사용한다면 필요 없습니다. ‘다른 앱에서’ 키로 열면 ‘앱’이 ‘브라우저 탭’보다 앞에 옵니다.",
  "Tab order": "Tab 순서",
  "Add site…": "사이트 추가…",
  "The “Search X” rows shown under Search mode after the search engine. %s in the URL is replaced with the query.": "‘검색’ 모드에서 검색 엔진 다음에 표시되는 ‘X에서 검색’ 항목입니다. URL의 %s는 검색어로 바뀝니다.",

@@ -861,8 +861,8 @@ private struct SearchPane: View {
                             .disabled(index == settings.searchModeOrder.count - 1)
                     }
                 }
-                Text(L10n.t("勾上的进循环。面板打开时是第一个，按 Tab 依次往下切，⇧Tab 往回。「文件夹」是状态栏收藏的那些，回车用上次的方式打开，⌘↩ 换一个；「应用」默认关，装了 Raycast 的用不上。",
-                            "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it."))
+                Text(L10n.t("勾上的进循环。面板打开时是第一个，按 Tab 依次往下切，⇧Tab 往回。「文件夹」是状态栏收藏的那些，回车用上次的方式打开，⌘↩ 换一个；「应用」默认关，装了 Raycast 的用不上。用「别的 App 里」那个键打开时，「应用」排在「浏览器标签」前面。",
+                            "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it. Opened with the “In any other app” key, Apps comes before Browser tabs."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             } header: {

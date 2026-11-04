@@ -385,7 +385,7 @@
   "zh": "已拷贝路径",
   "refs": [
    "ExtensionInstallGuide.swift:81",
-   "MRUController.swift:1629",
+   "MRUController.swift:1630",
    "StatusItemController.swift:717"
   ]
  },
@@ -454,8 +454,8 @@
   "refs": [
    "FavoriteFolders.swift:406",
    "MRUController.swift:1050",
-   "MRUController.swift:1588",
-   "MRUController.swift:1604"
+   "MRUController.swift:1589",
+   "MRUController.swift:1605"
   ]
  },
  {
@@ -539,100 +539,100 @@
   "key": "Couldn't open {0}",
   "zh": "打不开 {0}",
   "refs": [
-   "MRUController.swift:1550"
+   "MRUController.swift:1551"
   ]
  },
  {
   "key": "Couldn't read the Finder selection",
   "zh": "读不到访达里选中的项目",
   "refs": [
-   "MRUController.swift:1568",
-   "MRUController.swift:1573"
+   "MRUController.swift:1569",
+   "MRUController.swift:1574"
   ]
  },
  {
   "key": "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.",
   "zh": "系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「访达」。",
   "refs": [
-   "MRUController.swift:1569",
-   "MRUController.swift:1740"
+   "MRUController.swift:1570",
+   "MRUController.swift:1741"
   ]
  },
  {
   "key": "URL copied",
   "zh": "已拷贝网址",
   "refs": [
-   "MRUController.swift:1622"
+   "MRUController.swift:1623"
   ]
  },
  {
   "key": "Title copied",
   "zh": "已拷贝标题",
   "refs": [
-   "MRUController.swift:1623"
+   "MRUController.swift:1624"
   ]
  },
  {
   "key": "Markdown link copied",
   "zh": "已拷贝 Markdown 链接",
   "refs": [
-   "MRUController.swift:1624"
+   "MRUController.swift:1625"
   ]
  },
  {
   "key": "PID copied",
   "zh": "已拷贝 PID",
   "refs": [
-   "MRUController.swift:1625"
+   "MRUController.swift:1626"
   ]
  },
  {
   "key": "Command line copied",
   "zh": "已拷贝命令行",
   "refs": [
-   "MRUController.swift:1626"
+   "MRUController.swift:1627"
   ]
  },
  {
   "key": "Result copied",
   "zh": "已拷贝结果",
   "refs": [
-   "MRUController.swift:1627"
+   "MRUController.swift:1628"
   ]
  },
  {
   "key": "Calculation copied",
   "zh": "已拷贝算式和结果",
   "refs": [
-   "MRUController.swift:1628"
+   "MRUController.swift:1629"
   ]
  },
  {
   "key": "Reloaded",
   "zh": "已重新加载",
   "refs": [
-   "MRUController.swift:1636"
+   "MRUController.swift:1637"
   ]
  },
  {
   "key": "Couldn't open Get Info",
   "zh": "打不开简介",
   "refs": [
-   "MRUController.swift:1739"
+   "MRUController.swift:1740"
   ]
  },
  {
   "key": "The extension is too old for this",
   "zh": "扩展版本太旧，做不了这个操作",
   "refs": [
-   "MRUController.swift:1769"
+   "MRUController.swift:1770"
   ]
  },
  {
   "key": "Download the latest extension zip, replace the folder, then reload it in chrome://extensions.",
   "zh": "下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
   "refs": [
-   "MRUController.swift:1770",
+   "MRUController.swift:1771",
    "TabSearchPanel.swift:2386"
   ]
  },
@@ -640,35 +640,35 @@
   "key": "Window reopened",
   "zh": "已恢复窗口",
   "refs": [
-   "MRUController.swift:2006"
+   "MRUController.swift:2007"
   ]
  },
  {
   "key": "Tab reopened",
   "zh": "已恢复标签",
   "refs": [
-   "MRUController.swift:2006"
+   "MRUController.swift:2007"
   ]
  },
  {
   "key": "Nothing to reopen",
   "zh": "没有可恢复的标签",
   "refs": [
-   "MRUController.swift:2010"
+   "MRUController.swift:2011"
   ]
  },
  {
   "key": "Profile {0}",
   "zh": "个人资料 {0}",
   "refs": [
-   "MRUController.swift:2262"
+   "MRUController.swift:2263"
   ]
  },
  {
   "key": "Returned to the pinned URL",
   "zh": "已回到置顶地址",
   "refs": [
-   "MRUController.swift:2613"
+   "MRUController.swift:2614"
   ]
  },
  {
@@ -1317,8 +1317,8 @@
   ]
  },
  {
-  "key": "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it.",
-  "zh": "勾上的进循环。面板打开时是第一个，按 Tab 依次往下切，⇧Tab 往回。「文件夹」是状态栏收藏的那些，回车用上次的方式打开，⌘↩ 换一个；「应用」默认关，装了 Raycast 的用不上。",
+  "key": "Checked ones are in the cycle. The panel opens on the first; Tab moves down, ⇧Tab back up. Folders are your menu bar favorites — Enter opens with the last-used app, ⌘↩ picks another. Apps is off by default; Raycast users won't need it. Opened with the “In any other app” key, Apps comes before Browser tabs.",
+  "zh": "勾上的进循环。面板打开时是第一个，按 Tab 依次往下切，⇧Tab 往回。「文件夹」是状态栏收藏的那些，回车用上次的方式打开，⌘↩ 换一个；「应用」默认关，装了 Raycast 的用不上。用「别的 App 里」那个键打开时，「应用」排在「浏览器标签」前面。",
   "refs": [
    "SettingsWindow.swift:864"
   ]

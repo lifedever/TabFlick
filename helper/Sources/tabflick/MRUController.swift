@@ -1313,7 +1313,8 @@ final class MRUController {
             : activeClientID.map(extensionNeedsUpdate) ?? false
         search.show(items: items, closed: closed, bookmarks: bookmarks,
                     folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
-                    siteSearches: settings.siteSearches, modes: settings.activeSearchModes,
+                    siteSearches: settings.siteSearches,
+                    modes: global ? settings.activeGlobalSearchModes : settings.activeSearchModes,
                     allEmptyContent: searchEmptyContent, windows: wechatWindows,
                     recent: recent.rows, recentLeftAt: recent.leftAt,
                     icons: iconMap(for: items, closed: closed),
