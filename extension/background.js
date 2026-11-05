@@ -1286,11 +1286,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.tabs.onAttached.addListener(() => pushMRU());
 chrome.tabs.onDetached.addListener(() => pushMRU());
 
-// 工具栏图标点击 → 让 app 打开它的原生设置窗口。
-// 设置只有一个入口，浏览器这边不再单开一个页面。
+// 工具栏图标点击 → 让 app 打开快捷搜索（⌥Space 那个面板）。
+// app 那边关了搜索面板时会改开设置窗口。
 chrome.action.onClicked.addListener(() => {
   connect();
-  send({ type: "openSettings" });
+  send({ type: "openSearch" });
 });
 
 function ensureAlarms() {

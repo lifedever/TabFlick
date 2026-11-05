@@ -522,8 +522,8 @@ final class MRUController {
         onStatusChange?(connected, tabs.count)
     }
 
-    /// 扩展请求打开 app 的设置窗口（点了浏览器工具栏图标）。
-    var onExtensionRequestedSettings: (() -> Void)?
+    /// 点了浏览器工具栏上的 TabFlick 图标（main.swift 决定打开快捷搜索还是设置）。
+    var onExtensionIconClicked: (() -> Void)?
 
     /// 扩展版本与 app 不配套（major.minor 不同）。参数 (扩展版本, 应用版本)。
     var onExtensionOutdated: ((String, String) -> Void)?
@@ -544,7 +544,7 @@ final class MRUController {
     /// 低于它不影响基本功能，但有功能用不上（操作里的重新加载 / 删除历史、多 Profile 分账），
     /// 状态栏、设置页、搜索面板给不打扰的提示（用户 2026-09-27 要的）。和上面那个
     /// `requiredExtensionVersion`（协议不兼容才提，弹窗）是两回事。
-    static let latestExtensionVersion = "0.25.0"
+    static let latestExtensionVersion = "0.25.2"
 
     /// 版本比较（按数字逐段，缺位补 0）：v 是否低于 required。
     private static func isOlder(_ v: String, than required: String) -> Bool {
@@ -2011,9 +2011,10 @@ final class MRUController {
                 Toast.show(L10n.t("没有可恢复的标签", "Nothing to reopen"), kind: .info)
             }
 
-        case "openSettings":
-            // 用户点了浏览器工具栏的 TabFlick 图标
-            onExtensionRequestedSettings?()
+        case "openSearch", "openSettings":
+            // 用户点了浏览器工具栏的 TabFlick 图标。0.25.2 之前的扩展发的是 openSettings，
+            // 一样处理：没点 ↻ 的老扩展点图标也是打开快捷搜索
+            onExtensionIconClicked?()
 
         case "log":
             // 扩展侧的异常上报。SW 的 console 没人看,错误必须落到这份日志里

@@ -146,12 +146,15 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated { controller.openExtensionUpdate() }
         }
 
-        // 两个入口通向同一个窗口：菜单栏的「设置…」和浏览器工具栏的图标
         statusItem.onOpenSettings = {
             MainActor.assumeIsolated { settingsWindow.show() }
         }
-        controller.onExtensionRequestedSettings = {
-            MainActor.assumeIsolated { settingsWindow.show() }
+        // 浏览器工具栏的 TabFlick 图标 = 打开快捷搜索（和 ⌥Space、状态栏「打开快捷搜索」同一个面板）。
+        // 设置里关了搜索面板时退回打开设置，点了不能没反应
+        controller.onExtensionIconClicked = {
+            MainActor.assumeIsolated {
+                if settings.tabSearch { controller.openGlobalSearch() } else { settingsWindow.show() }
+            }
         }
         statusItem.onCheckForUpdates = {
             MainActor.assumeIsolated { updates.check(userInitiated: true) }
