@@ -269,13 +269,40 @@ struct TabSearchCheck {
             print("✗ 别名得分「\(query)」：期望 \(want)，实际 \(String(describing: TabSearch.score(aliased[1], query: query)))")
         }
 
+        // 精准叫出名字（2026-11-06 用户定的）：一字不差、开头的整个词、中文开头至少两个字算；中间的词、半个词、拼音不算
+        let openWith = ["打开方式…", "Open With", "打开方式"]
+        let killProcess = ["结束进程…", "Kill Process", "kill", "进程", "Activity Monitor"]
+        let calledCases: [(String, String, [String], Bool)] = [
+            ("英文整词开头", "open", openWith, true),
+            ("大小写、多余空白不管", "  OPEN   with ", openWith, true),
+            ("中文开头两个字", "打开", openWith, true),
+            ("打满整个名字，后面的省略号是词边界", "打开方式", ["打开方式…"], true),
+            ("中文开头一个字不算", "打", openWith, false),
+            ("中间的词不算", "方式", openWith, false),
+            ("英文中间的词不算", "with", openWith, false),
+            ("半个词不算", "ope", openWith, false),
+            ("拼音不算", "dakai", openWith, false),
+            ("首字母不算", "dkfs", openWith, false),
+            ("比名字长不算", "open with x", openWith, false),
+            ("驼峰不算词边界", "open", ["OpenCode"], false),
+            ("别名一字不差", "kill", killProcess, true),
+            ("中文别名一字不差", "进程", killProcess, true),
+            ("多词别名的开头一个词", "activity", killProcess, true),
+            ("多词别名打到一半不算", "activity m", killProcess, false),
+            ("空输入不算", "  ", openWith, false),
+        ]
+        for (name, query, names, want) in calledCases where TabSearch.callsByName(query, names: names) != want {
+            failures += 1
+            print("✗ 精准叫名「\(query)」\(name)：期望 \(want)")
+        }
+
         let py = Pinyin.index("掘金 - Swift 并发")
         if py.full != "juejin-swiftbingfa" || py.initials != "jj-swiftbf" {
             failures += 1
             print("✗ 拼音索引：\(py)")
         }
         let total = cases.count + urlCases.count + siteCases.count + mdCases.count + 2 + extraCases.count
-            + exactCases.count + 1 + abbrCases.count + 1
+            + exactCases.count + 1 + abbrCases.count + 1 + calledCases.count
         print(failures == 0
               ? "全部通过（\(total) 组）"
               : "\(failures) 项失败（共 \(total) 组）")

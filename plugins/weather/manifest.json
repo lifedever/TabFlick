@@ -1,0 +1,85 @@
+{
+  "id": "weather",
+  "version": "2.0.0",
+  "name": {
+    "zh-Hans": "天气",
+    "zh-Hant": "天氣",
+    "en": "Weather",
+    "ja": "天気",
+    "ko": "날씨",
+    "es": "Tiempo",
+    "fr": "Météo",
+    "de": "Wetter"
+  },
+  "summary": {
+    "zh-Hans": "收藏城市，看实况和今天的最高最低温，可以放进菜单栏。国内到区县。数据来自和风天气，要在这里填自己的 API Host 和 API Key（免费注册）。",
+    "zh-Hant": "收藏城市，看即時天氣和今天的最高最低溫，可以放進選單列。中國到區縣。資料來自和風天氣，要在這裡填自己的 API Host 和 API Key（免費註冊）。",
+    "en": "Save cities to see current weather and today's high and low. Can live in the menu bar. Data from QWeather; enter your own API Host and API Key here (free to sign up)."
+  },
+  "symbol": "cloud.sun.fill",
+  "tint": "cyan",
+  "hosts": [
+    "*.qweatherapi.com"
+  ],
+  "contributes": {
+    "menu": true,
+    "list": {
+      "title": {
+        "zh-Hans": "天气",
+        "zh-Hant": "天氣",
+        "en": "Weather"
+      },
+      "keywords": [
+        "tq",
+        "tianqi",
+        "weather",
+        "气温",
+        "forecast",
+        "和风",
+        "qweather"
+      ],
+      "placeholder": {
+        "zh-Hans": "看收藏的城市，或搜城市加入",
+        "zh-Hant": "看收藏的城市，或搜城市加入",
+        "en": "Your cities, or search for one to add"
+      },
+      "empty": {
+        "zh-Hans": "还没有城市。打城市名搜索，回车加入。",
+        "zh-Hant": "還沒有城市。打城市名搜尋，按 ↩ 加入。",
+        "en": "No cities yet. Search for one and press ↩ to add it."
+      }
+    }
+  },
+  "settings": {
+    "inputs": [
+      {
+        "key": "host",
+        "title": "API Host",
+        "placeholder": {
+          "zh-Hans": "abc123.re.qweatherapi.com",
+          "en": "abc123.re.qweatherapi.com"
+        }
+      },
+      {
+        "key": "key",
+        "title": "API Key",
+        "secret": true,
+        "note": {
+          "zh-Hans": "在和风天气控制台注册（免费，每月 5 万次）：「设置」里有 API Host，「项目管理」里新建项目、添加凭据选 API KEY。",
+          "zh-Hant": "在和風天氣控制台註冊（免費，每月 5 萬次）：「設定」裡有 API Host，「專案管理」裡新建專案、新增憑據選 API KEY。",
+          "en": "Sign up in the QWeather console (free, 50,000 calls a month). API Host is under Settings; create a project under Project Management and add an API KEY credential."
+        }
+      }
+    ],
+    "links": [
+      {
+        "title": {
+          "zh-Hans": "打开和风天气控制台",
+          "zh-Hant": "打開和風天氣控制台",
+          "en": "Open QWeather Console"
+        },
+        "url": "https://console.qweather.com/"
+      }
+    ]
+  }
+}

@@ -83,6 +83,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     /// 收藏的文件夹列表数据源。
     var favoriteFoldersProvider: (() -> [FavoriteFolder])?
+    /// 菜单里显不显示收藏的文件夹（设置 → 文件夹管理）。关掉时整段不出现，连「添加文件夹…」
+    /// 「收藏当前 Finder 目录」一起（2026-11-06 用户要的）。nil 当显示。
+    var showsFoldersProvider: (() -> Bool)?
+
+    /// 放进菜单的插件（设置 → 插件页里「在菜单栏显示」），每个一行带二级菜单，在文件夹段下面。
+    /// 和文件夹行一样每次打开菜单现拆现建；host 要留着（菜单项的 target 是弱引用）。
+    var menuPluginsProvider: (() -> [Plugin])?
+    private var pluginItems: [NSMenuItem] = []
+    private var pluginHosts: [PluginMenuHost] = []
+    /// 文件夹段和插件段之间那道分隔线；文件夹段关掉时藏起来，不然会和 sepAfterPin 叠成两道。
+    private var sepAfterFolders = NSMenuItem.separator()
     /// 平铺区容量（设置 → 文件夹管理）。nil 用内置默认值。
     var inlineFolderLimitProvider: (() -> Int)?
     /// 点了「收藏当前 Finder 目录」。
@@ -240,7 +251,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         addFolderItem.isEnabled = true
         menu.addItem(addFolderItem)
 
-        menu.addItem(.separator())
+        // 插件行在 menuNeedsUpdate 时插到它下方
+        sepAfterFolders = .separator()
+        menu.addItem(sepAfterFolders)
 
         let updates = NSMenuItem(title: L10n.t("检查更新…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
@@ -318,16 +331,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let searchVisible = refreshSearchItem()
         let pinVisible = refreshFavoriteItem(browserIsFront: BrowserSupport.isSupported(front))
         let finderIsFront = front == "com.apple.finder"
-        addFinderFolderItem.isHidden = !finderIsFront
+        let showsFolders = showsFoldersProvider?() ?? true
+        let finderSlot = finderIsFront && showsFolders
+        addFinderFolderItem.isHidden = !finderSlot
         let excludeVisible = refreshExcludeItem(frontApp)
-        refreshFolderLines(in: menu)
+        refreshFolderLines(in: menu, visible: showsFolders)
+        refreshPluginLines(in: menu)
         refreshWarningItem()
 
         // 动作槽按前台显隐后，它和文件夹区之间那道分隔线会叠到上一道上：
-        // 只在动作槽可见时要。文件夹区因「添加文件夹…」常驻而永远有内容，
-        // 顶上那道分隔线不用收敛。
+        // 只在动作槽可见时要。文件夹区开着时因「添加文件夹…」常驻而永远有内容；
+        // 关掉时它下面那道分隔线跟着藏，插件行（或「检查更新」）直接接在 sepAfterPin 下面。
         if !unauthorized {
-            sepAfterPin.isHidden = !(searchVisible || pinVisible || finderIsFront || excludeVisible)
+            sepAfterPin.isHidden = !(searchVisible || pinVisible || finderSlot || excludeVisible)
+            sepAfterFolders.isHidden = !showsFolders
         }
     }
 
@@ -559,6 +576,30 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         return copy
     }
 
+    // MARK: - 插件
+
+    /// 插件行：每个插件一行，二级菜单里是它给的内容（`PluginMenuHost` 先画上次的快照、再换新的）。
+    /// 后面跟一道分隔线，和「检查更新」隔开；一个都没有时什么都不加。
+    private func refreshPluginLines(in menu: NSMenu) {
+        for item in pluginItems { item.menu?.removeItem(item) }
+        pluginItems.removeAll()
+        pluginHosts.removeAll()
+        guard sepAfterFolders.menu === menu else { return }
+        let hosts = (menuPluginsProvider?() ?? []).compactMap(PluginMenuHost.init(plugin:))
+        guard !hosts.isEmpty else { return }
+        var index = menu.index(of: sepAfterFolders) + 1
+        for host in hosts {
+            let item = host.makeItem()
+            menu.insertItem(item, at: index)
+            index += 1
+            pluginItems.append(item)
+        }
+        let separator = NSMenuItem.separator()
+        menu.insertItem(separator, at: index)
+        pluginItems.append(separator)
+        pluginHosts = hosts
+    }
+
     // MARK: - 收藏的文件夹
 
     /// 平铺区容量的兜底值：按最近打开排的前几个直接躺在主菜单里，
@@ -570,11 +611,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     /// 每条的子菜单列出能打开它的 App。列表**始终显示**（有收藏就列）——
     /// 在任何 App 里都要能一键打开项目，这是功能本体。区头也始终画：
     /// 没有收藏时它下面只剩「添加文件夹…」，正好点明那一项是干什么的。
-    private func refreshFolderLines(in menu: NSMenu) {
+    private func refreshFolderLines(in menu: NSMenu, visible: Bool) {
         for item in folderItems { item.menu?.removeItem(item) }
         folderItems.removeAll()
-        // 未授权菜单里没有这一区
-        guard sepAfterPin.menu === menu else { return }
+        addFolderItem.isHidden = !visible
+        // 未授权菜单里没有这一区；设置里关掉了也没有
+        guard visible, sepAfterPin.menu === menu else { return }
 
         var insertIndex = menu.index(of: sepAfterPin) + 1
         let header = NSMenuItem.sectionHeader(title: L10n.t("收藏的文件夹", "Favorite Folders"))
@@ -826,21 +868,5 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
-    }
-}
-
-extension NSMenuItem {
-    /// 菜单项图标的唯一入口。macOS 27 起，链接到 26+ SDK 的 app 由 AppKit
-    /// 决定图标显不显示，**默认全部藏掉**（含 favicon、App 图标这类非 symbol
-    /// 图，本机实测）。本项目菜单的约定是「图标要么全有要么全无」，所以每个
-    /// 设了图的项都显式要求显示。直接写 `.image =` 会在 27 上静默没图。
-    var icon: NSImage? {
-        get { image }
-        set {
-            image = newValue
-            if #available(macOS 27, *) {
-                preferredImageVisibility = newValue == nil ? .automatic : .visible
-            }
-        }
     }
 }

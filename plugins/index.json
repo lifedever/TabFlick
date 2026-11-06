@@ -1,0 +1,247 @@
+{
+ "schema": 1,
+ "plugins": [
+  {
+   "id": "currency",
+   "version": "1.0.0",
+   "name": {
+    "zh-Hans": "汇率",
+    "zh-Hant": "匯率",
+    "en": "Exchange Rates",
+    "ja": "為替レート",
+    "ko": "환율",
+    "es": "Divisas",
+    "fr": "Taux de change",
+    "de": "Wechselkurse"
+   },
+   "summary": {
+    "zh-Hans": "打「100 usd」直接换算，常用币种可以放进菜单栏。数据每天更新一次。",
+    "zh-Hant": "打「100 usd」直接換算，常用幣種可以放進選單列。資料每天更新一次。",
+    "en": "Type “100 usd” to convert. Put the currencies you watch in the menu bar. Rates update daily."
+   },
+   "symbol": "dollarsign.arrow.circlepath",
+   "tint": "green",
+   "hosts": [
+    "open.er-api.com"
+   ],
+   "files": [
+    {
+     "path": "main.js",
+     "size": 11623,
+     "sha256": "bfda8575a90c63448b083ef46a37a64669cf51aaf60523380c3883aedee484d8"
+    },
+    {
+     "path": "manifest.json",
+     "size": 1319,
+     "sha256": "a6b226c2ce988ce8904ed6b6a416ec505b0809180ec134f009e0b969bb86622a"
+    }
+   ]
+  },
+  {
+   "id": "devtools",
+   "version": "1.1.0",
+   "name": {
+    "zh-Hans": "开发工具箱",
+    "zh-Hant": "開發工具箱",
+    "en": "Dev Toolbox",
+    "ja": "開発ツールボックス",
+    "ko": "개발 도구 상자",
+    "es": "Herramientas de desarrollo",
+    "fr": "Boîte à outils dev",
+    "de": "Entwickler-Werkzeugkasten"
+   },
+   "summary": {
+    "zh-Hans": "输入一段文字，列出能做的转换：Base64、URL、Unicode、HTML 编解码，时间戳和日期，JSON 格式化和转义，JWT 解析，进制、颜色互转，网址参数，MD5 / SHA，人民币大写。回车拷贝。不联网。",
+    "zh-Hant": "輸入一段文字，列出能做的轉換：Base64、URL、Unicode、HTML 編解碼，時間戳和日期，JSON 格式化和跳脫，JWT 解析，進位、顏色互轉，網址參數，MD5 / SHA，中文大寫金額。按 ↩ 拷貝。不連網。",
+    "en": "Type some text to see what it converts to: Base64, URL, Unicode and HTML encoding, timestamps and dates, JSON formatting and escaping, JWT decoding, number bases, colors, URL query parameters, MD5 / SHA hashes. ↩ copies. Works offline."
+   },
+   "symbol": "wrench.and.screwdriver.fill",
+   "tint": "gray",
+   "hosts": [],
+   "files": [
+    {
+     "path": "main.js",
+     "size": 25815,
+     "sha256": "9845b22be121bb419275fa6f87e3e05bcbdf85a46b2ab8b5ca6d13b0a564839b"
+    },
+    {
+     "path": "manifest.json",
+     "size": 2254,
+     "sha256": "2ba8b12971510fe2bae52ea8e5ad5292870719ad789f376aef5469abb537809c"
+    }
+   ]
+  },
+  {
+   "id": "hackernews",
+   "version": "1.0.0",
+   "name": {
+    "en": "Hacker News",
+    "zh-Hans": "Hacker News",
+    "zh-Hant": "Hacker News"
+   },
+   "summary": {
+    "zh-Hans": "首页或最新文章放进菜单栏，打字全文搜索，回车在浏览器打开文章或讨论。",
+    "zh-Hant": "首頁或最新文章放進選單列，打字全文搜尋，按 ↩ 在瀏覽器打開文章或討論。",
+    "en": "Front-page or newest stories in the menu bar, full-text search as you type, and ↩ opens the story or discussion in your browser."
+   },
+   "symbol": "newspaper.fill",
+   "tint": "orange",
+   "hosts": [
+    "hn.algolia.com"
+   ],
+   "files": [
+    {
+     "path": "main.js",
+     "size": 5183,
+     "sha256": "b481be099c2c40125bba7794266fa6189d7a6f57c4dbdae5f8e756c79c369e7e"
+    },
+    {
+     "path": "manifest.json",
+     "size": 2399,
+     "sha256": "e7838895676f109bd505b500aea0c63ebde71e09c5d374f80f91c25d3ca64a32"
+    }
+   ]
+  },
+  {
+   "id": "stocks",
+   "version": "1.0.0",
+   "name": {
+    "zh-Hans": "股票",
+    "zh-Hant": "股票",
+    "en": "Stocks",
+    "ja": "株価",
+    "ko": "주식",
+    "es": "Bolsa",
+    "fr": "Bourse",
+    "de": "Aktien"
+   },
+   "summary": {
+    "zh-Hans": "A 股、指数、板块、港美股行情和基金净值，可以放进菜单栏。",
+    "zh-Hant": "A 股、指數、板塊、港美股行情和基金淨值，可以放進選單列。",
+    "en": "Quotes for China A-shares, indices, sectors, Hong Kong and US stocks, plus fund NAVs. Can live in the menu bar."
+   },
+   "symbol": "chart.line.uptrend.xyaxis",
+   "tint": "red",
+   "hosts": [
+    "qt.gtimg.cn",
+    "web.ifzq.gtimg.cn",
+    "smartbox.gtimg.cn",
+    "proxy.finance.qq.com",
+    "stock.finance.sina.com.cn"
+   ],
+   "files": [
+    {
+     "path": "main.js",
+     "size": 25109,
+     "sha256": "6a0edf9954cce5b42ee7d26581143b5a44294e35a9ed276cc4a6a4c3ee3d80d2"
+    },
+    {
+     "path": "manifest.json",
+     "size": 1834,
+     "sha256": "6253431ace0bde6f4115b10f75ac8aad074964d719d43b1bf2215c7837df7cad"
+    }
+   ]
+  },
+  {
+   "id": "v2ex",
+   "version": "1.0.0",
+   "name": {
+    "zh-Hans": "V2EX",
+    "zh-Hant": "V2EX",
+    "en": "V2EX"
+   },
+   "summary": {
+    "zh-Hans": "看 V2EX 今天的热议或最新主题，可以放进菜单栏，回车在浏览器打开。",
+    "zh-Hant": "看 V2EX 今天的熱議或最新主題，可以放進選單列，按 ↩ 在瀏覽器打開。",
+    "en": "Today's hot or latest topics on V2EX. Can live in the menu bar; ↩ opens the topic in your browser."
+   },
+   "symbol": "bubble.left.and.bubble.right.fill",
+   "tint": "gray",
+   "hosts": [
+    "www.v2ex.com"
+   ],
+   "files": [
+    {
+     "path": "main.js",
+     "size": 4081,
+     "sha256": "479271529441eff6185b232aae9ee2c32a9971fa1e17b9832d2b25660a5305f3"
+    },
+    {
+     "path": "manifest.json",
+     "size": 2474,
+     "sha256": "4690e950148f1c83141758d25c639f7f7ad7f39cecdf390cfc713bf53c29f5b4"
+    }
+   ]
+  },
+  {
+   "id": "weather",
+   "version": "2.0.0",
+   "name": {
+    "zh-Hans": "天气",
+    "zh-Hant": "天氣",
+    "en": "Weather",
+    "ja": "天気",
+    "ko": "날씨",
+    "es": "Tiempo",
+    "fr": "Météo",
+    "de": "Wetter"
+   },
+   "summary": {
+    "zh-Hans": "收藏城市，看实况和今天的最高最低温，可以放进菜单栏。国内到区县。数据来自和风天气，要在这里填自己的 API Host 和 API Key（免费注册）。",
+    "zh-Hant": "收藏城市，看即時天氣和今天的最高最低溫，可以放進選單列。中國到區縣。資料來自和風天氣，要在這裡填自己的 API Host 和 API Key（免費註冊）。",
+    "en": "Save cities to see current weather and today's high and low. Can live in the menu bar. Data from QWeather; enter your own API Host and API Key here (free to sign up)."
+   },
+   "symbol": "cloud.sun.fill",
+   "tint": "cyan",
+   "hosts": [
+    "*.qweatherapi.com"
+   ],
+   "files": [
+    {
+     "path": "main.js",
+     "size": 17705,
+     "sha256": "77aa86cf2a084856c984f1eab957761e8f7b4c38afbf4095d5812e68a6e0f9c6"
+    },
+    {
+     "path": "manifest.json",
+     "size": 2889,
+     "sha256": "eec47710055749b64147096ff8cd62a896ca223121cda08985dcbb1a3983158b"
+    }
+   ]
+  },
+  {
+   "id": "worldclock",
+   "version": "1.1.0",
+   "name": {
+    "zh-Hans": "世界时钟",
+    "zh-Hant": "世界時鐘",
+    "en": "World Clock",
+    "ja": "世界時計",
+    "ko": "세계 시계",
+    "es": "Reloj mundial",
+    "fr": "Horloge mondiale",
+    "de": "Weltuhr"
+   },
+   "summary": {
+    "zh-Hans": "收藏城市，看当地时间和跟你差几个小时，可以放进菜单栏。搜国家列出它所有的城市。不联网。",
+    "zh-Hant": "收藏城市，看當地時間和跟你差幾個小時，可以放進選單列。搜國家列出它所有的城市。不連網。",
+    "en": "Save cities to see their local time and how far ahead or behind they are. Search a country to list its cities. Can live in the menu bar. Works offline."
+   },
+   "symbol": "globe.asia.australia.fill",
+   "tint": "indigo",
+   "hosts": [],
+   "files": [
+    {
+     "path": "main.js",
+     "size": 21234,
+     "sha256": "48f7b5695647c8a77b9352a2d501044ddade1cef7fb67f125850a7e41868dab7"
+    },
+    {
+     "path": "manifest.json",
+     "size": 1697,
+     "sha256": "c48683a22df562d3d5ee2375bf2f17cf094bc55cf72a85dda309bf6a8f77365b"
+    }
+   ]
+  }
+ ]
+}

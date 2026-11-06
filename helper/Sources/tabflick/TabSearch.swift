@@ -304,6 +304,33 @@ enum TabSearch {
         return false
     }
 
+    /// 输入是不是精准叫出了这个名字（2026-11-06 用户定的：内置命令精准命中时排到前面，模糊的不算）。
+    /// 和某个名字一字不差，或者是名字开头的一整个词：英文要停在词边界（「open」对「Open With」算，
+    /// 「ope」不算）；中文没有空格，从开头打满两个字就算（「打开」对「打开方式」算，「打」不算）。
+    /// 名字中间的词（「方式」）、拼音、首字母都不算。不分大小写，连着的空白当一个；名字末尾的「…」是词边界。
+    nonisolated static func callsByName(_ query: String, names: [String]) -> Bool {
+        let q = Array(nameKey(query))
+        guard !q.isEmpty else { return false }
+        for name in names {
+            let n = Array(nameKey(name))
+            guard n.count >= q.count, Array(n[..<q.count]) == q else { continue }
+            guard n.count > q.count else { return true }
+            let next = n[q.count]
+            if !next.isLetter && !next.isNumber { return true }
+            if q.count >= 2, isIdeograph(q[q.count - 1]) { return true }
+        }
+        return false
+    }
+
+    private nonisolated static func nameKey(_ text: String) -> String {
+        text.precomposedStringWithCanonicalMapping.lowercased()
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    private nonisolated static func isIdeograph(_ c: Character) -> Bool {
+        c.unicodeScalars.first?.properties.isIdeographic == true
+    }
+
     /// 输入像网址时，拿去和标签地址比「这个站是不是已经开着」的前缀；不像网址是 nil。
     /// 「全部」里据此决定「在新标签打开」排哪（2026-09-30 用户定的）：没开着就排最前，
     /// 开着就让那个标签排最前、回车切过去，免得开出重复标签。

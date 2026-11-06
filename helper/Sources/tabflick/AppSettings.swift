@@ -378,6 +378,7 @@ final class AppSettings: ObservableObject {
         static let knownBrowsers = "knownBrowsers"
         static let pendingUnpins = "pendingUnpins"
         static let inlineFolderLimit = "inlineFolderLimit"
+        static let showFoldersInMenu = "showFoldersInMenu"
     }
 
     /// 状态栏平铺文件夹数量的取值范围。下限 1：0 等于「全部收进更多」，
@@ -729,6 +730,15 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// 状态栏菜单里显不显示收藏的文件夹（默认显示）。关掉时整段连「添加文件夹…」一起不出现；
+    /// 搜索面板的「文件夹」不受影响。菜单每次打开时现读。
+    @Published var showFoldersInMenu: Bool {
+        didSet {
+            guard oldValue != showFoldersInMenu else { return }
+            UserDefaults.standard.set(showFoldersInMenu, forKey: Key.showFoldersInMenu)
+        }
+    }
+
     /// 自动检查更新的频率。UpdateChecker 到点对账时现读，改动立即生效。
     @Published var updateCheckFrequency: UpdateCheckFrequency {
         didSet {
@@ -795,6 +805,7 @@ final class AppSettings: ObservableObject {
         let storedLimit = defaults.integer(forKey: Key.inlineFolderLimit)
         inlineFolderLimit = Self.inlineFolderLimitRange.contains(storedLimit)
             ? storedLimit : Self.defaultInlineFolderLimit
+        showFoldersInMenu = defaults.object(forKey: Key.showFoldersInMenu) as? Bool ?? true
 
         let state = LoginItem.state
         launchAtLogin = state == .enabled

@@ -1,0 +1,69 @@
+{
+  "id": "stocks",
+  "version": "1.0.0",
+  "name": {
+    "zh-Hans": "股票",
+    "zh-Hant": "股票",
+    "en": "Stocks",
+    "ja": "株価",
+    "ko": "주식",
+    "es": "Bolsa",
+    "fr": "Bourse",
+    "de": "Aktien"
+  },
+  "summary": {
+    "zh-Hans": "A 股、指数、板块、港美股行情和基金净值，可以放进菜单栏。",
+    "zh-Hant": "A 股、指數、板塊、港美股行情和基金淨值，可以放進選單列。",
+    "en": "Quotes for China A-shares, indices, sectors, Hong Kong and US stocks, plus fund NAVs. Can live in the menu bar."
+  },
+  "symbol": "chart.line.uptrend.xyaxis",
+  "tint": "red",
+  "hosts": [
+    "qt.gtimg.cn",
+    "web.ifzq.gtimg.cn",
+    "smartbox.gtimg.cn",
+    "proxy.finance.qq.com",
+    "stock.finance.sina.com.cn"
+  ],
+  "settings": {
+    "upDownColors": true
+  },
+  "contributes": {
+    "menu": true,
+    "list": {
+      "title": {
+        "zh-Hans": "股票",
+        "zh-Hant": "股票",
+        "en": "Stocks",
+        "ja": "株価",
+        "ko": "주식",
+        "es": "Bolsa",
+        "fr": "Bourse",
+        "de": "Aktien"
+      },
+      "keywords": [
+        "gp",
+        "gupiao",
+        "stock",
+        "stocks",
+        "自选",
+        "行情",
+        "基金",
+        "jijin",
+        "fund",
+        "quote",
+        "watchlist"
+      ],
+      "placeholder": {
+        "zh-Hans": "搜自选里的，或找新的加入自选",
+        "zh-Hant": "搜自選裡的，或找新的加入自選",
+        "en": "Search your watchlist, or find new ones to add"
+      },
+      "empty": {
+        "zh-Hans": "还没有自选。打代码或名称搜索，回车加入。",
+        "zh-Hant": "還沒有自選。打代碼或名稱搜尋，按 ↩ 加入。",
+        "en": "No watchlist yet. Search by code or name, then press ↩ to add."
+      }
+    }
+  }
+}

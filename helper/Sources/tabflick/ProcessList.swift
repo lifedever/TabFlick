@@ -416,7 +416,7 @@ final class ProcessMonitor {
     }
 
     /// 普通 App 和菜单栏 App（有 bundle 的）。主线程上只读 NSWorkspace，路径在后台队列上解。
-    private static func runningApps() -> [RunningAppInfo] {
+    static func runningApps() -> [RunningAppInfo] {
         NSWorkspace.shared.runningApplications.compactMap { app in
             guard app.activationPolicy != .prohibited, let url = app.bundleURL else { return nil }
             // 路径先放原样的，到后台队列上再 `resolvingPaths`

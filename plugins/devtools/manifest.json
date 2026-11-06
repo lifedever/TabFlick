@@ -1,0 +1,67 @@
+{
+  "id": "devtools",
+  "version": "1.1.0",
+  "name": {
+    "zh-Hans": "开发工具箱",
+    "zh-Hant": "開發工具箱",
+    "en": "Dev Toolbox",
+    "ja": "開発ツールボックス",
+    "ko": "개발 도구 상자",
+    "es": "Herramientas de desarrollo",
+    "fr": "Boîte à outils dev",
+    "de": "Entwickler-Werkzeugkasten"
+  },
+  "summary": {
+    "zh-Hans": "输入一段文字，列出能做的转换：Base64、URL、Unicode、HTML 编解码，时间戳和日期，JSON 格式化和转义，JWT 解析，进制、颜色互转，网址参数，MD5 / SHA，人民币大写。回车拷贝。不联网。",
+    "zh-Hant": "輸入一段文字，列出能做的轉換：Base64、URL、Unicode、HTML 編解碼，時間戳和日期，JSON 格式化和跳脫，JWT 解析，進位、顏色互轉，網址參數，MD5 / SHA，中文大寫金額。按 ↩ 拷貝。不連網。",
+    "en": "Type some text to see what it converts to: Base64, URL, Unicode and HTML encoding, timestamps and dates, JSON formatting and escaping, JWT decoding, number bases, colors, URL query parameters, MD5 / SHA hashes. ↩ copies. Works offline."
+  },
+  "symbol": "wrench.and.screwdriver.fill",
+  "tint": "gray",
+  "hosts": [],
+  "contributes": {
+    "list": {
+      "title": {
+        "zh-Hans": "开发工具箱",
+        "zh-Hant": "開發工具箱",
+        "en": "Dev Toolbox"
+      },
+      "keywords": [
+        "kfgj",
+        "dev",
+        "devtools",
+        "base64",
+        "url",
+        "json",
+        "uuid",
+        "timestamp",
+        "时间戳",
+        "编码",
+        "解码",
+        "jwt",
+        "md5",
+        "sha",
+        "hash",
+        "哈希",
+        "进制",
+        "hex",
+        "color",
+        "颜色",
+        "unicode",
+        "html",
+        "大写",
+        "dx"
+      ],
+      "placeholder": {
+        "zh-Hans": "粘贴或输入要转换的内容",
+        "zh-Hant": "貼上或輸入要轉換的內容",
+        "en": "Paste or type something to convert"
+      },
+      "empty": {
+        "zh-Hans": "输入一段文字，这里列出能做的转换。",
+        "zh-Hant": "輸入一段文字，這裡列出能做的轉換。",
+        "en": "Type some text to see what it converts to."
+      }
+    }
+  }
+}

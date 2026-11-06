@@ -62,16 +62,29 @@ final class IconCache {
 
     func image(for url: String) -> IconInfo? { images[url] }
 
-    /// 本机文件 / App 的图标（文件夹、应用行用），键 `file:<path>`。同步取、缩到 64、缓存。
-    func fileIcon(path: String) -> IconInfo? {
+    private var fileInflight: Set<String> = []
+    private let fileIconQueue = DispatchQueue(label: "tabflick.file-icons", qos: .userInitiated)
+
+    /// 本机文件 / App 的图标（文件夹、应用行用），键 `file:<path>`，缩到 64、缓存。
+    /// 没缓存的不在主线程上取：先返回 nil（行画占位），后台取好入缓存后调 `onLoaded`。
+    /// 同步取过一版：打开方式列表一次列 40 个没取过图标的 App，主线程卡 220ms（2026-11-06 实测，
+    /// 系统图标服务已热；同一批第二次只要 9ms），用户说「有点卡」。
+    func fileIcon(path: String, onLoaded: @escaping () -> Void) -> IconInfo? {
         let key = "file:" + path
         if let hit = images[key] { return hit }
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
-        let raw = NSWorkspace.shared.icon(forFile: path)
-        guard let image = Self.downscaled(raw, to: 64) else { return nil }
-        let info = IconInfo(image: image, isLight: false)
-        images[key] = info
-        return info
+        guard !fileInflight.contains(key) else { return nil }
+        fileInflight.insert(key)
+        fileIconQueue.async {
+            let image = FileManager.default.fileExists(atPath: path)
+                ? Self.downscaled(NSWorkspace.shared.icon(forFile: path), to: 64) : nil
+            Task { @MainActor in
+                self.fileInflight.remove(key)
+                guard let image else { return }   // 文件没了：照旧画占位
+                self.images[key] = IconInfo(image: image, isLight: false)
+                onLoaded()
+            }
+        }
+        return nil
     }
 
     /// 扩展取回来的图标（书签 / 历史行按域名要的），直接入缓存。
@@ -801,6 +814,8 @@ final class MRUController {
         }
         search.model.webOpenerProvider = { WebOpeners.current }
         search.model.suggestions = SuggestionStore.shared
+        search.model.plugins = PluginRegistry.shared
+        search.model.commandKeywords = { CommandKeywordStore.shared.words(for: $0) }
         search.model.badgeProvider = { [weak self] row in
             guard let self else { return (nil, nil) }
             @MainActor func of(_ id: UUID?) -> (browser: String?, profile: String?) {
@@ -823,7 +838,10 @@ final class MRUController {
             var map: [String: IconInfo] = [:]
             for key in keys where !key.isEmpty && map[key] == nil {
                 if key.hasPrefix("file:") {
-                    if let info = self.icons.fileIcon(path: String(key.dropFirst(5))) { map[key] = info }
+                    let info = self.icons.fileIcon(path: String(key.dropFirst(5))) { [weak self] in
+                        self?.scheduleSearchIconReload()
+                    }
+                    if let info { map[key] = info }
                 } else if let info = self.icons.image(for: key) {
                     map[key] = info
                 }
@@ -1265,6 +1283,18 @@ final class MRUController {
     func openGlobalSearch() {
         guard !search.isVisible else { return }
         toggleTabSearch(global: true)
+    }
+
+    /// 状态栏「结束进程 ▸」里的「在快捷搜索里打开」：⌥Space 面板直接进进程列表。
+    func openProcessList() {
+        openGlobalSearch()
+        search.openProcessList()
+    }
+
+    /// 状态栏里插件（股票）子菜单的「在快捷搜索里打开」：⌥Space 面板直接进它的列表。
+    func openPluginList(_ id: String) {
+        openGlobalSearch()
+        search.openPluginList(id)
     }
 
     /// 搜索快捷键：开着就关，关着就开。cycling 中不开 —— 两个浮层叠一起没法用。
@@ -2803,6 +2833,19 @@ final class MRUController {
             .activate(options: [])
         log("📎 menu pick → \(target.title.prefix(50)) [\(bundleID)]")
         server.send(["type": "switch", "tabId": tabId], to: clientID)
+    }
+
+    /// 后台取的本机图标到了：攒 50ms 再让搜索面板重拿一次（一次列几十个 App 时图标是一个个到的，
+    /// 每到一个就重画整张表不值得）。
+    private var searchIconReloadPending = false
+    private func scheduleSearchIconReload() {
+        guard !searchIconReloadPending else { return }
+        searchIconReloadPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            self.searchIconReloadPending = false
+            if self.search.isVisible { self.search.model.reloadIcons() }
+        }
     }
 
     private func refreshOverlayImages() {

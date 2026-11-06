@@ -2,20 +2,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 所有设置 pane 的统一宽度。**必须全体一致**：宽度不一的话切 tab 时窗口
-/// 会跟着伸缩跳动（2026-09-02 用户反馈「跳来跳去体验不好」）。取 560 是
-/// 因为「文件夹管理」要放完整路径，460 截断太狠 —— 就全体跟它对齐。
-/// 设置各页的宽度。基准 560；工具栏八个分页名放不下时按需加宽，否则后几个分页会
-/// 被挤进 >> 溢出菜单（2026-09-27 日语截图；估算下来西法德也放不下）。
-/// 每次取都按当前语言重算：切语言时各页 rootView 重建，窗口跟着新宽度走。
-@MainActor private var kSettingsPaneWidth: CGFloat {
-    let font = NSFont.systemFont(ofSize: 11)
-    let needed = SettingsWindowController.paneTitles.reduce(CGFloat(0)) { sum, title in
-        // 每个按钮：max(文字宽, 图标宽) + 左右内边距。系数按日语截图反推（6 个按钮 + >> 约 550pt）
-        sum + max(ceil((title as NSString).size(withAttributes: [.font: font]).width), 40) + 24
-    } + 16
-    return max(560, needed)
-}
+// 各页铺满右边的内容区（窗口骨架见 SettingsShell.swift）。grouped Form 自己会滚，页面不定宽高。
 
 // MARK: - 通用
 
@@ -87,14 +74,21 @@ private struct GeneralPane: View {
                 }
             }
 
-            excludedSection
         }
         .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
     }
+}
+
+// MARK: - 排除的 App
+
+private struct ExcludedAppsSection: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View { excludedSection }
 
     /// 排除名单：这些 App 在前台时不接管全局切换器的键（搜索面板不看它，用户定的：
-    /// 那是全局工具，要关就关开关）。放在「通用」（2026-09-26 从切换器页搬来）。
+    /// 那是全局工具，要关就关开关）。2026-09-26 从切换器页搬去「通用」，2026-11-06 搬回切换器页、
+    /// 全局切换器关着时整段不出现（用户问「这个功能还有用吗」：它只管全局切换器，关着时放在「通用」最显眼处让人困惑）。
     ///
     /// 只有手工这一份。自动检测做过一版又拆了（2026-09-11）：AX 只读得到
     /// 摆进菜单栏的绑定，Electron / 自绘界面的 App（Claude、VS Code）把
@@ -263,8 +257,8 @@ private struct SwitcherPane: View {
                     .disabled(!settings.globalSwitcher)
 
                 Text(L10n.t(
-                    "列出所有浏览器的标签，按浏览器分组。默认沿用切换器快捷键，只在浏览器之外唤出；想在浏览器里也能用，单独给它设一个键。排除的 App 在「通用」里。",
-                    "Lists tabs from every browser, grouped by browser. It reuses the switcher shortcut and only opens outside a browser — give it its own key to use it anywhere. Excluded apps live under General."
+                    "列出所有浏览器的标签，按浏览器分组。默认沿用切换器快捷键，只在浏览器之外唤出；想在浏览器里也能用，单独给它设一个键。",
+                    "Lists tabs from every browser, grouped by browser. It reuses the switcher shortcut and only opens outside a browser — give it its own key to use it anywhere."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -272,9 +266,13 @@ private struct SwitcherPane: View {
                 Text(L10n.t("全局切换器", "Global switcher"))
             }
 
+            // 排除名单只管全局切换器，关着时不出现
+            if settings.globalSwitcher {
+                ExcludedAppsSection(settings: settings)
+            }
+
         }
         .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
     }
 }
 
@@ -328,7 +326,6 @@ private struct BrowserPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
     }
 
     @ViewBuilder
@@ -496,7 +493,6 @@ private struct TabManagementPane: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
     }
 
     /// 收藏分布在不止一个浏览器（或同一个浏览器的多个 Profile）时，每行标出归属
@@ -598,6 +594,36 @@ private struct FoldersPane: View {
 
     var body: some View {
         Form {
+            // 菜单栏这一段（2026-11-06 加开关）：开关跟着功能走，不另开一页「菜单栏」
+            Section {
+                Toggle(isOn: $settings.showFoldersInMenu) {
+                    Text(L10n.t("在菜单栏显示", "Show in Menu Bar"))
+                }
+                .toggleStyle(.switch)
+
+                // 下拉而不是 Stepper：Stepper 的数字是纯文本，点上去会被选中
+                // 变蓝，用户反馈「太难用」（2026-09-15）。档位之外的值（旧版
+                // Stepper 存下的）也列进去，不然当前值在菜单里没有对应项。
+                Picker(L10n.t("状态栏平铺数量", "Shown in the menu"),
+                       selection: $settings.inlineFolderLimit) {
+                    ForEach(AppSettings.inlineFolderLimitChoices(including: settings.inlineFolderLimit),
+                            id: \.self) { n in
+                        Text(L10n.t("\(n) 个", "\(n)")).tag(n)
+                    }
+                }
+                .disabled(!settings.showFoldersInMenu)
+
+                Text(settings.showFoldersInMenu
+                     ? L10n.t("状态栏菜单按最近打开排序，平铺前 \(settings.inlineFolderLimit) 个，其余收在「更多」里。",
+                              "The menu lists the \(settings.inlineFolderLimit) most recently opened; the rest live under More.")
+                     : L10n.t("状态栏菜单里不显示收藏的文件夹，也没有「添加文件夹…」。搜索面板里照样能搜到。",
+                              "The menu bar menu leaves out favorite folders and “Add Folder…”. They're still in the search panel."))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            } header: {
+                Text(L10n.t("菜单栏", "Menu Bar"))
+            }
+
             Section {
                 if folders.entries.isEmpty {
                     Text(L10n.t("还没有收藏。从状态栏菜单点「添加文件夹…」，或在 Finder 打开目录后点「收藏当前 Finder 目录」。",
@@ -629,23 +655,6 @@ private struct FoldersPane: View {
                     }
                 }
 
-                // 下拉而不是 Stepper：Stepper 的数字是纯文本，点上去会被选中
-                // 变蓝，用户反馈「太难用」（2026-09-15）。档位之外的值（旧版
-                // Stepper 存下的）也列进去，不然当前值在菜单里没有对应项。
-                Picker(L10n.t("状态栏平铺数量", "Shown in the menu"),
-                       selection: $settings.inlineFolderLimit) {
-                    ForEach(AppSettings.inlineFolderLimitChoices(including: settings.inlineFolderLimit),
-                            id: \.self) { n in
-                        Text(L10n.t("\(n) 个", "\(n)")).tag(n)
-                    }
-                }
-
-                Text(L10n.t(
-                    "状态栏菜单按最近打开排序，平铺前 \(settings.inlineFolderLimit) 个，其余收在「更多」里。",
-                    "The menu lists the \(settings.inlineFolderLimit) most recently opened; the rest live under More."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
             } header: {
                 Text(folders.entries.isEmpty
                      ? L10n.t("收藏的文件夹", "Favorite Folders")
@@ -655,7 +664,6 @@ private struct FoldersPane: View {
 
         }
         .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
     }
 
     @ViewBuilder
@@ -702,7 +710,6 @@ private struct OpenWithPane: View {
             openWithSection
         }
         .formStyle(.grouped)
-        .frame(width: kSettingsPaneWidth)
     }
 
     @ViewBuilder
@@ -906,11 +913,18 @@ private struct SearchPane: View {
             }
             .onAppear { memoryCount = SearchMemory.shared.count + SuggestionStore.shared.count + AppCatalog.storedActivityCount() }
 
+            // 不属于任何插件的命令（「打开方式…」）的关键词放这里；插件的命令在各自的插件页
+            Section {
+                CommandKeywordRow(command: PluginCommandInfo(id: "system.openWith",
+                                                             title: L10n.t("打开方式…", "Open With…"),
+                                                             symbol: "arrow.up.forward.app"))
+            } header: {
+                Text(L10n.t("命令", "Commands"))
+            } footer: {
+                CommandKeywordFooter()
+            }
         }
         .formStyle(.grouped)
-        // 这一页五段叠起来比屏幕还高（用户 2026-09-26 截图）：整页限高，超出在页内滚
-        //（grouped Form 本身就是滚动视图，给个高度就滚）
-        .frame(width: kSettingsPaneWidth, height: 620)
     }
 
     private func siteSearchRow(_ site: Binding<SiteSearch>) -> some View {
@@ -1017,6 +1031,497 @@ private func hotkeyNote(_ zh: L10nText, _ en: L10nText) -> some View {
         .foregroundStyle(.secondary)
 }
 
+// MARK: - 插件
+
+/// 插件图标块：彩色圆角方块 + 白色实心符号（同侧边栏、搜索面板的 ActionTile）。
+private struct PluginTile: View {
+    let plugin: Plugin
+    var side: CGFloat = 26
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: side * 0.27, style: .continuous)
+            .fill(plugin.tint.gradient)
+            .frame(width: side, height: side)
+            .overlay(
+                Image(systemName: plugin.symbol)
+                    .font(.system(size: side * 0.5, weight: .semibold))
+                    .foregroundStyle(.white)
+            )
+    }
+}
+
+extension Plugin {
+    /// 「内置」「官方 · 1.0.0」
+    var originLabel: String {
+        switch origin {
+        case .builtin: return L10n.t("内置", "Built-in")
+        case .official(let version): return L10n.t("官方", "Official") + " · " + version
+        }
+    }
+}
+
+/// 「内置」「官方 · 版本」小标签。
+private struct PluginOriginBadge: View {
+    let origin: PluginOrigin
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.12)))
+    }
+
+    private var label: String {
+        switch origin {
+        case .builtin: return L10n.t("内置", "Built-in")
+        case .official(let version): return L10n.t("官方", "Official") + " · " + version
+        }
+    }
+}
+
+/// 插件总览：装了哪些，各自开关。每个插件的详细设置在侧边栏它自己那一行。
+private struct PluginsPane: View {
+    @ObservedObject var registry: PluginRegistry
+    @ObservedObject private var store = PluginStore.shared
+    /// 等确认卸载的插件 id
+    @State private var removing: String?
+
+    private var builtins: [Plugin] { registry.plugins.filter { $0.origin == .builtin } }
+    private var installed: [Plugin] { registry.plugins.filter { $0.origin != .builtin } }
+    /// 商店里有、还没装的
+    private var available: [StoreEntry] { store.entries.filter { registry.plugin($0.id) == nil } }
+    private var updates: [StoreEntry] { installed.compactMap { store.update(for: $0) } }
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(builtins, id: \.id) { plugin in
+                    PluginListRow(symbol: plugin.symbol, tint: plugin.tint, title: plugin.title,
+                                  badge: L10n.t("内置", "Built-in"), summary: plugin.summary) {
+                        enabledToggle(plugin)
+                    }
+                }
+            } header: {
+                Text(L10n.t("内置", "Built-in"))
+            } footer: {
+                footnote(L10n.t("跟着 TabFlick 一起更新，不能卸载，只能关掉。关掉的插件不再出现在搜索面板和菜单栏里。",
+                                "Updated with TabFlick. They can't be removed, only turned off. A plugin that's off no longer shows up in the search panel or the menu bar."))
+            }
+
+            Section {
+                if installed.isEmpty {
+                    footnote(L10n.t("还没有装插件，在下面「可安装」里挑。", "No plugins installed yet. Pick one under Available."))
+                }
+                ForEach(installed, id: \.id) { plugin in
+                    let update = store.update(for: plugin)
+                    PluginListRow(symbol: plugin.symbol, tint: plugin.tint, title: plugin.title,
+                                  badge: plugin.originLabel, summary: plugin.summary) {
+                        if let update {
+                            if store.busy.contains(plugin.id) {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Button(L10n.t("更新到 \(update.version)", "Update to \(update.version)")) { store.install(update) }
+                                    .disabled(PluginStore.needsNewerApp(update) != nil)
+                            }
+                        }
+                        enabledToggle(plugin)
+                        Button {
+                            removing = plugin.id
+                        } label: {
+                            Image(systemName: "trash").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L10n.t("卸载", "Remove"))
+                    }
+                }
+            } header: {
+                HStack {
+                    Text(L10n.t("已安装", "Installed"))
+                    Spacer()
+                    if updates.count > 1 {
+                        Button(L10n.t("全部更新", "Update All")) { updates.forEach(store.install) }
+                            .controlSize(.small)
+                    }
+                }
+            }
+
+            Section {
+                switch store.status {
+                case .idle, .loading where store.entries.isEmpty:
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        footnote(L10n.t("正在取插件列表…", "Loading the plugin list…"))
+                    }
+                case .failed(let message) where store.entries.isEmpty:
+                    footnote(L10n.t("取不到插件列表：\(message)", "Couldn't load the plugin list: \(message)"))
+                default:
+                    if available.isEmpty {
+                        footnote(L10n.t("商店里的插件都装上了。", "Every plugin in the store is installed."))
+                    }
+                    ForEach(available) { entry in
+                        storeRow(entry)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text(L10n.t("可安装", "Available"))
+                    Spacer()
+                    if case .loaded(let at) = store.status {
+                        Text(L10n.t("检查于 \(Self.time(at))", "Checked at \(Self.time(at))"))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    Button(L10n.t("刷新", "Refresh")) { store.refresh(force: true) }
+                        .controlSize(.small)
+                        .disabled(store.status == .loading)
+                }
+            } footer: {
+                footnote(L10n.t("只有官方插件。装之前写明它会访问哪些网站，插件联网出了这个范围一律拦下。",
+                                "Official plugins only. Each one lists the sites it connects to, and anything else is blocked."))
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { store.refresh() }
+        .alert(L10n.t("卸载「\(removingTitle)」？", "Remove “\(removingTitle)”?"),
+               isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            // 存过数据（自选、收藏的城市）才问留不留（用户 2026-11-06）；默认留着
+            if let id = removing, PluginStore.hasData(id) {
+                Button(L10n.t("卸载，保留数据", "Remove, Keep Data")) { uninstall(keepData: true) }
+                Button(L10n.t("卸载并删除数据", "Remove and Delete Data"), role: .destructive) { uninstall(keepData: false) }
+            } else {
+                Button(L10n.t("卸载", "Remove"), role: .destructive) { uninstall(keepData: true) }
+            }
+            Button(L10n.t("取消", "Cancel"), role: .cancel) { removing = nil }
+        } message: {
+            if let id = removing, PluginStore.hasData(id) {
+                Text(L10n.t("插件存的数据（比如自选、收藏的城市）保留的话，重装回来还在。",
+                            "If you keep its data (watchlists, saved cities), it comes back when you reinstall."))
+            }
+        }
+    }
+
+    private var removingTitle: String { removing.flatMap { registry.plugin($0)?.title } ?? "" }
+
+    private func uninstall(keepData: Bool) {
+        if let id = removing, let plugin = registry.plugin(id) { store.uninstall(plugin, keepData: keepData) }
+        removing = nil
+    }
+
+    private func storeRow(_ entry: StoreEntry) -> some View {
+        let language = L10n.current.rawValue
+        let hosts = entry.hosts.isEmpty
+            ? L10n.t("不联网", "Works offline")
+            : L10n.t("会访问 \(entry.hosts.joined(separator: L10n.listSeparator))", "Connects to \(entry.hosts.joined(separator: ", "))")
+        return PluginListRow(symbol: entry.symbol, tint: PluginTint.color(entry.tint),
+                             title: PluginManifest.pick(entry.names, language: language) ?? entry.id,
+                             badge: entry.version,
+                             summary: PluginManifest.pick(entry.summaries, language: language) ?? "",
+                             detail: hosts) {
+            if let need = PluginStore.needsNewerApp(entry) {
+                Text(L10n.t("需要 TabFlick \(need)", "Needs TabFlick \(need)"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else if store.busy.contains(entry.id) {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(L10n.t("安装", "Install")) { store.install(entry) }
+            }
+        }
+    }
+
+    private func enabledToggle(_ plugin: Plugin) -> some View {
+        Toggle("", isOn: Binding(get: { registry.isEnabled(plugin.id) }, set: { registry.setEnabled(plugin.id, $0) }))
+            .toggleStyle(.switch)
+            .labelsHidden()
+    }
+
+    private func footnote(_ text: String) -> some View {
+        Text(text).font(.system(size: 11)).foregroundStyle(.secondary)
+    }
+
+    private static func time(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+}
+
+/// 插件列表的一行：图标块、名字 + 小标签、说明（和一行灰字），右边放按钮和开关。
+private struct PluginListRow<Trailing: View>: View {
+    let symbol: String
+    let tint: Color
+    let title: String
+    let badge: String
+    let summary: String
+    var detail: String? = nil
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 10) {
+            PluginSymbolTile(symbol: symbol, tint: tint, side: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(title)
+                    Text(badge)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.12)))
+                }
+                Text(summary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer(minLength: 12)
+            HStack(spacing: 10) { trailing() }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// 一个插件自己的页：开关、它在搜索面板里加了什么、菜单栏（有菜单的插件才有）。
+private struct PluginPane: View {
+    @ObservedObject var registry: PluginRegistry
+    let plugin: Plugin
+
+    private var enabled: Bool { registry.isEnabled(plugin.id) }
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 12) {
+                    PluginTile(plugin: plugin, side: 40)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(plugin.title).font(.system(size: 15, weight: .semibold))
+                            PluginOriginBadge(origin: plugin.origin)
+                        }
+                        Text(plugin.summary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 2)
+
+                // 开关只在「插件」总览页（这里再放一个是重复，用户 2026-11-06）；关着时说一句去哪里开
+                if !enabled {
+                    Text(L10n.t("已关闭。在「插件」页打开后这里的设置才生效。",
+                                "Turned off. Turn it on in Plugins for these settings to take effect."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !plugin.panelCommands.isEmpty {
+                Section {
+                    ForEach(plugin.panelCommands) { command in
+                        CommandKeywordRow(command: command)
+                    }
+                } header: {
+                    Text(L10n.t("在搜索面板里", "In the Search Panel"))
+                } footer: {
+                    CommandKeywordFooter()
+                }
+                .disabled(!enabled)
+            }
+
+            // 插件自己声明的设置项（V2EX 看热议还是最新）
+            if let choices = (plugin as? JSPlugin)?.manifest.choices, !choices.isEmpty {
+                Section {
+                    ForEach(choices, id: \.key) { choice in
+                        PluginChoicePicker(pluginID: plugin.id, choice: choice)
+                    }
+                }
+                .disabled(!enabled)
+            }
+
+            // 要用户填的（和风天气的 API Host、Key）+ 去哪拿的链接
+            if let manifest = (plugin as? JSPlugin)?.manifest, !manifest.inputs.isEmpty {
+                Section {
+                    ForEach(manifest.inputs, id: \.key) { input in
+                        PluginInputField(pluginID: plugin.id, input: input)
+                    }
+                } footer: {
+                    PluginInputFooter(inputs: manifest.inputs, links: manifest.links)
+                }
+                .disabled(!enabled)
+            }
+
+            // 只给声明了要它的插件（股票）：V2EX 这类没有涨跌的不该出现（用户 2026-11-06 截图）
+            if (plugin as? JSPlugin)?.manifest.usesUpDownColors == true {
+                Section {
+                    PluginColorPicker()
+                }
+                .disabled(!enabled)
+            }
+
+            if plugin.menu != nil {
+                Section {
+                    Toggle(isOn: Binding(get: { registry.wantsMenu(plugin.id) },
+                                         set: { registry.setWantsMenu(plugin.id, $0) })) {
+                        Text(L10n.t("在菜单栏显示", "Show in Menu Bar"))
+                    }
+                    .toggleStyle(.switch)
+
+                    if plugin is ProcessesPlugin {
+                        ProcessMenuOptions()
+                            .disabled(!registry.wantsMenu(plugin.id))
+                    }
+
+                    Text(L10n.t("状态栏菜单里多一行「\(plugin.title)」，展开看内容。",
+                                "Adds “\(plugin.title)” to the menu bar menu; hover it to see the contents."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text(L10n.t("菜单栏", "Menu Bar"))
+                }
+                .disabled(!enabled)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// 一条命令 + 它的关键词输入框。占位就是命令名：不填就按命令名搜（用户 2026-11-06 定的默认）。
+private struct CommandKeywordRow: View {
+    let command: PluginCommandInfo
+    @ObservedObject private var store = CommandKeywordStore.shared
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: command.symbol)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            Text(command.title)
+                .lineLimit(1)
+            Spacer(minLength: 12)
+            // 分组表单里 TextField 的第一个参数会被画成前置标签，占位要走 prompt + labelsHidden
+            TextField("", text: Binding(get: { store.text(for: command.id) },
+                                        set: { store.setText($0, for: command.id) }),
+                      prompt: Text(command.title.replacingOccurrences(of: "…", with: "")))
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 180)
+        }
+    }
+}
+
+private struct CommandKeywordFooter: View {
+    var body: some View {
+        Text(L10n.t("打出关键词，这条命令排在最前，回车就执行。多个关键词用空格分开，不填就按命令名搜。",
+                    "Type a keyword and that command comes first; ↩ runs it. Separate keywords with spaces. Leave it empty to search by the command's name."))
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+    }
+}
+
+/// 插件声明的一个设置项，画成下拉框。值存 `PluginSettingsStore`，插件下一次调用就读到新的。
+private struct PluginChoicePicker: View {
+    let pluginID: String
+    let choice: PluginChoice
+    @State private var value = ""
+
+    var body: some View {
+        let language = L10n.current.rawValue
+        Picker(PluginManifest.pick(choice.titles, language: language) ?? choice.key,
+               selection: Binding(get: { value.isEmpty ? PluginSettingsStore.value(pluginID, choice) : value },
+                                  set: { value = $0; PluginSettingsStore.set(pluginID, choice.key, $0) })) {
+            ForEach(choice.options, id: \.value) { option in
+                Text(PluginManifest.pick(option.titles, language: language) ?? option.value).tag(option.value)
+            }
+        }
+    }
+}
+
+/// 插件要用户填的一段文字，`secret` 的画成密码框。边打边存（`PluginSettingsStore`），插件下一次调用就读到新的。
+private struct PluginInputField: View {
+    let pluginID: String
+    let input: PluginInput
+    @State private var text: String?
+
+    var body: some View {
+        let language = L10n.current.rawValue
+        let title = PluginManifest.pick(input.titles, language: language) ?? input.key
+        let prompt = PluginManifest.pick(input.placeholders, language: language).map { Text($0) }
+        let binding = Binding(get: { text ?? PluginSettingsStore.text(pluginID, input) },
+                              set: { value in
+                                  let clipped = String(value.prefix(PluginInput.maxLength))
+                                  text = clipped
+                                  PluginSettingsStore.set(pluginID, input.key, clipped)
+                              })
+        if input.secret {
+            SecureField(title, text: binding, prompt: prompt)
+        } else {
+            TextField(title, text: binding, prompt: prompt)
+        }
+    }
+}
+
+/// 输入框下面：manifest 给的说明 + 链接（去哪拿 Key）。
+private struct PluginInputFooter: View {
+    let inputs: [PluginInput]
+    let links: [PluginLink]
+
+    var body: some View {
+        let language = L10n.current.rawValue
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(inputs.compactMap { PluginManifest.pick($0.notes, language: language) }, id: \.self) { note in
+                Text(note)
+            }
+            if !links.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(links, id: \.url) { link in
+                        Link(PluginManifest.pick(link.titles, language: language) ?? link.url.absoluteString, destination: link.url)
+                    }
+                }
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+    }
+}
+
+/// 涨跌用什么颜色（菜单和搜索面板共用，`PluginColors`）。A 股习惯红涨绿跌，美股反过来。
+private struct PluginColorPicker: View {
+    @AppStorage(PluginColors.key) private var upIsRed = true
+
+    var body: some View {
+        Picker(L10n.t("涨跌颜色", "Up and down colors"), selection: $upIsRed) {
+            Text(L10n.t("红涨绿跌", "Red up, green down")).tag(true)
+            Text(L10n.t("绿涨红跌", "Green up, red down")).tag(false)
+        }
+    }
+}
+
+/// 「结束进程」放进菜单栏时列几个、按什么排。菜单每次打开时现读（`ProcessMenu.count` / `.sort`）。
+private struct ProcessMenuOptions: View {
+    @AppStorage(ProcessMenu.countKey) private var count = ProcessMenu.defaultCount
+    @AppStorage(ProcessMenu.sortKey) private var sort = ProcessSort.cpu.rawValue
+
+    var body: some View {
+        Picker(L10n.t("列几个", "Show"), selection: $count) {
+            ForEach(ProcessMenu.countChoices, id: \.self) { n in
+                Text(L10n.t("\(n) 个", "\(n)")).tag(n)
+            }
+        }
+        Picker(L10n.t("排序", "Sort by"), selection: $sort) {
+            ForEach(ProcessSort.allCases, id: \.rawValue) { option in
+                Text(option.label).tag(option.rawValue)
+            }
+        }
+    }
+}
+
 // MARK: - 关于
 
 private struct AboutPane: View {
@@ -1091,21 +1596,63 @@ private struct AboutPane: View {
         }
         .frame(maxWidth: .infinity)
         .padding(22)
-        .frame(width: kSettingsPaneWidth)
+        .padding(.top, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// MARK: - 内容区
+
+/// 右边的内容区：按侧边栏选中的页挑页面。会变的数据（浏览器状态）从 `context` 读，变了只重画。
+private struct SettingsDetail: View {
+    @ObservedObject var nav: SettingsNavigationModel
+    @ObservedObject var context: SettingsContext
+    let settings: AppSettings
+    let updates: UpdateChecker
+    let folders: FavoriteFolderStore
+    let canInstallExtension: Bool
+    let onInstallExtension: (String) -> Void
+    let onUpdateExtension: (String) -> Void
+    let onOpenExtensionPage: (String) -> Void
+
+    var body: some View {
+        page
+            // 换语言整页重建：文案是渲染时取的
+            .id(context.languageRevision)
+            // 去掉标题栏底色和那条分隔线，内容直接从顶上开始，同系统设置
+            .toolbarBackground(.hidden, for: .windowToolbar)
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        switch nav.selection {
+        case .general: GeneralPane(settings: settings)
+        case .switcher: SwitcherPane(settings: settings)
+        case .search: SearchPane(settings: settings)
+        case .tabs: TabManagementPane(settings: settings)
+        case .folders: FoldersPane(folders: folders, settings: settings)
+        case .openWith: OpenWithPane(folders: folders)
+        case .browsers:
+            BrowserPane(browsers: context.browserStatuses, canInstall: canInstallExtension,
+                        onInstall: onInstallExtension, onUpdate: onUpdateExtension,
+                        onOpenExtensions: onOpenExtensionPage)
+        case .plugins: PluginsPane(registry: PluginRegistry.shared)
+        case .plugin(let id):
+            if let plugin = PluginRegistry.shared.plugin(id) {
+                PluginPane(registry: PluginRegistry.shared, plugin: plugin)
+            } else {
+                // 刚卸载的插件：页面没了，显示总览
+                PluginsPane(registry: PluginRegistry.shared)
+            }
+        case .about: AboutPane(updates: updates)
+        }
     }
 }
 
 // MARK: - 窗口
 
-// macOS 26 的「玻璃」外观长在窗口的 titlebar/toolbar 上：SwiftUI `TabView`
-// 渲染出来的是内容区里的一颗分段控件，永远得不到那层玻璃。要拿到系统设置
-// 那种效果，tab 必须真的住进 toolbar —— 这正是 NSTabViewController 的
-// `.toolbar` 样式，切换时窗口尺寸动画、顶边锚定也都是它的原生行为。
-//
-// 窗口标题固定为「设置」,不随 pane 变。注意 title 必须设在
-// NSTabViewController 上而不是 window 上 —— NSWindow(contentViewController:)
-// 会把 window.title **绑定**到 contentViewController.title,直接写
-// window.title 会被绑定覆盖回 "Untitled"(nil title 的显示值)。
+// 窗口标题跟着当前页走（同系统设置、PasteMemo）。标题要设在 contentViewController 上：
+// 窗口的 title 绑定在 contentViewController.title 上，只写 window.title 会被绑定盖回去。
 
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
@@ -1114,100 +1661,56 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let updates: UpdateChecker
     private let folders: FavoriteFolderStore
     private var window: NSWindow?
-    private var connected = false
+    private var split: SettingsSplitViewController?
+    private let nav = SettingsNavigationModel()
+    private let context = SettingsContext()
 
-    private var generalHost: NSHostingController<GeneralPane>?
-    private var switcherHost: NSHostingController<SwitcherPane>?
-    private var searchHost: NSHostingController<SearchPane>?
-    private var tabManagementHost: NSHostingController<TabManagementPane>?
-    private var foldersHost: NSHostingController<FoldersPane>?
-    private var openWithHost: NSHostingController<OpenWithPane>?
-    private var browserHost: NSHostingController<BrowserPane>?
-    private var aboutHost: NSHostingController<AboutPane>?
-
-    private var browserStatuses: [MRUController.BrowserStatus] = []
     /// 浏览器页的「安装扩展」「更新」按钮，main.swift 接。canInstallExtension = app 里带着扩展。
     var canInstallExtension = false
     var onInstallExtension: ((String) -> Void)?
     var onUpdateExtension: ((String) -> Void)?
     var onOpenExtensionPage: ((String) -> Void)?
 
-    private func makeBrowserPane() -> BrowserPane {
-        BrowserPane(browsers: browserStatuses, canInstall: canInstallExtension,
-                    onInstall: { [weak self] in self?.onInstallExtension?($0) },
-                    onUpdate: { [weak self] in self?.onUpdateExtension?($0) },
-                    onOpenExtensions: { [weak self] in self?.onOpenExtensionPage?($0) })
-    }
-
     var isShowing: Bool { window?.isVisible == true }
     /// 打开窗口时现取浏览器状态（main.swift 接 controller.browserStatuses）。
     var browserStatusProvider: (() -> [MRUController.BrowserStatus])?
-
-    func setBrowserStatuses(_ statuses: [MRUController.BrowserStatus]) {
-        guard statuses != browserStatuses else { return }
-        browserStatuses = statuses
-        refreshContentIfVisible()
-    }
-    private var tabController: NSTabViewController?
 
     init(settings: AppSettings, updates: UpdateChecker, folders: FavoriteFolderStore) {
         self.settings = settings
         self.updates = updates
         self.folders = folders
         super.init()
+        nav.onLocationChange = { [weak self] in self?.syncTitle() }
+    }
+
+    func setBrowserStatuses(_ statuses: [MRUController.BrowserStatus]) {
+        guard statuses != context.browserStatuses else { return }
+        context.browserStatuses = statuses
     }
 
     func setConnected(_ value: Bool) {
-        guard connected != value else { return }
-        connected = value
-        refreshContentIfVisible()
+        guard context.connected != value else { return }
+        context.connected = value
     }
 
-    /// 语言变了要重建内容 —— 文案是渲染时取的，不会自己更新。
+    /// 语言变了：侧边栏和内容区整个重建（文案是渲染时取的），侧边栏宽度、窗口标题、箭头提示跟着换。
     func reloadForLanguageChange() {
-        guard let tabController else { return }
-        for (item, title) in zip(tabController.tabViewItems, Self.paneTitles) {
-            item.label = title
-        }
-        // 工具栏按钮是开窗时按 tabViewItem 生成的，改 label 不保证同步过去，直接改按钮。
-        // 按钮顺序和分页顺序一致；两头可能有居中用的空白项，滤掉。
-        let buttons = window?.toolbar?.items.filter {
-            $0.itemIdentifier != .flexibleSpace && $0.itemIdentifier != .space
-        } ?? []
-        for (button, title) in zip(buttons, Self.paneTitles) {
-            button.label = title
-            button.paletteLabel = title
-        }
-        tabController.title = L10n.t("设置", "Settings")
-        window?.title = tabController.title ?? ""
-        refreshContentIfVisible()
+        context.languageRevision += 1
+        split?.setSidebarWidth(kSettingsSidebarWidth)
+        split?.syncNavigationState()
+        syncTitle()
     }
 
-    fileprivate static var paneTitles: [String] {
-        [L10n.t("通用", "General"),
-         L10n.t("切换器", "Switcher"),
-         L10n.t("搜索面板", "Search"),
-         L10n.t("标签管理", "Tabs"),
-         L10n.t("文件夹管理", "Folders"),
-         L10n.t("打开方式", "Open With"),
-         L10n.t("浏览器", "Browsers"),
-         L10n.t("关于", "About")]
+    private func syncTitle() {
+        let title = nav.selection.title
+        split?.title = title
+        window?.title = title
     }
 
-    private func refreshContentIfVisible() {
-        guard let window, window.isVisible else { return }
-        refreshContent()
-    }
-
-    private func refreshContent() {
-        generalHost?.rootView = GeneralPane(settings: settings)
-        switcherHost?.rootView = SwitcherPane(settings: settings)
-        searchHost?.rootView = SearchPane(settings: settings)
-        tabManagementHost?.rootView = TabManagementPane(settings: settings)
-        foldersHost?.rootView = FoldersPane(folders: folders, settings: settings)
-        openWithHost?.rootView = OpenWithPane(folders: folders)
-        browserHost?.rootView = makeBrowserPane()
-        aboutHost?.rootView = AboutPane(updates: updates)
+    /// 打开并翻到某一页（插件「去填 Key」那一行用）。
+    func show(page: SettingsPage) {
+        show()
+        nav.selection = page
     }
 
     func show() {
@@ -1218,63 +1721,39 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         settings.refreshLaunchAtLogin()   // 用户可能刚在系统设置里改过
         // 浏览器状态现取一份：平时靠连接事件推过来，app 启动后浏览器一直没开过就一次都没推，列表是空的
-        if let provider = browserStatusProvider { browserStatuses = provider() }
+        if let provider = browserStatusProvider { setBrowserStatuses(provider()) }
 
         if window == nil {
-            let general = NSHostingController(rootView: GeneralPane(settings: settings))
-            let switcher = NSHostingController(rootView: SwitcherPane(settings: settings))
-            let searchPane = NSHostingController(rootView: SearchPane(settings: settings))
-            let tabManagement = NSHostingController(rootView: TabManagementPane(settings: settings))
-            let foldersPane = NSHostingController(rootView: FoldersPane(folders: folders, settings: settings))
-            let openWith = NSHostingController(rootView: OpenWithPane(folders: folders))
-            let browser = NSHostingController(rootView: makeBrowserPane())
-            let about = NSHostingController(rootView: AboutPane(updates: updates))
-            // 让 preferredContentSize 跟随 SwiftUI 内容：NSTabViewController
-            // 切 tab 时按它做窗口尺寸动画（顶边锚定是 AppKit 原生行为）
-            general.sizingOptions = [.preferredContentSize]
-            switcher.sizingOptions = [.preferredContentSize]
-            searchPane.sizingOptions = [.preferredContentSize]
-            tabManagement.sizingOptions = [.preferredContentSize]
-            foldersPane.sizingOptions = [.preferredContentSize]
-            openWith.sizingOptions = [.preferredContentSize]
-            browser.sizingOptions = [.preferredContentSize]
-            about.sizingOptions = [.preferredContentSize]
-            generalHost = general
-            switcherHost = switcher
-            searchHost = searchPane
-            tabManagementHost = tabManagement
-            foldersHost = foldersPane
-            openWithHost = openWith
-            browserHost = browser
-            aboutHost = about
+            let detail = SettingsDetail(
+                nav: nav, context: context, settings: settings, updates: updates, folders: folders,
+                canInstallExtension: canInstallExtension,
+                onInstallExtension: { [weak self] in self?.onInstallExtension?($0) },
+                onUpdateExtension: { [weak self] in self?.onUpdateExtension?($0) },
+                onOpenExtensionPage: { [weak self] in self?.onOpenExtensionPage?($0) })
+            let sidebarWidth = kSettingsSidebarWidth
+            let controller = SettingsSplitViewController(
+                nav: nav, sidebar: SettingsSidebar(nav: nav, context: context), detail: detail,
+                sidebarWidth: sidebarWidth)
+            split = controller
 
-            let tabs = NSTabViewController()
-            tabs.tabStyle = .toolbar
-            let symbols = ["gearshape", "rectangle.on.rectangle.angled", "magnifyingglass", "rectangle.stack", "folder", "arrow.up.forward.app", "globe", "info.circle"]
-            for (index, controller) in ([general, switcher, searchPane, tabManagement, foldersPane, openWith, browser, about] as [NSViewController]).enumerated() {
-                let item = NSTabViewItem(viewController: controller)
-                item.label = Self.paneTitles[index]
-                item.image = NSImage(systemSymbolName: symbols[index], accessibilityDescription: nil)
-                tabs.addTabViewItem(item)
-            }
-            tabs.title = L10n.t("设置", "Settings")
-            tabController = tabs
-
-            let w = NSWindow(contentViewController: tabs)
-            w.styleMask = [.titled, .closable]
+            // 内容区 600 宽：原来各页是 560，「文件夹管理」要放完整路径
+            let size = NSSize(width: sidebarWidth + 600, height: 600)
+            let w = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                             backing: .buffered, defer: false)
+            w.contentViewController = controller
+            w.setContentSize(size)
+            w.contentMinSize = NSSize(width: sidebarWidth + 460, height: 420)
+            // 侧边栏通顶到标题栏下面
+            w.styleMask.insert(.fullSizeContentView)
+            w.toolbarStyle = .unified
             w.isReleasedWhenClosed = false
             w.delegate = self
-
-            // 必须先把内容布局出来再居中：自适应尺寸的窗口如果在内容到位前
-            // center()，会以近零尺寸算中心，随后内容以左上角为锚向右下展开，
-            // 窗口最终落在屏幕右下象限（PasteMemo #66）。
-            tabs.view.layoutSubtreeIfNeeded()
-            w.setContentSize(general.view.fittingSize)
-            w.center()
             window = w
-        } else {
-            // 重开：窗口这时还不可见，refreshContentIfVisible 会直接跳过，关着期间的变化就丢了
-            refreshContent()
+            syncTitle()
+            controller.installToolbar(on: w)
+            w.setFrameAutosaveName("SettingsWindow")
+            if !w.setFrameUsingName("SettingsWindow") { w.center() }
         }
 
         window?.makeKeyAndOrderFront(nil)

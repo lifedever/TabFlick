@@ -1,0 +1,51 @@
+{
+  "id": "worldclock",
+  "version": "1.1.0",
+  "name": {
+    "zh-Hans": "世界时钟",
+    "zh-Hant": "世界時鐘",
+    "en": "World Clock",
+    "ja": "世界時計",
+    "ko": "세계 시계",
+    "es": "Reloj mundial",
+    "fr": "Horloge mondiale",
+    "de": "Weltuhr"
+  },
+  "summary": {
+    "zh-Hans": "收藏城市，看当地时间和跟你差几个小时，可以放进菜单栏。搜国家列出它所有的城市。不联网。",
+    "zh-Hant": "收藏城市，看當地時間和跟你差幾個小時，可以放進選單列。搜國家列出它所有的城市。不連網。",
+    "en": "Save cities to see their local time and how far ahead or behind they are. Search a country to list its cities. Can live in the menu bar. Works offline."
+  },
+  "symbol": "globe.asia.australia.fill",
+  "tint": "indigo",
+  "hosts": [],
+  "contributes": {
+    "menu": true,
+    "list": {
+      "title": {
+        "zh-Hans": "世界时钟",
+        "zh-Hant": "世界時鐘",
+        "en": "World Clock"
+      },
+      "keywords": [
+        "sjsz",
+        "shizhong",
+        "clock",
+        "time",
+        "时区",
+        "timezone",
+        "几点"
+      ],
+      "placeholder": {
+        "zh-Hans": "看收藏的城市，或搜城市、国家加入",
+        "zh-Hant": "看收藏的城市，或搜城市、國家加入",
+        "en": "Your cities, or search a city or country to add"
+      },
+      "empty": {
+        "zh-Hans": "还没有城市。打城市名或国家名搜索，回车加入。",
+        "zh-Hant": "還沒有城市。打城市名或國家名搜尋，按 ↩ 加入。",
+        "en": "No cities yet. Search a city or country and press ↩ to add."
+      }
+    }
+  }
+}

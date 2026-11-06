@@ -1,0 +1,102 @@
+{
+  "id": "hackernews",
+  "version": "1.0.0",
+  "name": {
+    "en": "Hacker News",
+    "zh-Hans": "Hacker News",
+    "zh-Hant": "Hacker News"
+  },
+  "summary": {
+    "zh-Hans": "首页或最新文章放进菜单栏，打字全文搜索，回车在浏览器打开文章或讨论。",
+    "zh-Hant": "首頁或最新文章放進選單列，打字全文搜尋，按 ↩ 在瀏覽器打開文章或討論。",
+    "en": "Front-page or newest stories in the menu bar, full-text search as you type, and ↩ opens the story or discussion in your browser."
+  },
+  "symbol": "newspaper.fill",
+  "tint": "orange",
+  "hosts": [
+    "hn.algolia.com"
+  ],
+  "settings": {
+    "choices": [
+      {
+        "key": "feed",
+        "title": {
+          "zh-Hans": "看什么",
+          "zh-Hant": "看什麼",
+          "en": "Show"
+        },
+        "default": "front",
+        "options": [
+          {
+            "value": "front",
+            "title": {
+              "zh-Hans": "首页",
+              "zh-Hant": "首頁",
+              "en": "Front page"
+            }
+          },
+          {
+            "value": "newest",
+            "title": {
+              "zh-Hans": "最新",
+              "zh-Hant": "最新",
+              "en": "Newest"
+            }
+          }
+        ]
+      },
+      {
+        "key": "count",
+        "title": {
+          "zh-Hans": "条数",
+          "zh-Hant": "條數",
+          "en": "Items"
+        },
+        "default": "10",
+        "options": [
+          {
+            "value": "5",
+            "title": "5"
+          },
+          {
+            "value": "10",
+            "title": "10"
+          },
+          {
+            "value": "20",
+            "title": "20"
+          },
+          {
+            "value": "30",
+            "title": "30"
+          }
+        ]
+      }
+    ]
+  },
+  "contributes": {
+    "menu": true,
+    "list": {
+      "title": {
+        "en": "Hacker News"
+      },
+      "keywords": [
+        "hn",
+        "hacker",
+        "news",
+        "ycombinator",
+        "yc"
+      ],
+      "placeholder": {
+        "zh-Hans": "看首页，或搜 Hacker News 上的文章",
+        "zh-Hant": "看首頁，或搜 Hacker News 上的文章",
+        "en": "Front page, or search Hacker News"
+      },
+      "empty": {
+        "zh-Hans": "没有取到文章。",
+        "zh-Hant": "沒有取到文章。",
+        "en": "No stories."
+      }
+    }
+  }
+}

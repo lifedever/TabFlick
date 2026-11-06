@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import SwiftUI
 
 /// 内置命令：按 App 写死的几条高频操作（2026-09-28 用户定的「内置扩展」）。搜索面板里有输入且
 /// 命中时跟在它的 App 下面（一级），App 的 ⌘↩ 里也列（二级）。只列装了的 App 的。
@@ -26,6 +27,8 @@ struct AppCommand: Identifiable {
         case openWith
         /// 「结束进程…」：面板不关，列表换成进程（`ProcessesCommand`）
         case processes
+        /// 插件的列表（股票…）：面板不关，列表换成插件给的行。参数是插件 id
+        case pluginList(String)
     }
 
     let id: String
@@ -39,6 +42,8 @@ struct AppCommand: Identifiable {
     var symbol = "command"
     /// 行的第二行。nil = 写命令的主人（App 名，系统命令写 macOS）；窗口命令写要动的是谁的窗口。
     var subtitle: String? = nil
+    /// 图标方块的底色。nil = 灰（系统命令）；插件的入口命令用插件自己的颜色，和设置里那个图标一样（用户 2026-11-06）
+    var tint: Color? = nil
     let action: Action
 }
 
@@ -78,14 +83,8 @@ enum AppCommands {
                 keywords: ["Lock Screen", "锁定屏幕", "锁屏", "lock", "suoping"],
                 symbol: "lock.fill",
                 action: .native { lockScreen() }),
-            ProcessesCommand.command,
+            // 「结束进程…」归它自己的插件（ProcessesPlugin），能单独关
         ]
-    }
-
-    /// 某个 App 的内置命令（没有就是空）。系统命令不属于任何 App，这里拿不到。
-    @MainActor static func commands(for bundleID: String?) -> [AppCommand] {
-        guard let bundleID else { return [] }
-        return all.filter { $0.bundleID == bundleID }
     }
 
     /// 锁屏，和 ⌃⌘Q 一样立刻锁。走 login.framework 的私有接口 `SACLockScreenImmediate`，
@@ -122,7 +121,7 @@ enum AppCommands {
         case .window(let action, let target):
             WindowMover.perform(action, on: target)
             return
-        case .openWith, .processes:
+        case .openWith, .processes, .pluginList:
             return   // 面板自己接（选中它不关面板），走不到这里
         case .appleScript(let source, let reporter):
             script = source

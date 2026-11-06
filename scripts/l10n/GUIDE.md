@@ -40,5 +40,6 @@
 | 辅助功能 | Accessibility | 用 macOS 系统设置里那个面板的名字 |
 | 设置 | Settings | 用 macOS 该语言的叫法 |
 | 状态栏 / 菜单栏 | menu bar | 用 macOS 该语言的叫法 |
+| 插件 | plugin | 2026-11-06 起：繁中「外掛程式」、日「プラグイン」、韩「플러그인」、西「complementos」、法德「plug-ins」。和「扩展」（浏览器扩展）分开，别混用 |
 | 站内搜索 | site search | 在某个网站里搜 |
 | 全部 / 标签 / 搜索 / 历史记录 / 书签 / 最近关闭 / 文件夹 / 应用 | All / Tabs / Search / History / Bookmarks / Recently closed / Folders / Apps | 搜索面板的模式名，要短 |

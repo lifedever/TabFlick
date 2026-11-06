@@ -1,0 +1,107 @@
+{
+  "id": "v2ex",
+  "version": "1.0.0",
+  "name": {
+    "zh-Hans": "V2EX",
+    "zh-Hant": "V2EX",
+    "en": "V2EX"
+  },
+  "summary": {
+    "zh-Hans": "看 V2EX 今天的热议或最新主题，可以放进菜单栏，回车在浏览器打开。",
+    "zh-Hant": "看 V2EX 今天的熱議或最新主題，可以放進選單列，按 ↩ 在瀏覽器打開。",
+    "en": "Today's hot or latest topics on V2EX. Can live in the menu bar; ↩ opens the topic in your browser."
+  },
+  "symbol": "bubble.left.and.bubble.right.fill",
+  "tint": "gray",
+  "hosts": [
+    "www.v2ex.com"
+  ],
+  "settings": {
+    "choices": [
+      {
+        "key": "feed",
+        "title": {
+          "zh-Hans": "看什么",
+          "zh-Hant": "看什麼",
+          "en": "Show"
+        },
+        "default": "hot",
+        "options": [
+          {
+            "value": "hot",
+            "title": {
+              "zh-Hans": "今日热议",
+              "zh-Hant": "今日熱議",
+              "en": "Hot today"
+            }
+          },
+          {
+            "value": "latest",
+            "title": {
+              "zh-Hans": "最新主题",
+              "zh-Hant": "最新主題",
+              "en": "Latest"
+            }
+          }
+        ]
+      },
+      {
+        "key": "count",
+        "title": {
+          "zh-Hans": "条数",
+          "zh-Hant": "條數",
+          "en": "Items"
+        },
+        "default": "10",
+        "options": [
+          {
+            "value": "5",
+            "title": "5"
+          },
+          {
+            "value": "10",
+            "title": "10"
+          },
+          {
+            "value": "20",
+            "title": "20"
+          },
+          {
+            "value": "30",
+            "title": "30"
+          }
+        ]
+      }
+    ]
+  },
+  "contributes": {
+    "menu": true,
+    "list": {
+      "title": {
+        "zh-Hans": "V2EX",
+        "zh-Hant": "V2EX",
+        "en": "V2EX"
+      },
+      "keywords": [
+        "v2",
+        "v2ex",
+        "rd",
+        "redian",
+        "热议",
+        "zx",
+        "最新",
+        "论坛"
+      ],
+      "placeholder": {
+        "zh-Hans": "看热议或最新，或按标题、节点过滤",
+        "zh-Hant": "看熱議或最新，或按標題、節點過濾",
+        "en": "Hot or latest topics, or filter by title or node"
+      },
+      "empty": {
+        "zh-Hans": "没有取到主题。",
+        "zh-Hant": "沒有取到主題。",
+        "en": "No topics."
+      }
+    }
+  }
+}

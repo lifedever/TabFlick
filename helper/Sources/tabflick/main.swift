@@ -185,6 +185,19 @@ MainActor.assumeIsolated {
         statusItem.inlineFolderLimitProvider = {
             MainActor.assumeIsolated { settings.inlineFolderLimit }
         }
+        statusItem.showsFoldersProvider = {
+            MainActor.assumeIsolated { settings.showFoldersInMenu }
+        }
+        // 插件：设置里打开了「在菜单栏显示」的，各占一行二级菜单
+        statusItem.menuPluginsProvider = {
+            MainActor.assumeIsolated { PluginRegistry.shared.menuPlugins }
+        }
+        for case let processes as ProcessesPlugin in PluginRegistry.shared.plugins {
+            processes.processMenu.openProcessList = { controller.openProcessList() }
+        }
+        // 有列表的插件（股票），子菜单底下的「在快捷搜索里打开」直接进它的列表
+        PluginMenuHost.openList = { id in controller.openPluginList(id) }
+        PluginMenuHost.openSettings = { id in settingsWindow.show(page: .plugin(id)) }
         statusItem.onRemoveFolder = { path in
             MainActor.assumeIsolated {
                 folders.remove(path: path)

@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import Combine
 import Foundation
+import UniformTypeIdentifiers
 
 /// 一条收藏的文件夹。
 struct FavoriteFolder: Codable, Equatable {
@@ -440,20 +441,45 @@ enum OpenerCatalog {
 
     /// 「打开方式…」打开文件时列哪些 App：Launch Services 推荐的（默认那个在最前），
     /// 选了几个就取都能打开的；滤掉缓存里的副本、装在别的 App 包里的。走 Launch Services，放后台线程调。
+    ///
+    /// 没有 App 登记能打开的文件（`.mdd` 这类，Launch Services 一个都不给）当文本看：列能打开纯文本的 App，
+    /// 默认的文本编辑器在最前（2026-11-06 用户要拿 VS Code 打开一个 .mdd，列表却是空的）。
     nonisolated static func fileHandlers(for paths: [String]) -> [URL] {
         let urls = paths.map { URL(fileURLWithPath: $0) }
         guard let first = urls.first else { return [] }
-        var list = NSWorkspace.shared.urlsForApplications(toOpen: first).map(\.standardizedFileURL)
+        var editors: [URL]?
+        func handlers(_ url: URL) -> [URL] {
+            let claimed = NSWorkspace.shared.urlsForApplications(toOpen: url).map(\.standardizedFileURL)
+            guard claimed.isEmpty else { return claimed }
+            if editors == nil { editors = plainTextEditors() }
+            return editors ?? []
+        }
+        var list = handlers(first)
         if let preferred = NSWorkspace.shared.urlForApplication(toOpen: first)?.standardizedFileURL {
             list = [preferred] + list.filter { $0 != preferred }
         }
         for url in urls.dropFirst() {
-            let allowed = Set(NSWorkspace.shared.urlsForApplications(toOpen: url).map(\.standardizedFileURL))
+            let allowed = Set(handlers(url))
             list = list.filter { allowed.contains($0) }
         }
         let kept = WebOpeners.installed(list.map { ($0.path, Bundle(url: $0)?.bundleIdentifier) },
                                         excluding: Bundle.main.bundleIdentifier)
         return kept.map { URL(fileURLWithPath: $0.path, isDirectory: true) }
+    }
+
+    /// 能打开纯文本的 App，默认的那个在最前。浏览器不列：它们也登记了纯文本（本机 26 个里 9 个是浏览器），
+    /// 拿来开一个不认识的文件只会下载一份。浏览器按「能打开 http(s) 链接」认，比 `WebOpeners` 宽，
+    /// 顺带滤掉下载器这类，它们本来也不是编辑器。
+    nonisolated static func plainTextEditors() -> [URL] {
+        let browsers = Set(URL(string: "https://example.com")
+            .map { NSWorkspace.shared.urlsForApplications(toOpen: $0).map(\.standardizedFileURL) } ?? [])
+        var list = NSWorkspace.shared.urlsForApplications(toOpen: UTType.plainText)
+            .map(\.standardizedFileURL).filter { !browsers.contains($0) }
+        if let preferred = NSWorkspace.shared.urlForApplication(toOpen: UTType.plainText)?.standardizedFileURL,
+           list.contains(preferred) {
+            list = [preferred] + list.filter { $0 != preferred }
+        }
+        return list
     }
 
     /// 「打开方式…」的列表。全是普通目录：和收藏的文件夹同一份打开方式（终端、Claude Code、
