@@ -609,25 +609,32 @@ final class TabSearchModel: ObservableObject {
     private var pluginDebounce: DispatchWorkItem?
     private var pluginTimer: Timer?
     /// 最近一次问插件是什么时候、回没回来：网络慢时定时刷新别越堆越多（上一次 10 秒内还没回来就跳过这一轮）。
-    private var pluginRequestStarted: Date? {
-        didSet { schedulePluginSpinner() }
-    }
-    /// 输入框右边转圈：问插件超过 0.2 秒还没回来才显示（快的时候一闪而过反而像出错），回来了就收。
-    /// 用户 2026-11-06：搜索联网时没有任何动静，看起来像卡住了。只在用户在等的时候转（打字 / 进列表），定时刷新不转。
+    private var pluginRequestStarted: Date?
+    /// 最近一次发出去的请求的编号：只有它回来才收转圈（连着打字时，上一个先回来不算）
+    private var pluginRequestToken = 0
+    /// 输入框右边转圈，只在用户在等的时候转（打字 / 进列表），5 秒一次的定时刷新不转。
+    /// - 联网的插件打字搜索：一打字就转，转到最新那次的结果回来（用户 2026-11-06：搜天气没看到转圈 ——
+    ///   原来要先等 250ms 合并输入、再等 0.2 秒才转，和风回得快，结果常常在转圈出来之前就到了，中间什么动静都没有）；
+    /// - 别的（进列表、清空输入）：0.2 秒还没回来才转，快的时候一闪而过反而像出错。
     @Published private(set) var pluginBusy = false
     private var pluginSpinnerWork: DispatchWorkItem?
     /// 这一轮请求是用户在等的（打字、进列表、加入自选后刷新），不是 5 秒一次的定时刷新
     private var pluginRequestVisible = false
 
-    private func schedulePluginSpinner() {
+    private func stopPluginSpinner() {
         pluginSpinnerWork?.cancel()
-        guard pluginRequestStarted != nil, pluginRequestVisible else {
-            pluginBusy = false
-            return
-        }
+        pluginSpinnerWork = nil
+        pluginBusy = false
+    }
+
+    /// 请求发出去了：用户在等、转圈还没出来的话，0.2 秒后还没回来就转。
+    private func schedulePluginSpinner() {
+        guard pluginRequestVisible, !pluginBusy else { return }
+        pluginSpinnerWork?.cancel()
+        let token = pluginRequestToken
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.pluginRequestStarted != nil else { return }
+                guard let self, self.pluginRequestStarted != nil, self.pluginRequestToken == token else { return }
                 self.pluginBusy = true
             }
         }
@@ -1242,22 +1249,41 @@ final class TabSearchModel: ObservableObject {
         pluginTimer?.invalidate()
         pluginTimer = nil
         pluginRequestStarted = nil
-        pluginBusy = false
+        pluginRequestToken += 1
+        stopPluginSpinner()
     }
 
-    /// 问插件要当前输入的行：打字时合并 250ms 再问（搜索要联网），进列表、定时刷新、清空输入时立刻问。
+    /// 问插件要当前输入的行：联网的插件打字时合并 250ms 再问（每个字都发一次请求太浪费），
+    /// 不联网的（世界时钟、开发工具箱）不用等；进列表、定时刷新、清空输入时立刻问。
     private func requestPluginRows(immediately: Bool, background: Bool = false) {
         guard let id = pluginListID, let plugin = plugins.plugin(id) else { return }
         pluginRequestVisible = !background
         pluginDebounce?.cancel()
         let generation = pluginGeneration
         let text = query.trimmingCharacters(in: .whitespaces)
+        let typing = !immediately && !background
+        // 在路上的请求不再算「最新」：它回来时新的还在合并输入，不能让它把转圈收了
+        if !background { pluginRequestToken += 1 }
+        if typing && plugin.usesNetwork {
+            // 一打字就转：合并输入的那 250ms 加上请求本身，都是用户在等
+            pluginSpinnerWork?.cancel()
+            pluginBusy = true
+        } else if !typing {
+            stopPluginSpinner()
+        }
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
-                self?.pluginRequestStarted = Date()
+                guard let self else { return }
+                self.pluginRequestToken += 1
+                let token = self.pluginRequestToken
+                self.pluginRequestStarted = Date()
+                self.schedulePluginSpinner()
                 plugin.list(text) { [weak self] rows in
                     guard let self else { return }
-                    self.pluginRequestStarted = nil
+                    if token == self.pluginRequestToken {
+                        self.pluginRequestStarted = nil
+                        self.stopPluginSpinner()
+                    }
                     guard generation == self.pluginGeneration, self.pluginListID == id,
                           self.query.trimmingCharacters(in: .whitespaces) == text else { return }
                     self.setPluginRows(rows, for: text)
@@ -1265,7 +1291,8 @@ final class TabSearchModel: ObservableObject {
             }
         }
         pluginDebounce = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (immediately ? 0 : 0.25), execute: work)
+        let delay = immediately || !plugin.usesNetwork ? 0 : 0.25
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     /// 插件的行回来了。换了输入（或第一份）按新内容排、游标回到默认；同一个输入的定时刷新只换数字，

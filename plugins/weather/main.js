@@ -322,6 +322,36 @@ function perform(action, id) {
   else if (action === "remove") tabflick.storage.set("cities", saved.filter((c) => cityID(c) !== id))
 }
 
+/** 设置页的「测试」：用填好的 API Host + Key 真搜一次城市，结果说给用户听。只花一次请求。 */
+async function test() {
+  const c = credentials()
+  if (c.host === null) {
+    const [title, detail] = problemText("host")
+    return { ok: false, title, detail }
+  }
+  if (!c.host) return { ok: false, title: t("还没填 API Host", "還沒填 API Host", "API Host is empty") }
+  if (!c.key) return { ok: false, title: t("还没填 API Key", "還沒填 API Key", "API Key is empty") }
+  const city = t("北京", "北京", "Beijing")
+  try {
+    const res = await qweather("/geo/v2/city/lookup?number=1&lang=" + QW_LANG + "&location=" + encodeURIComponent(city))
+    if (res.status === 200) {
+      // 200 就说明 Host 和 Key 都能用；搜没搜到是另一回事
+      const found = parseLookup(res.text)
+      const name = found.length ? found[0].name : ""
+      return { ok: true, title: t("连上了", "連上了", "Connected"),
+               detail: name ? t(`搜到了「${name}」`, `搜到了「${name}」`, `Found “${name}”`)
+                            : t(`没搜到「${city}」`, `沒搜到「${city}」`, `“${city}” not found`) }
+    }
+    return { ok: false, title: problemText("network")[0], detail: "HTTP " + res.status }
+  } catch (e) {
+    const kind = e.kind || "network"
+    const [title, detail] = problemText(kind)
+    // 连不上时把系统给的原因带上（「未能找到使用指定主机名的服务器」= Host 填错了）
+    const reason = kind === "network" && e.message ? String(e.message).replace(/^network: /, "") : ""
+    return { ok: false, title, detail: reason ? detail + "：" + reason : detail }
+  }
+}
+
 function timeOf(ms) {
   const d = new Date(ms)
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0")
@@ -363,6 +393,7 @@ if (typeof tabflick !== "undefined" && tabflick.register) {
     menu: () => menu(),
     list: (q) => list(q),
     perform: (a, id) => perform(a, id),
+    test,
     action(id) {
       const m = /^open:(.+)$/.exec(String(id))
       if (m) perform("open", m[1])

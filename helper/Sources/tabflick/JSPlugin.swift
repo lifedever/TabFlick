@@ -55,6 +55,7 @@ final class JSPlugin: Plugin {
     }
     var listPlaceholder: String? { pick(manifest.listPlaceholders) }
     var hasOwnSettings: Bool { !manifest.choices.isEmpty || !manifest.inputs.isEmpty || manifest.usesUpDownColors }
+    var usesNetwork: Bool { !manifest.hosts.isEmpty }
     /// 插件页「在搜索面板里」那一段：列表入口命令。
     var panelCommands: [PluginCommandInfo] {
         listCommand.map { [PluginCommandInfo(id: $0.id, title: $0.title, symbol: $0.symbol)] } ?? []
@@ -70,6 +71,35 @@ final class JSPlugin: Plugin {
 
     func perform(_ action: String, on row: PluginRow, _ done: @escaping @MainActor () -> Void) {
         runtime.call("perform", [action, row.id]) { _ in MainActor.assumeIsolated { done() } }
+    }
+
+    /// 设置页的「测试」：用填好的设置真去试一次（天气：拿 API Host + Key 搜一次城市）。
+    /// 插件没注册 `test`、抛错、回的不是 `{ok, title, detail}` 都回 nil。
+    func runTest(_ done: @escaping @MainActor (PluginTestResult?) -> Void) {
+        runtime.call("test") { value in
+            MainActor.assumeIsolated { done(PluginTestResult(value)) }
+        }
+    }
+}
+
+/// 插件 `test()` 回的结果。外部输入：标题必须有，文字截短。
+struct PluginTestResult: Equatable {
+    let ok: Bool
+    let title: String
+    let detail: String?
+
+    init(ok: Bool, title: String, detail: String?) {
+        self.ok = ok
+        self.title = title
+        self.detail = detail
+    }
+
+    init?(_ value: Any?) {
+        guard let object = value as? [String: Any], let ok = object["ok"] as? Bool,
+              let title = object["title"] as? String, !title.isEmpty else { return nil }
+        self.ok = ok
+        self.title = String(title.prefix(120))
+        self.detail = (object["detail"] as? String).flatMap { $0.isEmpty ? nil : String($0.prefix(300)) }
     }
 }
 

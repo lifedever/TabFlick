@@ -53,6 +53,8 @@ protocol Plugin: AnyObject {
     var listEmptyText: String? { get }
     /// 插件自己声明的设置项（JS 插件 manifest 里的 choices、涨跌颜色）
     var hasOwnSettings: Bool { get }
+    /// 列表要不要联网取（搜索面板据此决定打字时合并多久、要不要一打字就转圈）
+    var usesNetwork: Bool { get }
 }
 
 extension Plugin {
@@ -66,6 +68,7 @@ extension Plugin {
     var listPlaceholder: String? { nil }
     var listEmptyText: String? { nil }
     var hasOwnSettings: Bool { false }
+    var usesNetwork: Bool { false }
 }
 
 /// manifest 里的颜色名 → 图标块底色。认不出的当灰色。
@@ -221,8 +224,9 @@ final class PluginRegistry: ObservableObject {
     @Published private(set) var plugins: [Plugin]
     /// 关掉的插件。默认全开，所以存的是关掉的那些（以后新加的插件装上就是开的）。
     @Published private(set) var disabled: Set<String>
-    /// 放进状态栏菜单的插件。默认一个都不放（菜单要克制）。
-    @Published private(set) var inMenu: Set<String>
+    /// 放进状态栏菜单的插件，按菜单里的先后（设置 → 插件 →「菜单栏里的顺序」，用户 2026-11-06 要能调）。
+    /// 默认一个都不放（菜单要克制）；新放进去的接在末尾。老版本存的是按字母排的同一个键，直接接着用。
+    @Published private(set) var menuOrder: [String]
     /// nil = 不存盘（官网样例程序、校验程序用，别读写本机真实的设置）。
     private let defaults: UserDefaults?
 
@@ -230,7 +234,8 @@ final class PluginRegistry: ObservableObject {
         self.defaults = defaults
         self.plugins = plugins ?? BuiltinPlugins.all()
         disabled = Set(defaults?.stringArray(forKey: Key.disabled) ?? [])
-        inMenu = Set(defaults?.stringArray(forKey: Key.inMenu) ?? [])
+        var seen = Set<String>()
+        menuOrder = (defaults?.stringArray(forKey: Key.inMenu) ?? []).filter { seen.insert($0).inserted }
     }
 
     func plugin(_ id: String) -> Plugin? { plugins.first { $0.id == id } }
@@ -247,18 +252,30 @@ final class PluginRegistry: ObservableObject {
     }
 
     /// 设置里「在菜单栏显示」的开关值（不看插件开没开：关掉插件再打开，菜单开关还在）。
-    func wantsMenu(_ id: String) -> Bool { inMenu.contains(id) }
+    func wantsMenu(_ id: String) -> Bool { menuOrder.contains(id) }
 
     func setWantsMenu(_ id: String, _ on: Bool) {
-        guard on != inMenu.contains(id) else { return }
-        if on { inMenu.insert(id) } else { inMenu.remove(id) }
-        defaults?.set(inMenu.sorted(), forKey: Key.inMenu)
+        guard on != menuOrder.contains(id) else { return }
+        if on { menuOrder.append(id) } else { menuOrder.removeAll { $0 == id } }
+        defaults?.set(menuOrder, forKey: Key.inMenu)
+    }
+
+    /// 在菜单里往前（-1）/ 往后（+1）挪一位。只在此刻出现在菜单里的那几个之间挪
+    /// （关掉的、卸掉的还留在记录里，跳过它们，不然点一下看上去没动）。
+    func moveInMenu(_ id: String, by offset: Int) {
+        let visible = menuPlugins.map(\.id)
+        guard let from = visible.firstIndex(of: id), visible.indices.contains(from + offset),
+              let a = menuOrder.firstIndex(of: id), let b = menuOrder.firstIndex(of: visible[from + offset]) else { return }
+        menuOrder.swapAt(a, b)
+        defaults?.set(menuOrder, forKey: Key.inMenu)
     }
 
     var enabled: [Plugin] { plugins.filter { isEnabled($0.id) } }
 
-    /// 此刻要出现在状态栏菜单里的插件（开着、有菜单、设置里打开了）。
-    var menuPlugins: [Plugin] { enabled.filter { $0.menu != nil && inMenu.contains($0.id) } }
+    /// 此刻要出现在状态栏菜单里的插件（开着、有菜单、设置里打开了），按 `menuOrder` 排。
+    var menuPlugins: [Plugin] {
+        menuOrder.compactMap { id in plugins.first { $0.id == id && $0.menu != nil && isEnabled(id) } }
+    }
 
     func commands(_ context: PluginContext) -> [AppCommand] {
         enabled.flatMap { $0.commands(context) + ($0.listCommand.map { [$0] } ?? []) }

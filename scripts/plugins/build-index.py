@@ -52,6 +52,11 @@ def build():
         main = manifest.get("main", "main.js")
         if not any(f["path"] == main for f in files):
             sys.exit(f"✗ {name}: 没有入口脚本 {main}")
+        # 要用户填东西的插件必须能测试（设置页的「测试」按钮，用户 2026-11-06：「不然填进去都不知道能不能用」）
+        if (manifest.get("settings") or {}).get("inputs"):
+            source = open(os.path.join(directory, main), encoding="utf-8").read()
+            if not re.search(r"register\(\{[\s\S]*?\btest\b", source):
+                sys.exit(f"✗ {name}: 有要用户填的设置项（settings.inputs），register 里必须有 test")
         entry = {k: manifest[k] for k in ("id", "version", "name", "summary", "symbol", "tint", "hosts", "minAppVersion")
                  if k in manifest}
         entry["files"] = files

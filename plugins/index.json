@@ -175,7 +175,7 @@
   },
   {
    "id": "weather",
-   "version": "2.0.0",
+   "version": "2.1.0",
    "name": {
     "zh-Hans": "天气",
     "zh-Hant": "天氣",
@@ -199,13 +199,13 @@
    "files": [
     {
      "path": "main.js",
-     "size": 17705,
-     "sha256": "77aa86cf2a084856c984f1eab957761e8f7b4c38afbf4095d5812e68a6e0f9c6"
+     "size": 19407,
+     "sha256": "8f056ee541694087c9e31ba51cdf8432cf9f5be525e33f2185348a789bda7ec1"
     },
     {
      "path": "manifest.json",
-     "size": 2889,
-     "sha256": "eec47710055749b64147096ff8cd62a896ca223121cda08985dcbb1a3983158b"
+     "size": 3120,
+     "sha256": "dfd3e0467f83d2af0d0c22ce3a224db3e0279b71ce162e5c6c0472c1fd86a156"
     }
    ]
   },

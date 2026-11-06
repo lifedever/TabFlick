@@ -220,6 +220,28 @@ const tianjin = { name: "天津", adm2: "天津", adm1: "天津市", country: "�
     assert.ok(p.opened[0].startsWith("https://www.bing.com/search?q="), "没有和风的预报页，退回搜索")
   })
 
+  await test("设置页的测试：真搜一次城市，各种原因分开说", async () => {
+    const ok = load(dir, { routes: routes(), settings })
+    assert.deepStrictEqual(plain(await ok.handlers.test()), { ok: true, title: "连上了", detail: "搜到了「天津」" })
+    assert.strictEqual(ok.requests.length, 1, "只花一次请求")
+    assert.ok(ok.requests[0].url.includes("number=1"))
+    assert.deepStrictEqual(plain(await load(dir, { routes: routes(), settings: { key: "k" } }).handlers.test()),
+      { ok: false, title: "还没填 API Host" })
+    assert.deepStrictEqual(plain(await load(dir, { routes: routes(), settings: { host: HOST } }).handlers.test()),
+      { ok: false, title: "还没填 API Key" })
+    const badHost = await load(dir, { routes: routes(), settings: { host: "devapi.qweather.com", key: "k" } }).handlers.test()
+    assert.strictEqual(badHost.title, "API Host 不对")
+    assert.strictEqual((await load(dir, { routes: routes({ status: 401 }), settings }).handlers.test()).title, "API Key 不对")
+    assert.strictEqual((await load(dir, { routes: routes({ status: 429 }), settings }).handlers.test()).title, "和风天气的请求额度用完了")
+    const offline = await load(dir, { routes: routes({ fail: true }), settings }).handlers.test()
+    assert.strictEqual(offline.title, "连不上和风天气")
+    assert.strictEqual(offline.detail, "检查网络和 API Host：The Internet connection appears to be offline.", "带上系统给的原因")
+    const empty = await load(dir, { routes: routes({ lookupEmptyFor: "北京" }), settings }).handlers.test()
+    assert.deepStrictEqual(plain(empty), { ok: true, title: "连上了", detail: "没搜到「北京」" }, "200 就是连上了")
+    assert.deepStrictEqual(plain(await load(dir, { routes: routes({ status: 500 }), settings }).handlers.test()),
+      { ok: false, title: "连不上和风天气", detail: "HTTP 500" })
+  })
+
   await test("解析：坏 JSON、缺字段", () => {
     assert.strictEqual(sandbox.parseCurrent("<html>"), null)
     assert.strictEqual(sandbox.parseCurrent('{"condition":{"text":"晴"}}'), null)

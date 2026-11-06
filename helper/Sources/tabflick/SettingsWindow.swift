@@ -1147,6 +1147,35 @@ private struct PluginsPane: View {
                 }
             }
 
+            // 状态栏菜单里插件的先后（放进去两个以上才有得调），同搜索面板的「Tab 顺序」用上下箭头
+            let menuPlugins = registry.menuPlugins
+            if menuPlugins.count > 1 {
+                Section {
+                    ForEach(Array(menuPlugins.enumerated()), id: \.element.id) { index, plugin in
+                        HStack(spacing: 8) {
+                            PluginTile(plugin: plugin, side: 20)
+                            Text(plugin.title)
+                            Spacer()
+                            Button {
+                                registry.moveInMenu(plugin.id, by: -1)
+                            } label: { Image(systemName: "chevron.up") }
+                                .buttonStyle(.borderless)
+                                .disabled(index == 0)
+                            Button {
+                                registry.moveInMenu(plugin.id, by: 1)
+                            } label: { Image(systemName: "chevron.down") }
+                                .buttonStyle(.borderless)
+                                .disabled(index == menuPlugins.count - 1)
+                        }
+                    }
+                } header: {
+                    Text(L10n.t("菜单栏里的顺序", "Menu Bar Order"))
+                } footer: {
+                    footnote(L10n.t("在插件页打开「在菜单栏显示」的插件列在这里。",
+                                    "Plugins with “Show in Menu Bar” turned on are listed here."))
+                }
+            }
+
             Section {
                 switch store.status {
                 case .idle, .loading where store.entries.isEmpty:
@@ -1344,16 +1373,10 @@ private struct PluginPane: View {
                 .disabled(!enabled)
             }
 
-            // 要用户填的（和风天气的 API Host、Key）+ 去哪拿的链接
-            if let manifest = (plugin as? JSPlugin)?.manifest, !manifest.inputs.isEmpty {
-                Section {
-                    ForEach(manifest.inputs, id: \.key) { input in
-                        PluginInputField(pluginID: plugin.id, input: input)
-                    }
-                } footer: {
-                    PluginInputFooter(inputs: manifest.inputs, links: manifest.links)
-                }
-                .disabled(!enabled)
+            // 要用户填的（和风天气的 API Host、Key）+ 测试 + 去哪拿的链接
+            if let js = plugin as? JSPlugin, !js.manifest.inputs.isEmpty {
+                PluginInputsSection(plugin: js)
+                    .disabled(!enabled)
             }
 
             // 只给声明了要它的插件（股票）：V2EX 这类没有涨跌的不该出现（用户 2026-11-06 截图）
@@ -1443,10 +1466,83 @@ private struct PluginChoicePicker: View {
     }
 }
 
+/// 插件要用户填的几项 + 「测试」：填进去能不能用，点一下就知道（用户 2026-11-06：「不然填进去都不知道能不能用」）。
+/// 测试由插件自己做（`test()`），改了哪一项旧结果就清掉；15 秒没回来照实说没有回应。
+private struct PluginInputsSection: View {
+    let plugin: JSPlugin
+    @State private var testing = false
+    @State private var result: PluginTestResult?
+    /// 每点一次加一：上一次的回包、超时不算数
+    @State private var attempt = 0
+
+    var body: some View {
+        Section {
+            ForEach(plugin.manifest.inputs, id: \.key) { input in
+                PluginInputField(pluginID: plugin.id, input: input) {
+                    attempt += 1
+                    testing = false
+                    result = nil
+                }
+            }
+            HStack(alignment: .center, spacing: 8) {
+                status
+                Spacer(minLength: 12)
+                Button(L10n.t("测试", "Test")) { runTest() }
+                    .disabled(testing)
+            }
+        } footer: {
+            PluginInputFooter(inputs: plugin.manifest.inputs, links: plugin.manifest.links)
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        if testing {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(L10n.t("正在测试…", "Testing…")).foregroundStyle(.secondary)
+            }
+        } else if let result {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(result.ok ? Color.green : Color.red)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(result.title)
+                    if let detail = result.detail {
+                        Text(detail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func runTest() {
+        attempt += 1
+        let mine = attempt
+        testing = true
+        result = nil
+        plugin.runTest { value in
+            guard mine == attempt else { return }
+            testing = false
+            result = value ?? PluginTestResult(ok: false, title: L10n.t("没能测试", "Couldn't run the test"), detail: nil)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            guard mine == attempt, testing else { return }
+            testing = false
+            result = PluginTestResult(ok: false, title: L10n.t("没有回应", "No response"),
+                                      detail: L10n.t("过一会儿再试。", "Try again in a moment."))
+        }
+    }
+}
+
 /// 插件要用户填的一段文字，`secret` 的画成密码框。边打边存（`PluginSettingsStore`），插件下一次调用就读到新的。
 private struct PluginInputField: View {
     let pluginID: String
     let input: PluginInput
+    /// 改了内容（测试结果作废）
+    var onEdit: () -> Void = {}
     @State private var text: String?
 
     var body: some View {
@@ -1456,8 +1552,10 @@ private struct PluginInputField: View {
         let binding = Binding(get: { text ?? PluginSettingsStore.text(pluginID, input) },
                               set: { value in
                                   let clipped = String(value.prefix(PluginInput.maxLength))
+                                  guard clipped != (text ?? PluginSettingsStore.text(pluginID, input)) else { return }
                                   text = clipped
                                   PluginSettingsStore.set(pluginID, input.key, clipped)
+                                  onEdit()
                               })
         if input.secret {
             SecureField(title, text: binding, prompt: prompt)

@@ -1,6 +1,6 @@
 {
   "id": "weather",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": {
     "zh-Hans": "天气",
     "zh-Hant": "天氣",
@@ -72,6 +72,14 @@
       }
     ],
     "links": [
+      {
+        "title": {
+          "zh-Hans": "和风天气开发者平台",
+          "zh-Hant": "和風天氣開發者平台",
+          "en": "QWeather Developer"
+        },
+        "url": "https://dev.qweather.com/"
+      },
       {
         "title": {
           "zh-Hans": "打开和风天气控制台",
