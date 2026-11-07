@@ -1,3 +1,2 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#62c6ff"/><stop offset="1" stop-color="#2479e6"/></linearGradient><linearGradient id="hl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="64" height="64" fill="url(#bg)"/><rect width="64" height="64" fill="url(#hl)"/>
-<circle cx="40" cy="23" r="14" fill="#ffe27a" fill-opacity=".35"/><circle cx="40" cy="23" r="10" fill="#ffd02e"/>
-<g fill="#fff"><circle cx="23" cy="40" r="8.5"/><circle cx="33.5" cy="34.5" r="11"/><circle cx="44.5" cy="41" r="7.5"/><rect x="13" y="39" width="39" height="11" rx="5.5"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="40" cy="23" r="10.5" fill="#ffcc00"/>
+<g fill="#4fa3ff"><circle cx="23" cy="40" r="8.5"/><circle cx="33.5" cy="34.5" r="11"/><circle cx="44.5" cy="41" r="7.5"/><rect x="13" y="39" width="39" height="11" rx="5.5"/></g></svg>

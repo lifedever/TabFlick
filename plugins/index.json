@@ -3,7 +3,7 @@
  "plugins": [
   {
    "id": "currency",
-   "version": "1.0.1",
+   "version": "1.0.2",
    "name": {
     "zh-Hans": "汇率",
     "zh-Hant": "匯率",
@@ -28,8 +28,8 @@
    "files": [
     {
      "path": "icon.svg",
-     "size": 1183,
-     "sha256": "ff35cb865772c8c408958eec3bce7b5dee18539f1466582aff9b1795a89d86d9"
+     "size": 655,
+     "sha256": "89ce57ca97a1e274b6a9443819bd0762154a6f53adb2a74e81ebb916738525cf"
     },
     {
      "path": "main.js",
@@ -39,13 +39,13 @@
     {
      "path": "manifest.json",
      "size": 1341,
-     "sha256": "53caba0e21c0083c1920ac0b1f1be5c63d35b444d6927168ecfe5a9217b901ed"
+     "sha256": "13a73392e857c3edbe1e42a1b8160d40f9f5b930b9bcfb720a231214cb12e35e"
     }
    ]
   },
   {
    "id": "devtools",
-   "version": "1.2.0",
+   "version": "1.2.1",
    "name": {
     "zh-Hans": "开发工具箱",
     "zh-Hant": "開發工具箱",
@@ -68,8 +68,8 @@
    "files": [
     {
      "path": "icon.svg",
-     "size": 888,
-     "sha256": "d5dbbab60f206a4c69cf136ba0ec92e5bc517473d2cfc51b5904b6a0b5157b0a"
+     "size": 460,
+     "sha256": "593b0af65cd45f5f72e1bb455c9db6caed99fdcdab982f2d03145a763c2d0034"
     },
     {
      "path": "main.js",
@@ -79,13 +79,13 @@
     {
      "path": "manifest.json",
      "size": 2379,
-     "sha256": "06618d39ba270197dd42ef5b6c0d2acc64c139fdc8b2c6ca326f37c497b7f1d8"
+     "sha256": "39c45e37e10b7323e4813f289f7bf0dfddf10913feebe0d128a9f6ecceb14a3b"
     }
    ]
   },
   {
    "id": "hackernews",
-   "version": "1.0.1",
+   "version": "1.0.2",
    "name": {
     "en": "Hacker News",
     "zh-Hans": "Hacker News",
@@ -105,8 +105,8 @@
    "files": [
     {
      "path": "icon.svg",
-     "size": 736,
-     "sha256": "b83749cc28cc31787132233612c03c269506dba260ad77c99e63df4a90c70261"
+     "size": 275,
+     "sha256": "36249cc0da1f21d1a6e4f9a98eff716c48405ff0f22353821e1a843b946ec922"
     },
     {
      "path": "main.js",
@@ -116,13 +116,13 @@
     {
      "path": "manifest.json",
      "size": 2421,
-     "sha256": "933f9db85204efd9c06564c80b51899c7d578659a1b1191d6a5f3fd75019c757"
+     "sha256": "4d57530100b3c5eccac72634d0672c00d311417beb67ebade79b81c65646646d"
     }
    ]
   },
   {
    "id": "stocks",
-   "version": "1.0.1",
+   "version": "1.0.2",
    "name": {
     "zh-Hans": "股票",
     "zh-Hant": "股票",
@@ -151,8 +151,8 @@
    "files": [
     {
      "path": "icon.svg",
-     "size": 863,
-     "sha256": "4b000c80daab0a7b661a5dc188e1d4f0b5905b2ab2fa83caf36fee57c019ee3b"
+     "size": 438,
+     "sha256": "f4a060f975a41bb92f1f7f0d49281a3043fd5618fa9585fdec5adcb4d14785ee"
     },
     {
      "path": "main.js",
@@ -162,13 +162,13 @@
     {
      "path": "manifest.json",
      "size": 1856,
-     "sha256": "594a440b25957768c83c98dd2cc24d914dcc0abe7a88ddc39af3c601933c6cbe"
+     "sha256": "f40796856cfa5b8ef8c07e1bb51add2e7db824a61971331937de4488b1afccdd"
     }
    ]
   },
   {
    "id": "v2ex",
-   "version": "1.0.1",
+   "version": "1.0.2",
    "name": {
     "zh-Hans": "V2EX",
     "zh-Hant": "V2EX",
@@ -188,8 +188,8 @@
    "files": [
     {
      "path": "icon.svg",
-     "size": 824,
-     "sha256": "947ee3216826d54625ee74622f4322e547bb02e9587a786de08663e01ed1cc3e"
+     "size": 389,
+     "sha256": "d279f634410511c7742e5f79ce9dd55cb0408b1cf25dd7a364d602413a1609b5"
     },
     {
      "path": "main.js",
@@ -199,13 +199,13 @@
     {
      "path": "manifest.json",
      "size": 2496,
-     "sha256": "64bc7852303626e732b26152e674f903e0e6702d2adf49bdeb00a65dddc42e58"
+     "sha256": "e725bdf3c852d311958a486bd6288cd1f83f35e9d646f6dd2eeab764e930a16a"
     }
    ]
   },
   {
    "id": "weather",
-   "version": "2.1.1",
+   "version": "2.1.2",
    "name": {
     "zh-Hans": "天气",
     "zh-Hant": "天氣",
@@ -230,8 +230,8 @@
    "files": [
     {
      "path": "icon.svg",
-     "size": 788,
-     "sha256": "132a3563415471673c0a1723bf4464b927323060e97c9196698787122fdd07d4"
+     "size": 296,
+     "sha256": "9307b9dd9cc21afd4c3285841ee8d1cf9c39233c9b3d591cac0a60da43212992"
     },
     {
      "path": "main.js",
@@ -241,13 +241,13 @@
     {
      "path": "manifest.json",
      "size": 3142,
-     "sha256": "c88be3f519556ff921813df9bf146a6463c8ed8e2ad134337f0b057389d29335"
+     "sha256": "135e69ecc2666a5c1636272a0110a3e17080b330afe89cf14be8df0915919955"
     }
    ]
   },
   {
    "id": "worldclock",
-   "version": "1.2.0",
+   "version": "1.2.1",
    "name": {
     "zh-Hans": "世界时钟",
     "zh-Hant": "世界時鐘",
@@ -270,8 +270,8 @@
    "files": [
     {
      "path": "icon.svg",
-     "size": 965,
-     "sha256": "5ac9e82ce0daa7eeabdc3e0b94b2e2a804279516f02d2748b779dba5e6393cb1"
+     "size": 553,
+     "sha256": "8e7c29897e5198ceb974307b827a27d830f6b3d1c5ec3530c11e1cf32a099d37"
     },
     {
      "path": "main.js",
@@ -281,7 +281,7 @@
     {
      "path": "manifest.json",
      "size": 1719,
-     "sha256": "a631cd61c3951604eddd2ad0e552f0c822765c1e5e359e3e9b6240c5e7e2dc27"
+     "sha256": "c2510f0470f83c641fa288294fd35ed838a77b9b709a704d2bd118d26e125736"
     }
    ]
   }

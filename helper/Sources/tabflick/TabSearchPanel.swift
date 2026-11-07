@@ -3625,19 +3625,15 @@ private struct PluginTextTile: View {
     }
 }
 
-/// 插件自己的图标块（底栏「在哪个插件里」那个胶囊用）。
+/// 插件命令（窗口命令、锁屏）和没带图标的插件：插件那种块上画符号。
 struct PluginSymbolTile: View {
     let symbol: String
     let tint: Color
     let side: CGFloat
 
+    /// 插件的东西一律是插件那种块（中性底 + 彩色符号），和系统的 ActionTile（彩色底 + 白符号）反过来
     var body: some View {
-        RoundedRectangle(cornerRadius: side * 0.27, style: .continuous)
-            .fill(LinearGradient(colors: [tint.opacity(0.85), tint], startPoint: .top, endPoint: .bottom))
-            .frame(width: side, height: side)
-            .overlay(Image(systemName: symbol)
-                .font(.system(size: side * 0.56, weight: .semibold))
-                .foregroundStyle(.white))
+        PluginIconTile(icon: nil, symbol: symbol, tint: tint, side: side)
     }
 }
 

@@ -195,8 +195,8 @@ struct SettingsSidebar: View {
     private func row(_ page: SettingsPage) -> some View {
         let isSelected = nav.selection == page
         return HStack(spacing: 8) {
-            if let icon = page.icon {
-                PluginIconTile(icon: icon, symbol: page.symbol, tint: page.tint, side: 22)
+            if case .plugin = page {
+                PluginIconTile(icon: page.icon, symbol: page.symbol, tint: page.tint, side: 22)
             } else {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(page.tint.gradient)
