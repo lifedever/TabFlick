@@ -150,6 +150,16 @@ struct PluginManifestCheck {
         check("入口往上走", problem(#"{"id":"ab","version":"1","name":"x","main":"../x.js"}"#) == .missing("main"))
         check("入口绝对路径", problem(#"{"id":"ab","version":"1","name":"x","main":"/tmp/x.js"}"#) == .missing("main"))
         check("入口不是 js", problem(#"{"id":"ab","version":"1","name":"x","main":"x.sh"}"#) == .missing("main"))
+        // 图标：写了就得是插件目录里的 .svg / .png
+        check("图标可以",
+              { if case .success(let m) = parse(#"{"id":"ab","version":"1","name":"x","icon":"icons/icon.SVG"}"#) { return m.icon == "icons/icon.SVG" }; return false }())
+        check("没写图标是 nil",
+              { if case .success(let m) = parse(#"{"id":"ab","version":"1","name":"x"}"#) { return m.icon == nil }; return false }())
+        check("图标往上走", problem(#"{"id":"ab","version":"1","name":"x","icon":"../icon.svg"}"#) == .badIcon("../icon.svg"))
+        check("图标绝对路径", problem(#"{"id":"ab","version":"1","name":"x","icon":"/tmp/icon.png"}"#) == .badIcon("/tmp/icon.png"))
+        check("图标不是 svg / png", problem(#"{"id":"ab","version":"1","name":"x","icon":"icon.gif"}"#) == .badIcon("icon.gif"))
+        check("图标空段", problem(#"{"id":"ab","version":"1","name":"x","icon":"a//icon.svg"}"#) == .badIcon("a//icon.svg"))
+        check("图标不是字符串", problem(#"{"id":"ab","version":"1","name":"x","icon":1}"#) == .badIcon("1"))
         check("入口在子目录可以",
               { if case .success(let m) = parse(#"{"id":"ab","version":"1","name":"x","main":"lib/x.js"}"#) { return m.main == "lib/x.js" }; return false }())
 

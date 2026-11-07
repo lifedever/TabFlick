@@ -1,6 +1,6 @@
 {
   "id": "devtools",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": {
     "zh-Hans": "开发工具箱",
     "zh-Hant": "開發工具箱",
@@ -12,12 +12,13 @@
     "de": "Entwickler-Werkzeugkasten"
   },
   "summary": {
-    "zh-Hans": "输入一段文字，列出能做的转换：Base64、URL、Unicode、HTML 编解码，时间戳和日期，JSON 格式化和转义，JWT 解析，进制、颜色互转，网址参数，MD5 / SHA，人民币大写。回车拷贝。不联网。",
-    "zh-Hant": "輸入一段文字，列出能做的轉換：Base64、URL、Unicode、HTML 編解碼，時間戳和日期，JSON 格式化和跳脫，JWT 解析，進位、顏色互轉，網址參數，MD5 / SHA，中文大寫金額。按 ↩ 拷貝。不連網。",
-    "en": "Type some text to see what it converts to: Base64, URL, Unicode and HTML encoding, timestamps and dates, JSON formatting and escaping, JWT decoding, number bases, colors, URL query parameters, MD5 / SHA hashes. ↩ copies. Works offline."
+    "zh-Hans": "Base64、URL、Unicode、HTML 编解码，时间戳和日期，JSON 格式化和转义，JWT 解析，进制、颜色互转，网址参数，MD5 / SHA，人民币大写，UUID。打开先列出全部工具；直接粘贴，列出能做的转换，回车拷贝。不联网。",
+    "zh-Hant": "Base64、URL、Unicode、HTML 編解碼，時間戳和日期，JSON 格式化和跳脫，JWT 解析，進位、顏色互轉，網址參數，MD5 / SHA，中文大寫金額，UUID。打開先列出全部工具；直接貼上，列出能做的轉換，按 ↩ 拷貝。不連網。",
+    "en": "Base64, URL, Unicode and HTML encoding, timestamps and dates, JSON formatting and escaping, JWT decoding, number bases, colors, URL query parameters, MD5 / SHA hashes, UUIDs. Opens with a list of every tool; paste something to see what it converts to. ↩ copies. Works offline."
   },
   "symbol": "wrench.and.screwdriver.fill",
-  "tint": "gray",
+  "tint": "teal",
+  "icon": "icon.svg",
   "hosts": [],
   "contributes": {
     "list": {

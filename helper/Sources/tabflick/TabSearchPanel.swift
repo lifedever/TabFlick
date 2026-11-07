@@ -643,10 +643,14 @@ final class TabSearchModel: ObservableObject {
     }
     /// 加入自选之后回到列表：新列表回来时游标落到这一行上（`clearsQuery`）。
     private var pluginPendingCursorID: String?
+    /// 插件列表里往下进的层（开发工具箱 → JWT 解码）：空 = 在列表首页。Esc / 空着按 ⌫ 一层层退回
+    @Published private(set) var pluginScopes: [PluginScope] = []
+    var pluginScope: PluginScope? { pluginScopes.last }
 
     /// 在某个二级里（操作列表、进程列表、插件列表）：输入框左边画「‹」，空着按 ⌫ 退回。
     var inSubList: Bool { actionTarget != nil || inProcesses || pluginListID != nil }
-    var pluginListTitle: String? { pluginListID.flatMap { plugins.plugin($0)?.title } }
+    /// 输入框右边那个胶囊：在哪一层写哪一层（JWT 解码），首页写插件名
+    var pluginListTitle: String? { pluginScope?.title ?? pluginListID.flatMap { plugins.plugin($0)?.title } }
 
     // MARK: 重开面板回到原来那一层
 
@@ -675,6 +679,8 @@ final class TabSearchModel: ObservableObject {
             /// 关面板那一刻的行：重开时先画它（不闪一下空的），再按输入重新问插件
             let rows: [PluginRow]
             let rowsQuery: String?
+            /// 进到的层（每一层带着它上一层的现场），重开回到同一层、Esc 照样一层层退
+            var scopes: [PluginScope] = []
         }
         var processes: Processes?
         var pluginList: PluginList?
@@ -693,7 +699,7 @@ final class TabSearchModel: ObservableObject {
         if let id = pluginListID {
             state.pluginList = SubState.PluginList(id: id, query: actionTarget != nil ? savedQuery : query,
                                                    cursorID: actionTarget != nil ? savedCursorID : selectedRow?.id,
-                                                   rows: pluginRows, rowsQuery: pluginRowsQuery)
+                                                   rows: pluginRows, rowsQuery: pluginRowsQuery, scopes: pluginScopes)
         }
         if let target = actionTarget {
             if case .selection(let selection) = target {
@@ -1031,6 +1037,8 @@ final class TabSearchModel: ObservableObject {
             if !query.isEmpty {
                 query = ""
                 noteUserEdit()
+            } else if !pluginScopes.isEmpty {
+                leavePluginScope()
             } else {
                 leavePluginList()
             }
@@ -1203,9 +1211,11 @@ final class TabSearchModel: ObservableObject {
         pluginSavedCursorID = selectedRow?.id
         pluginSavedCursorIndex = cursor
         pluginListID = id
+        pluginScopes = saved?.scopes ?? []
         pluginRows = saved?.rows ?? []
         pluginRowsQuery = saved?.rowsQuery
         pluginLoaded = !(saved?.rows.isEmpty ?? true)
+        updatePluginClock()
         pluginFailed = false
         pluginGeneration += 1
         // 重开回来：先画关面板时那份、游标放回原来那一行，再按输入重新问（同一个输入只换数字，游标不动）
@@ -1238,10 +1248,53 @@ final class TabSearchModel: ObservableObject {
         }
     }
 
+    /// 进这一行的下一层（动作带 `enter`）：记下这一层的现场，输入清空，列表换成插件给这一层的行。
+    func enterPluginScope(_ action: PluginRowAction, on row: PluginRow) {
+        guard pluginListID == row.pluginID, actionTarget == nil else { return }
+        pluginScopes.append(PluginScope(
+            id: row.id, title: row.title, placeholder: action.enterPlaceholder, empty: action.enterEmpty,
+            savedQuery: query, savedCursorID: selectedRow?.id, savedCursorIndex: cursor,
+            savedRows: pluginRows, savedRowsQuery: pluginRowsQuery))
+        switchPluginLevel(rows: [], rowsQuery: nil, query: "", cursorID: nil, cursorIndex: 0)
+    }
+
+    /// 退回上一层：输入、行、游标都是进去之前那样，再按原来的输入重新问一次（同一个输入只换数字，游标不动）。
+    private func leavePluginScope() {
+        guard let scope = pluginScopes.popLast() else { return }
+        switchPluginLevel(rows: scope.savedRows, rowsQuery: scope.savedRowsQuery, query: scope.savedQuery,
+                          cursorID: scope.savedCursorID, cursorIndex: scope.savedCursorIndex)
+    }
+
+    private func switchPluginLevel(rows saved: [PluginRow], rowsQuery: String?, query text: String,
+                                   cursorID: String?, cursorIndex: Int) {
+        pluginGeneration += 1
+        pluginDebounce?.cancel()
+        pluginRequestStarted = nil
+        pluginRequestToken += 1
+        pluginPendingCursorID = nil
+        stopPluginSpinner()
+        pluginRows = saved
+        pluginRowsQuery = rowsQuery
+        pluginLoaded = !saved.isEmpty
+        pluginFailed = false
+        updatePluginClock()
+        setQueryQuietly(text)
+        refilter(keepCursorOn: cursorID)
+        if let cursorID, let index = rows.firstIndex(where: { $0.id == cursorID }) {
+            setCursor(index, source: .keyboard)
+        } else if cursorID != nil, !rows.isEmpty {
+            setCursor(min(cursorIndex, rows.count - 1), source: .keyboard)
+        }
+        // 进新的一层列表回到顶；退回时游标放回原来那一行，别把它滚走
+        if cursorID == nil { noteUserEdit() }
+        requestPluginRows(immediately: true)
+    }
+
     /// 停掉插件列表（面板关了也走这里）。
     func closePluginList() {
         guard pluginListID != nil else { return }
         pluginListID = nil
+        pluginScopes = []
         pluginPendingCursorID = nil
         pluginGeneration += 1
         pluginDebounce?.cancel()
@@ -1251,6 +1304,12 @@ final class TabSearchModel: ObservableObject {
         pluginRequestStarted = nil
         pluginRequestToken += 1
         stopPluginSpinner()
+        updatePluginClock()
+    }
+
+    /// 插件列表里有走的钟（世界时钟）才让 `PluginClock` 跑，退出列表、关面板就停（关面板也走 closePluginList）。
+    private func updatePluginClock() {
+        PluginClock.shared.setRunning(pluginListID != nil && pluginRows.contains { $0.clock != nil })
     }
 
     /// 问插件要当前输入的行：联网的插件打字时合并 250ms 再问（每个字都发一次请求太浪费），
@@ -1261,6 +1320,7 @@ final class TabSearchModel: ObservableObject {
         pluginDebounce?.cancel()
         let generation = pluginGeneration
         let text = query.trimmingCharacters(in: .whitespaces)
+        let scope = pluginScope?.id
         let typing = !immediately && !background
         // 在路上的请求不再算「最新」：它回来时新的还在合并输入，不能让它把转圈收了
         if !background { pluginRequestToken += 1 }
@@ -1278,13 +1338,13 @@ final class TabSearchModel: ObservableObject {
                 let token = self.pluginRequestToken
                 self.pluginRequestStarted = Date()
                 self.schedulePluginSpinner()
-                plugin.list(text) { [weak self] rows in
+                plugin.list(text, scope: scope) { [weak self] rows in
                     guard let self else { return }
                     if token == self.pluginRequestToken {
                         self.pluginRequestStarted = nil
                         self.stopPluginSpinner()
                     }
-                    guard generation == self.pluginGeneration, self.pluginListID == id,
+                    guard generation == self.pluginGeneration, self.pluginListID == id, self.pluginScope?.id == scope,
                           self.query.trimmingCharacters(in: .whitespaces) == text else { return }
                     self.setPluginRows(rows, for: text)
                 }
@@ -1309,6 +1369,7 @@ final class TabSearchModel: ObservableObject {
         let sameQuery = pluginLoaded && pluginRowsQuery == text
         pluginRows = fresh
         pluginRowsQuery = text
+        updatePluginClock()
         pluginLoaded = true
         pluginFailed = false
         guard actionTarget == nil else { return }
@@ -1334,7 +1395,7 @@ final class TabSearchModel: ObservableObject {
     /// 执行插件一行的一个动作。做完面板不关的（加入 / 移出自选）重新取一次列表。
     func performPluginAction(_ action: PluginRowAction, on row: PluginRow) {
         guard let plugin = plugins.plugin(row.pluginID) else { return }
-        plugin.perform(action.id, on: row) { [weak self] in
+        plugin.perform(action.id, on: row, scope: pluginScope?.id) { [weak self] in
             guard let self, action.stays, self.pluginListID == row.pluginID else { return }
             if action.clearsQuery, !self.query.isEmpty {
                 // 搜到了加进自选：回到自选列表，游标落在刚加的那一项（用户 2026-11-06 要的）。
@@ -2657,6 +2718,7 @@ private struct TabSearchView: View {
         }
         if model.inProcesses { return L10n.t("按名称、端口或 PID 过滤", "Filter by name, port or PID") }
         if let id = model.pluginListID, let plugin = model.plugins.plugin(id) {
+            if let scope = model.pluginScope { return scope.placeholder ?? L10n.t("搜索\(scope.title)", "Search \(scope.title)") }
             return plugin.listPlaceholder ?? L10n.t("搜索\(plugin.title)", "Search \(plugin.title)")
         }
         switch model.mode {
@@ -2686,7 +2748,8 @@ private struct TabSearchView: View {
         if let id = model.pluginListID {
             if !model.pluginLoaded { return L10n.t("正在读取…", "Loading…") }
             if model.pluginFailed { return L10n.t("取不到数据，过一会儿再试。", "Couldn't load. Try again in a moment.") }
-            return noQuery ? (model.plugins.plugin(id)?.listEmptyText ?? L10n.t("还没有内容", "Nothing here yet"))
+            let empty = model.pluginScope != nil ? model.pluginScope?.empty : model.plugins.plugin(id)?.listEmptyText
+            return noQuery ? (empty ?? L10n.t("还没有内容", "Nothing here yet"))
                            : L10n.t("没有匹配的结果", "No results")
         }
         switch model.mode {
@@ -2746,12 +2809,14 @@ private struct TabSearchView: View {
             } else if let id = model.pluginListID, let plugin = model.plugins.plugin(id) {
                 // 插件列表：左边写在哪个插件里（同进程列表），点它返回
                 HStack(spacing: kSearchIconGap) {
-                    PluginSymbolTile(symbol: plugin.symbol, tint: plugin.tint, side: 17)
+                    PluginIconTile(icon: plugin.icon, symbol: plugin.symbol, tint: plugin.tint, side: 17)
                         .frame(width: kSearchRowIconSize)
-                    Text(plugin.title)
+                    // 进了几层就写一条路径：开发工具箱 › JWT 解码
+                    Text(([plugin.title] + model.pluginScopes.map(\.title)).joined(separator: " › "))
                         .font(.system(size: 12))
                         .foregroundStyle(Color.primary.opacity(0.75))
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 .modifier(GlassCapsule(leading: kSearchRowInset))
                 .contentShape(Capsule())
@@ -2760,7 +2825,8 @@ private struct TabSearchView: View {
             } else if model.inProcesses {
                 // 进程列表：左边写在哪一层（同操作列表的对象胶囊），点它返回
                 HStack(spacing: kSearchIconGap) {
-                    ActionTile(symbol: ProcessesCommand.symbol, tint: .gray, side: 17)
+                    PluginIconTile(icon: BuiltinPluginIcons.processes, symbol: ProcessesCommand.symbol,
+                                   tint: ProcessesCommand.tint, side: 17)
                         .frame(width: kSearchRowIconSize)
                     Text(ProcessesCommand.title)
                         .font(.system(size: 12))
@@ -2961,9 +3027,12 @@ private struct SearchRowIcon: View {
                     .foregroundStyle(.secondary)
             }
         case .appCommand(let command, nil):
-            // 系统命令没有 App 图标：灰色方块里画它自己的符号，和旁边的 App 图标一个形状；
-            // 插件的入口命令用插件的颜色（和设置侧边栏里那个图标一样）
-            if let tint = command.tint {
+            // 系统命令没有 App 图标：方块里画它自己的符号，和旁边的 App 图标一个形状。
+            // 代表整个插件的命令（结束进程…、插件列表入口）画插件的图标；其余的底色是所属插件的颜色
+            // （`PluginRegistry.commands` 补的），都和设置里那个插件图标对得上；不归插件的留灰
+            if let icon = command.icon {
+                PluginIconTile(icon: icon, symbol: command.symbol, tint: command.tint ?? .gray, side: tileSide)
+            } else if let tint = command.tint {
                 PluginSymbolTile(symbol: command.symbol, tint: tint, side: tileSide)
             } else {
                 ActionTile(symbol: command.symbol, tint: .gray, side: tileSide)
@@ -3475,7 +3544,9 @@ private struct PluginRowTrailing: View {
                 Sparkline(points: row.spark, color: Color(nsColor: PluginColors.nsColor(row.tone == .secondary ? .plain : row.tone)))
                     .frame(width: 56, height: 20)
             }
-            if let value = row.value {
+            if let zone = row.clock {
+                PluginClockText(zone: zone)
+            } else if let value = row.value {
                 Text(value)
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
                     .foregroundStyle(Color.primary.opacity(0.85))
@@ -3492,6 +3563,19 @@ private struct PluginRowTrailing: View {
                         .fill(row.tone == .up || row.tone == .down ? color.opacity(0.12) : Color.primary.opacity(0.06)))
             }
         }
+    }
+}
+
+/// 插件行尾走的钟（`PluginRow.clock`）：样子同 value，跟着 `PluginClock` 每秒换一次字。
+private struct PluginClockText: View {
+    let zone: TimeZone
+    @ObservedObject private var clock = PluginClock.shared
+
+    var body: some View {
+        Text(PluginClock.text(clock.now, in: zone))
+            .font(.system(size: 13, weight: .semibold).monospacedDigit())
+            .foregroundStyle(Color.primary.opacity(0.85))
+            .frame(minWidth: 58, alignment: .trailing)
     }
 }
 
@@ -4022,7 +4106,10 @@ final class TabSearchPanel {
             }()
             if case .pluginItem = row, pluginTarget == nil { return }
             if let (action, target) = pluginTarget {
-                if action.stays {
+                if action.enters {
+                    if case .pluginAction = row { self.model.leaveActions() }
+                    self.model.enterPluginScope(action, on: target)
+                } else if action.stays {
                     if case .pluginAction = row { self.model.leaveActions() }
                     self.model.performPluginAction(action, on: target)
                 } else {

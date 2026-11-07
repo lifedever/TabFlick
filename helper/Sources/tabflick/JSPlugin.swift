@@ -25,9 +25,12 @@ final class JSPlugin: Plugin {
     private lazy var jsMenu: JSPluginMenu? =
         manifest.contributes.contains(.menu) ? JSPluginMenu(runtime: runtime) : nil
 
-    init(manifest: PluginManifest, runtime: JSPluginRuntime) {
+    let icon: NSImage?
+
+    init(manifest: PluginManifest, runtime: JSPluginRuntime, icon: NSImage? = nil) {
         self.manifest = manifest
         self.runtime = runtime
+        self.icon = icon
     }
 
     var id: String { manifest.id }
@@ -51,7 +54,7 @@ final class JSPlugin: Plugin {
         let name = pick(manifest.listTitles) ?? title
         return AppCommand(id: "plugin." + id, bundleID: nil, title: name + "…",
                           keywords: manifest.listKeywords + Array(manifest.names.values) + Array(manifest.listTitles.values),
-                          symbol: symbol, subtitle: L10n.t("插件", "Plugins"), tint: tint, action: .pluginList(id))
+                          symbol: symbol, subtitle: L10n.t("插件", "Plugins"), tint: tint, icon: icon, action: .pluginList(id))
     }
     var listPlaceholder: String? { pick(manifest.listPlaceholders) }
     var hasOwnSettings: Bool { !manifest.choices.isEmpty || !manifest.inputs.isEmpty || manifest.usesUpDownColors }
@@ -62,15 +65,16 @@ final class JSPlugin: Plugin {
     }
     var listEmptyText: String? { pick(manifest.listEmpty) }
 
-    func list(_ query: String, _ done: @escaping @MainActor ([PluginRow]?) -> Void) {
+    func list(_ query: String, scope: String?, _ done: @escaping @MainActor ([PluginRow]?) -> Void) {
         let id = self.id
-        runtime.call("list", [query]) { value in
+        // 首页不传第二个参数（插件那边是 undefined），老插件只认一个参数也照样能用
+        runtime.call("list", scope.map { [query, $0] } ?? [query]) { value in
             MainActor.assumeIsolated { done((value as? [Any]).map { JSPluginRows.parse($0, pluginID: id) }) }
         }
     }
 
-    func perform(_ action: String, on row: PluginRow, _ done: @escaping @MainActor () -> Void) {
-        runtime.call("perform", [action, row.id]) { _ in MainActor.assumeIsolated { done() } }
+    func perform(_ action: String, on row: PluginRow, scope: String?, _ done: @escaping @MainActor () -> Void) {
+        runtime.call("perform", [action, row.id] + (scope.map { [$0] } ?? [])) { _ in MainActor.assumeIsolated { done() } }
     }
 
     /// 设置页的「测试」：用填好的设置真去试一次（天气：拿 API Host + Key 搜一次城市）。
@@ -104,8 +108,8 @@ struct PluginTestResult: Equatable {
 }
 
 /// 插件 `list()` 回的数组 → 列表行。外部输入：每个字段都可能缺、类型都可能错，认不出的丢掉。
-///   `{id, title, badge, subtitle, value, detail, tone, spark: [数字], icon: {text, tint},
-///     actions: [{id, title, symbol, destructive, stay}]}`
+///   `{id, title, badge, subtitle, value, detail, tone, spark: [数字], icon: {text, tint}, clock: "时区",
+///     actions: [{id, title, symbol, destructive, stay, clear, enter, placeholder, empty}]}`
 enum JSPluginRows {
     static let maxRows = 60
     static let maxText = 120
@@ -142,7 +146,10 @@ enum JSPluginRows {
                 actions.append(PluginRowAction(id: actionID, title: actionTitle, symbol: symbol,
                                                destructive: (a["destructive"] as? Bool) == true,
                                                stays: (a["stay"] as? Bool) == true,
-                                               clearsQuery: (a["clear"] as? Bool) == true))
+                                               clearsQuery: (a["clear"] as? Bool) == true,
+                                               enters: (a["enter"] as? Bool) == true,
+                                               enterPlaceholder: text(a["placeholder"], limit: 80),
+                                               enterEmpty: text(a["empty"])))
             }
             rows.append(PluginRow(
                 pluginID: pluginID, id: id, title: title, badge: text(item["badge"], limit: 12),
@@ -151,7 +158,9 @@ enum JSPluginRows {
                 spark: downsample(((item["spark"] as? [Any]) ?? []).compactMap { ($0 as? NSNumber)?.doubleValue }
                     .filter(\.isFinite)),
                 iconText: text(icon?["text"], limit: 2), iconTint: icon?["tint"] as? String,
-                actions: actions))
+                actions: actions,
+                // IANA 时区名（Asia/Tokyo）；认不出的当没写，退回 value
+                clock: (item["clock"] as? String).flatMap { $0.count <= 64 ? TimeZone(identifier: $0) : nil }))
         }
         return rows
     }
@@ -292,7 +301,13 @@ enum JSPluginLoader {
                     },
                     openURL: { url in NSWorkspace.shared.open(url) },
                     openSettings: { [id = manifest.id] in MainActor.assumeIsolated { PluginMenuHost.openSettings?(id) } }))
-            out.append(JSPlugin(manifest: manifest, runtime: runtime))
+            // 图标读不出来不影响插件本身，退回符号、写一行日志
+            let icon = manifest.icon.flatMap { path -> NSImage? in
+                let image = PluginIconLoader.load(dir.appendingPathComponent(path))
+                if image == nil { log("🧩 plugin \(name): icon \(path) unreadable, using symbol") }
+                return image
+            }
+            out.append(JSPlugin(manifest: manifest, runtime: runtime, icon: icon))
             log("🧩 found plugin \(manifest.id) v\(manifest.version)")
         }
         return out

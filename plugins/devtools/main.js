@@ -393,33 +393,7 @@ function conversions(input, nowMs = Date.now()) {
     out.push({ name: t("当前时间（ISO）", "目前時間（ISO）", "Current time (ISO)"), value: new Date(nowMs).toISOString() })
     return out
   }
-  // JWT：载荷、头、过期时间（不验签名）
-  const jwt = decodeJWT(trimmed)
-  if (jwt) {
-    out.push({ name: t("JWT 载荷", "JWT 載荷", "JWT payload"), value: JSON.stringify(jwt.payload, null, 2) })
-    out.push({ name: t("JWT 头", "JWT 標頭", "JWT header"), value: JSON.stringify(jwt.header, null, 2) })
-    if (typeof jwt.payload.exp === "number") {
-      out.push({ name: t("JWT 过期时间", "JWT 過期時間", "JWT expires") + " · " + relative(jwt.payload.exp * 1000, nowMs),
-                 value: localDate(jwt.payload.exp * 1000) })
-    }
-    if (typeof jwt.payload.iat === "number") {
-      out.push({ name: t("JWT 签发时间", "JWT 簽發時間", "JWT issued"), value: localDate(jwt.payload.iat * 1000) })
-    }
-  }
-  // 时间戳 → 日期：10 位秒、13 位毫秒
-  if (/^\d{10}$|^\d{13}$/.test(trimmed)) {
-    const ms = trimmed.length === 10 ? parseInt(trimmed, 10) * 1000 : parseInt(trimmed, 10)
-    out.push({ name: t("时间戳 → 本地时间", "時間戳 → 本地時間", "Timestamp → local time"), value: localDate(ms) })
-    out.push({ name: t("时间戳 → ISO（UTC）", "時間戳 → ISO（UTC）", "Timestamp → ISO (UTC)"), value: new Date(ms).toISOString() })
-  }
-  // 日期 → 时间戳：认得出的日期写法（2026-11-06、2026/11/06 18:30、ISO）
-  if (/\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(trimmed)) {
-    const ms = Date.parse(trimmed.replace(/\//g, "-").replace(" ", "T"))
-    if (isFinite(ms)) {
-      out.push({ name: t("日期 → 时间戳（秒）", "日期 → 時間戳（秒）", "Date → timestamp (s)"), value: String(Math.floor(ms / 1000)) })
-      out.push({ name: t("日期 → 时间戳（毫秒）", "日期 → 時間戳（毫秒）", "Date → timestamp (ms)"), value: String(ms) })
-    }
-  }
+  out.push(...jwtItems(trimmed, nowMs), ...timeItems(trimmed))
   // 进制：十进制给十六 / 二 / 八进制，带前缀的给十进制和十六（或二）进制
   const integer = parseInteger(trimmed)
   if (integer) {
@@ -503,40 +477,408 @@ function conversions(input, nowMs = Date.now()) {
     out.push({ name: "SHA-1", value: sha1(text) })
     out.push({ name: "SHA-256", value: sha256(text) })
   }
+  out.push(countItem(text))
+  return out
+}
+
+/** JWT：载荷、头、过期时间（不验签名）。不是 JWT 回空。 */
+function jwtItems(trimmed, nowMs) {
+  const jwt = decodeJWT(trimmed)
+  if (!jwt) return []
+  const out = [
+    { name: t("JWT 载荷", "JWT 載荷", "JWT payload"), value: JSON.stringify(jwt.payload, null, 2) },
+    { name: t("JWT 头", "JWT 標頭", "JWT header"), value: JSON.stringify(jwt.header, null, 2) },
+  ]
+  if (typeof jwt.payload.exp === "number") {
+    out.push({ name: t("JWT 过期时间", "JWT 過期時間", "JWT expires") + " · " + relative(jwt.payload.exp * 1000, nowMs),
+               value: localDate(jwt.payload.exp * 1000) })
+  }
+  if (typeof jwt.payload.iat === "number") {
+    out.push({ name: t("JWT 签发时间", "JWT 簽發時間", "JWT issued"), value: localDate(jwt.payload.iat * 1000) })
+  }
+  return out
+}
+
+/** 时间戳（10 位秒、13 位毫秒）→ 日期；认得出的日期写法（2026-11-06、2026/11/06 18:30、ISO）→ 时间戳。 */
+function timeItems(trimmed) {
+  const out = []
+  if (/^\d{10}$|^\d{13}$/.test(trimmed)) {
+    const ms = trimmed.length === 10 ? parseInt(trimmed, 10) * 1000 : parseInt(trimmed, 10)
+    out.push({ name: t("时间戳 → 本地时间", "時間戳 → 本地時間", "Timestamp → local time"), value: localDate(ms) })
+    out.push({ name: t("时间戳 → ISO（UTC）", "時間戳 → ISO（UTC）", "Timestamp → ISO (UTC)"), value: new Date(ms).toISOString() })
+  }
+  if (/\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(trimmed)) {
+    const ms = Date.parse(trimmed.replace(/\//g, "-").replace(" ", "T"))
+    if (isFinite(ms)) {
+      out.push({ name: t("日期 → 时间戳（秒）", "日期 → 時間戳（秒）", "Date → timestamp (s)"), value: String(Math.floor(ms / 1000)) })
+      out.push({ name: t("日期 → 时间戳（毫秒）", "日期 → 時間戳（毫秒）", "Date → timestamp (ms)"), value: String(ms) })
+    }
+  }
+  return out
+}
+
+/** 字数 · 字节 · 行数 */
+function countItem(text) {
   const lines = text.split("\n").length
-  out.push({
+  const bytes = utf8Bytes(text).length
+  return {
     name: t("字数", "字數", "Length"),
     value: t(`${[...text].length} 个字 · ${bytes} 字节 · ${lines} 行`, `${[...text].length} 個字 · ${bytes} 位元組 · ${lines} 行`,
              `${[...text].length} chars · ${bytes} bytes · ${lines} lines`),
     stat: true,
-  })
-  return out
+  }
+}
+
+// MARK: - 工具目录（用户 2026-11-07：「不知道有啥命令」）
+//
+// 进开发工具箱没输入时列出全部工具；有输入时照旧自动识别（`conversions`），名字对得上的工具排最前；
+// 在工具上回车进它自己那一层（TabFlick 的 enter 动作），只列这个工具的结果。
+// 老版本 TabFlick 不认 enter（`tabflick.features` 里没有）：目录照样列，只是进不去，粘贴照旧能用。
+
+const LEVELS = typeof tabflick !== "undefined" && Array.isArray(tabflick.features) && tabflick.features.indexOf("enter") >= 0
+
+const CAT = {
+  gen: () => t("生成", "產生", "Generate"),
+  time: () => t("时间", "時間", "Time"),
+  data: () => t("数据", "資料", "Data"),
+  code: () => t("编码", "編碼", "Encoding"),
+  num: () => t("数字", "數字", "Numbers"),
+  text: () => t("文本", "文字", "Text"),
+}
+
+/** 不知道在等什么时那句话。 */
+const notRecognized = (what) => ({ value: what, invalid: true })
+
+/** 当前这个 UUID：拷走之后才换新的（面板开着每 5 秒刷新一次，每次都换的话正看着就变了）。 */
+let currentUUID = null
+function stableUUID() {
+  if (!currentUUID) currentUUID = uuid()
+  return currentUUID
+}
+
+/**
+ * 全部工具，按类别排。
+ *   glyph / tint：行首方块；keys：除了名字之外打什么能找到它（英文、拼音首字母）；
+ *   generator：不用输入，目录里直接给值、回车拷贝；run(text, nowMs)：这个工具对输入的结果 [{name, value}]。
+ */
+const TOOLS = [
+  {
+    id: "uuid", glyph: "ID", tint: "indigo", cat: CAT.gen, generator: true,
+    name: () => t("随机 UUID", "隨機 UUID", "Random UUID"),
+    hint: () => t("回车拷贝，拷完换一个新的", "按 ↩ 拷貝，拷完換一個新的", "↩ copies, then a new one is made"),
+    keys: ["uuid", "guid", "sjuuid"],
+    run() {
+      const id = stableUUID()
+      return [
+        { name: t("小写", "小寫", "Lowercase"), value: id },
+        { name: t("大写", "大寫", "Uppercase"), value: id.toUpperCase() },
+        { name: t("不带连字符", "不帶連字號", "No hyphens"), value: id.replace(/-/g, "") },
+      ]
+    },
+  },
+  {
+    id: "now", glyph: "TS", tint: "orange", cat: CAT.gen, generator: true,
+    name: () => t("当前时间戳", "目前時間戳", "Current timestamp"),
+    hint: () => t("秒、毫秒、ISO、本地时间", "秒、毫秒、ISO、本地時間", "Seconds, milliseconds, ISO, local time"),
+    keys: ["now", "timestamp", "unix", "dqsjc", "sjc"],
+    run(text, nowMs) {
+      return [
+        { name: t("秒", "秒", "Seconds"), value: String(Math.floor(nowMs / 1000)) },
+        { name: t("毫秒", "毫秒", "Milliseconds"), value: String(nowMs) },
+        { name: "ISO（UTC）", value: new Date(nowMs).toISOString() },
+        { name: t("本地时间", "本地時間", "Local time"), value: localDate(nowMs) },
+      ]
+    },
+  },
+  {
+    id: "time", glyph: "⇄", tint: "orange", cat: CAT.time,
+    name: () => t("时间戳 ↔ 日期", "時間戳 ↔ 日期", "Timestamp ↔ date"),
+    hint: () => t("10 位秒、13 位毫秒，或 2025-11-06 这样的日期", "10 位秒、13 位毫秒，或 2025-11-06 這樣的日期",
+                  "10-digit seconds, 13-digit milliseconds, or a date like 2025-11-06"),
+    placeholder: () => t("1762425000、2025-11-06 18:30", "1762425000、2025-11-06 18:30", "1762425000 or 2025-11-06 18:30"),
+    keys: ["timestamp", "date", "time", "sjc", "rq", "日期", "时间戳"],
+    run(text) {
+      const out = timeItems(text.trim())
+      return out.length ? out : [notRecognized(t("认不出时间戳或日期", "認不出時間戳或日期", "Not a timestamp or date"))]
+    },
+  },
+  {
+    id: "jwt", glyph: "JW", tint: "purple", cat: CAT.data,
+    name: () => t("JWT 解码", "JWT 解碼", "Decode JWT"),
+    hint: () => t("看载荷、头和过期时间，不验签名", "看載荷、標頭和過期時間，不驗簽章", "Payload, header and expiry. Signature isn't checked"),
+    placeholder: () => t("粘贴 JWT", "貼上 JWT", "Paste a JWT"),
+    keys: ["jwt", "token"],
+    run(text, nowMs) {
+      const out = jwtItems(text.trim(), nowMs)
+      return out.length ? out : [notRecognized(t("不是 JWT", "不是 JWT", "Not a JWT"))]
+    },
+  },
+  {
+    id: "json", glyph: "{}", tint: "green", cat: CAT.data,
+    name: () => t("JSON 格式化 / 压缩", "JSON 格式化 / 壓縮", "Format / minify JSON"),
+    hint: () => t("缩进排好，或者压成一行", "縮排排好，或者壓成一行", "Pretty-print or squeeze onto one line"),
+    placeholder: () => t("粘贴 JSON", "貼上 JSON", "Paste JSON"),
+    keys: ["json", "format", "minify", "gsh", "格式化"],
+    run(text) {
+      try {
+        const value = JSON.parse(text.trim())
+        return [
+          { name: t("JSON 格式化", "JSON 格式化", "Format JSON"), value: JSON.stringify(value, null, 2) },
+          { name: t("JSON 压缩", "JSON 壓縮", "Minify JSON"), value: JSON.stringify(value) },
+        ]
+      } catch (e) {
+        return [{ name: t("JSON 解析不了", "JSON 解析不了", "Not valid JSON"), value: String(e.message || e), invalid: true }]
+      }
+    },
+  },
+  {
+    id: "query", glyph: "?=", tint: "green", cat: CAT.data,
+    name: () => t("网址参数", "網址參數", "URL query parameters"),
+    hint: () => t("把网址里的参数逐个列出来、解码", "把網址裡的參數逐個列出來、解碼", "List and decode each parameter of a URL"),
+    placeholder: () => t("粘贴带参数的网址", "貼上帶參數的網址", "Paste a URL with parameters"),
+    keys: ["query", "params", "url", "wzcs", "参数"],
+    run(text) {
+      const out = queryParams(text.trim()).map(([key, value]) => ({ name: key, value }))
+      return out.length ? out : [notRecognized(t("网址里没有参数", "網址裡沒有參數", "No query parameters"))]
+    },
+  },
+  {
+    id: "base64", glyph: "64", tint: "blue", cat: CAT.code,
+    name: () => t("Base64 编码 / 解码", "Base64 編碼 / 解碼", "Base64 encode / decode"),
+    hint: () => t("中文按 UTF-8，认 URL 安全的写法", "中文按 UTF-8，認 URL 安全的寫法", "UTF-8, URL-safe input accepted"),
+    placeholder: () => t("输入要编码或解码的文字", "輸入要編碼或解碼的文字", "Text to encode or decode"),
+    keys: ["base64", "b64"],
+    run(text) {
+      const decoded = base64Decode(text.trim())
+      return [{ name: t("Base64 编码", "Base64 編碼", "Base64 encode"), value: base64Encode(text) }]
+        .concat(decoded != null ? [{ name: t("Base64 解码", "Base64 解碼", "Base64 decode"), value: decoded }] : [])
+    },
+  },
+  {
+    id: "url", glyph: "%", tint: "blue", cat: CAT.code,
+    name: () => t("URL 编码 / 解码", "URL 編碼 / 解碼", "URL encode / decode"),
+    hint: () => t("百分号编码", "百分號編碼", "Percent-encoding"),
+    placeholder: () => t("输入要编码或解码的文字", "輸入要編碼或解碼的文字", "Text to encode or decode"),
+    keys: ["url", "urlencode", "encode", "decode", "percent", "bm", "jm", "编码", "解码"],
+    run(text) {
+      const out = [{ name: t("URL 编码", "URL 編碼", "URL encode"), value: encodeURIComponent(text) }]
+      try {
+        const d = decodeURIComponent(text)
+        if (d !== text) out.push({ name: t("URL 解码", "URL 解碼", "URL decode"), value: d })
+      } catch (e) { /* 不是合法的编码 */ }
+      return out
+    },
+  },
+  {
+    id: "unicode", glyph: "\\u", tint: "blue", cat: CAT.code,
+    name: () => t("Unicode 转义 / 反转义", "Unicode 跳脫 / 反跳脫", "Unicode escape / unescape"),
+    hint: () => t("\\u4f60 这种写法和文字互转", "\\u4f60 這種寫法和文字互轉", "Convert between text and \\u4f60 escapes"),
+    placeholder: () => t("输入文字，或 \\u 开头的转义", "輸入文字，或 \\u 開頭的跳脫", "Text, or \\u escapes"),
+    keys: ["unicode", "escape", "unescape", "zy", "转义"],
+    run(text) {
+      const out = [{ name: t("Unicode 转义", "Unicode 跳脫", "Unicode escape"), value: unicodeEscape(text) }]
+      const unescaped = unicodeUnescape(text)
+      if (unescaped !== text) out.push({ name: t("Unicode 反转义", "Unicode 反跳脫", "Unicode unescape"), value: unescaped })
+      return out
+    },
+  },
+  {
+    id: "html", glyph: "&;", tint: "blue", cat: CAT.code,
+    name: () => t("HTML 转义 / 实体解码", "HTML 跳脫 / 實體解碼", "HTML escape / decode entities"),
+    hint: () => t("< > & 和 &amp; 这类实体互转", "< > & 和 &amp; 這類實體互轉", "Convert between < > & and entities like &amp;"),
+    placeholder: () => t("输入 HTML 或带实体的文字", "輸入 HTML 或帶實體的文字", "HTML, or text with entities"),
+    keys: ["html", "entity", "escape", "st", "实体"],
+    run(text) {
+      const out = [{ name: t("HTML 转义", "HTML 跳脫", "HTML escape"), value: htmlEncode(text) }]
+      const decoded = htmlDecode(text)
+      if (decoded !== text) out.push({ name: t("HTML 实体解码", "HTML 實體解碼", "HTML entity decode"), value: decoded })
+      return out
+    },
+  },
+  {
+    id: "jsonstr", glyph: "\"\"", tint: "blue", cat: CAT.code,
+    name: () => t("JSON 字符串转义 / 反转义", "JSON 字串跳脫 / 反跳脫", "JSON string escape / unescape"),
+    hint: () => t("引号、换行这些写成 \\\" \\n，或者反过来", "引號、換行這些寫成 \\\" \\n，或者反過來", "Quotes and newlines to \\\" \\n, and back"),
+    placeholder: () => t("输入文字，或带 \\n 的字符串", "輸入文字，或帶 \\n 的字串", "Text, or a string with \\n"),
+    keys: ["json", "string", "escape", "zfc", "转义"],
+    run(text) {
+      const out = [{ name: t("JSON 字符串转义", "JSON 字串跳脫", "JSON string escape"), value: jsonEscape(text) }]
+      const unescaped = jsonUnescape(text.trim())
+      if (unescaped != null && unescaped !== text.trim()) {
+        out.push({ name: t("JSON 字符串反转义", "JSON 字串反跳脫", "JSON string unescape"), value: unescaped })
+      }
+      return out
+    },
+  },
+  {
+    id: "radix", glyph: "0x", tint: "pink", cat: CAT.num,
+    name: () => t("进制转换", "進位轉換", "Number bases"),
+    hint: () => t("十进制、十六进制、二进制、八进制互转", "十進位、十六進位、二進位、八進位互轉", "Decimal, hex, binary and octal"),
+    placeholder: () => t("255、0xff、0b1010、0o17", "255、0xff、0b1010、0o17", "255, 0xff, 0b1010, 0o17"),
+    keys: ["radix", "hex", "binary", "bin", "oct", "decimal", "jz", "进制"],
+    run(text) {
+      const integer = parseInteger(text.trim())
+      if (!integer) return [notRecognized(t("不是整数", "不是整數", "Not an integer"))]
+      const v = integer.value
+      return [
+        [t("十进制", "十進位", "Decimal"), 10, ""], [t("十六进制", "十六進位", "Hex"), 16, "0x"],
+        [t("二进制", "二進位", "Binary"), 2, "0b"], [t("八进制", "八進位", "Octal"), 8, "0o"],
+      ].map(([name, base, prefix]) => ({ name, value: radix(v, base, prefix) }))
+    },
+  },
+  {
+    id: "color", glyph: "#", tint: "pink", cat: CAT.num,
+    name: () => t("颜色转换", "顏色轉換", "Color formats"),
+    hint: () => t("HEX、RGB、HSL 互转", "HEX、RGB、HSL 互轉", "HEX, RGB and HSL"),
+    placeholder: () => t("#ff9500、rgb(255, 149, 0)", "#ff9500、rgb(255, 149, 0)", "#ff9500 or rgb(255, 149, 0)"),
+    keys: ["color", "colour", "hex", "rgb", "hsl", "ys", "颜色"],
+    run(text) {
+      const color = parseColor(text.trim())
+      if (!color) return [notRecognized(t("认不出颜色", "認不出顏色", "Not a color"))]
+      const swatch = colorHex({ r: color.r, g: color.g, b: color.b, a: 1 })
+      return [["HEX", colorHex(color)], ["RGB", colorRGB(color)], ["HSL", colorHSL(color)]]
+        .map(([name, value]) => ({ name: t("颜色 ", "顏色 ", "Color ") + name, value, swatch }))
+    },
+  },
+  {
+    id: "amount", glyph: "¥", tint: "red", cat: CAT.num, chineseOnly: true,
+    name: () => t("人民币大写", "中文大寫金額", "Chinese amount"),
+    hint: () => t("金额写成壹仟零伍元整，最多 12 位整数", "金額寫成壹仟零伍元整，最多 12 位整數", "Up to 12 integer digits"),
+    placeholder: () => t("1234.56", "1234.56", "1234.56"),
+    keys: ["rmb", "amount", "dx", "je", "大写", "金额"],
+    run(text) {
+      const amount = chineseAmount(text.trim(), LANG === "zh-Hant")
+      return amount ? [{ name: t("人民币大写", "中文大寫金額", "Chinese amount"), value: amount }]
+        : [notRecognized(t("不是金额（最多 12 位整数、2 位小数）", "不是金額（最多 12 位整數、2 位小數）", "Not an amount"))]
+    },
+  },
+  {
+    id: "case", glyph: "Aa", tint: "teal", cat: CAT.text,
+    name: () => t("命名风格", "命名風格", "Naming styles"),
+    hint: () => t("驼峰、帕斯卡、下划线、短横线、大小写", "駝峰、帕斯卡、底線、連字號、大小寫", "camelCase, PascalCase, snake_case, kebab-case, upper and lower"),
+    placeholder: () => t("user name、userName、user_name", "user name、userName、user_name", "user name, userName, user_name"),
+    keys: ["case", "camel", "snake", "kebab", "pascal", "upper", "lower", "mmfg", "tf", "驼峰", "命名"],
+    run(text) {
+      const trimmed = text.trim()
+      if (!/^[A-Za-z][A-Za-z0-9 _\-]*$/.test(trimmed) || trimmed.length > 200) {
+        return [notRecognized(t("只认字母、数字、空格、_ 和 -，以字母开头", "只認字母、數字、空格、_ 和 -，以字母開頭",
+                                "Letters, digits, spaces, _ and - only, starting with a letter"))]
+      }
+      const w = words(trimmed).map((x) => x.toLowerCase())
+      const camel = w.map((x, i) => (i ? x[0].toUpperCase() + x.slice(1) : x)).join("")
+      return [
+        [t("驼峰", "駝峰", "camelCase"), camel],
+        [t("帕斯卡", "帕斯卡", "PascalCase"), camel[0].toUpperCase() + camel.slice(1)],
+        [t("下划线", "底線", "snake_case"), w.join("_")],
+        [t("短横线", "連字號", "kebab-case"), w.join("-")],
+        [t("全大写", "全大寫", "UPPER CASE"), trimmed.toUpperCase()],
+        [t("全小写", "全小寫", "lower case"), trimmed.toLowerCase()],
+      ].map(([name, value]) => ({ name, value }))
+    },
+  },
+  {
+    id: "hash", glyph: "#=", tint: "teal", cat: CAT.text,
+    name: () => t("哈希", "雜湊", "Hashes"),
+    hint: () => "MD5、SHA-1、SHA-256",
+    placeholder: () => t("输入要算哈希的文字", "輸入要算雜湊的文字", "Text to hash"),
+    keys: ["hash", "md5", "sha", "sha1", "sha256", "hx", "哈希"],
+    run(text) {
+      if (utf8Bytes(text).length > 1 << 17) return [notRecognized(t("太长了，只算 128 KB 以内的", "太長了，只算 128 KB 以內的", "Too long. Up to 128 KB"))]
+      return [{ name: "MD5", value: md5(text) }, { name: "SHA-1", value: sha1(text) }, { name: "SHA-256", value: sha256(text) }]
+    },
+  },
+  {
+    id: "count", glyph: "12", tint: "teal", cat: CAT.text,
+    name: () => t("字数统计", "字數統計", "Character count"),
+    hint: () => t("字数、字节数、行数", "字數、位元組數、行數", "Characters, bytes and lines"),
+    placeholder: () => t("粘贴要数的文字", "貼上要數的文字", "Paste text to count"),
+    keys: ["count", "length", "words", "zs", "tj", "字数"],
+    run(text) {
+      return [countItem(text)]
+    },
+  },
+]
+
+function availableTools() {
+  return TOOLS.filter((tool) => !tool.chineseOnly || LANG === "zh" || LANG === "zh-Hant")
+}
+
+/** 名字或关键词对得上的工具（打「jwt」「base64」「时间戳」）。超过 30 个字的不可能是工具名，不用逐个比。 */
+function matchingTools(text) {
+  const q = text.trim().toLowerCase()
+  if (q.length < 2 || q.length > 30) return []
+  return availableTools().filter((tool) =>
+    tool.name().toLowerCase().includes(q) || tool.keys.some((key) => key.toLowerCase().startsWith(q)))
+}
+
+/** 目录里一个工具那一行：生成类直接给值、回车拷贝；别的回车进它那一层。 */
+function toolRow(tool, nowMs) {
+  const enter = {
+    id: "enter", title: t("打开", "打開", "Open"), symbol: "arrow.right.circle.fill", enter: true,
+    placeholder: tool.placeholder ? tool.placeholder() : undefined,
+    empty: tool.generator ? undefined : tool.hint(),
+  }
+  const row = {
+    id: "tool:" + tool.id,
+    title: tool.name(),
+    subtitle: tool.cat() + " · " + tool.hint(),
+    icon: { text: tool.glyph, tint: tool.tint },
+    actions: LEVELS ? [enter] : [],
+  }
+  if (tool.generator) {
+    const value = tool.run("", nowMs)[0].value
+    lastValues[row.id] = value
+    row.subtitle = tool.cat() + " · " + value
+    row.actions = [{ id: "copy", title: t("拷贝", "拷貝", "Copy"), symbol: "doc.on.doc.fill" }]
+      .concat(LEVELS ? [{ ...enter, title: t("更多格式", "更多格式", "More formats") }] : [])
+  }
+  return row
 }
 
 /** 最近一次列出来的结果（回车拷贝时按 id 取完整的值：行上的标题会被截短）。 */
 let lastValues = {}
 
-function list(query) {
-  const items = conversions(query)
-  lastValues = {}
+/** 结果 → 列表的行（id 按顺序编号，值记进 lastValues）。 */
+function resultRows(items, offset = 0) {
   return items.map((item, i) => {
-    const id = "r" + i
+    const id = "r" + (i + offset)
     lastValues[id] = item.value
     const oneLine = item.value.replace(/\s*\n\s*/g, " ⏎ ")
     return {
       id,
       title: oneLine.length > 100 ? oneLine.slice(0, 99) + "…" : oneLine,
       subtitle: item.name,
-      icon: item.swatch ? { text: " ", tint: item.swatch } : { text: item.name.slice(0, 1), tint: item.invalid ? "red" : "gray" },
+      icon: item.swatch ? { text: " ", tint: item.swatch }
+        : { text: (item.name || "!").slice(0, 1), tint: item.invalid ? "red" : "gray" },
       actions: item.invalid ? [] : [{ id: "copy", title: t("拷贝", "拷貝", "Copy"), symbol: "doc.on.doc.fill" }],
     }
   })
+}
+
+/**
+ * scope 空（首页）：没输入列全部工具；有输入照旧自动识别，名字对得上的工具排在最前。
+ * scope = 工具 id：只列这个工具的结果；没输入时生成类直接给值，别的回空（TabFlick 显示那个工具的说明）。
+ */
+function list(query, scope, nowMs = Date.now()) {
+  lastValues = {}
+  const text = String(query == null ? "" : query)
+  const toolID = typeof scope === "string" ? scope.replace(/^tool:/, "") : null
+  if (toolID) {
+    const tool = availableTools().find((x) => x.id === toolID)
+    if (!tool || (!text.trim() && !tool.generator)) return []
+    return resultRows(tool.run(text, nowMs))
+  }
+  if (!text.trim()) return availableTools().map((tool) => toolRow(tool, nowMs))
+  const tools = matchingTools(text).slice(0, 4).map((tool) => toolRow(tool, nowMs))
+  return tools.concat(resultRows(conversions(text, nowMs)))
 }
 
 function perform(action, id) {
   if (action !== "copy" || !(id in lastValues)) return
   tabflick.copy(lastValues[id])
   tabflick.toast(t("已拷贝", "已拷貝", "Copied"))
+  // 拷走了这个 UUID，下次给新的
+  if (lastValues[id] && currentUUID && lastValues[id].toLowerCase().replace(/-/g, "") === currentUUID.replace(/-/g, "")) currentUUID = null
 }
 
 if (typeof tabflick !== "undefined" && tabflick.register) {

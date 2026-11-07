@@ -52,6 +52,8 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
         return URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }()
 
+    static let features = ["enter", "clock"]
+
     /// 一次同步执行最多跑多久（秒）。异步等网络不算在内。
     static let executionLimit: Double = 2
     /// 响应体上限，超过就当失败（行情接口几 KB，防插件拉大文件撑内存）。
@@ -184,6 +186,9 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
         }
         api.setObject(register, forKeyedSubscript: "register" as NSString)
         api.setObject(language, forKeyedSubscript: "locale" as NSString)
+        // 这个版本的 TabFlick 认哪些后来加的能力，插件据此决定给不给（老版本没有这一项）：
+        // enter = 行的动作能进下一层，clock = 行尾画走秒的钟
+        api.setObject(Self.features, forKeyedSubscript: "features" as NSString)
 
         let fetch: @convention(block) (String, JSValue?) -> JSValue? = { [weak self] address, options in
             self?.fetch(address, options)

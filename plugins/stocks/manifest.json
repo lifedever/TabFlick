@@ -1,6 +1,6 @@
 {
   "id": "stocks",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": {
     "zh-Hans": "股票",
     "zh-Hant": "股票",
@@ -18,6 +18,7 @@
   },
   "symbol": "chart.line.uptrend.xyaxis",
   "tint": "red",
+  "icon": "icon.svg",
   "hosts": [
     "qt.gtimg.cn",
     "web.ifzq.gtimg.cn",

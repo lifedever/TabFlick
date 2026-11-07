@@ -32,6 +32,9 @@ const SUMMER = Date.UTC(2026, 6, 1, 10, 30)
   await test("列表：默认纽约、伦敦；搜中文、英文、拼音首字母", () => {
     const p = load(dir)
     assert.deepStrictEqual(plain(p.sandbox.list("", NOW).map((r) => r.value)), ["05:30", "10:30"])
+    // 行带时区：TabFlick 按它画走秒的钟；value（时:分）留给不认 clock 的老版本
+    assert.deepStrictEqual(plain(p.sandbox.list("", NOW).map((r) => r.clock)), ["America/New_York", "Europe/London"])
+    assert.strictEqual(p.sandbox.list("东京", NOW)[0].clock, "Asia/Tokyo", "搜出来的也带")
     assert.strictEqual(p.sandbox.list("东京", NOW)[0].id, "tokyo")
     assert.strictEqual(p.sandbox.list("tokyo", NOW)[0].id, "tokyo")
     assert.strictEqual(p.sandbox.list("dj", NOW)[0].id, "tokyo")

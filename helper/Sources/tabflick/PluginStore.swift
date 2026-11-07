@@ -27,6 +27,8 @@ final class PluginStore: ObservableObject {
     @Published private(set) var busy: Set<String> = []
     /// 这份目录是从哪拉的（装的时候文件也从这里拉）
     private var source: URL?
+    /// 商店里插件的图标（还没装的也要画）：sha256 → 图。按内容记，目录刷新了图标没变就不再拉
+    @Published private(set) var icons: [String: NSImage] = [:]
 
     static let overrideKey = "pluginStoreBase"
     static let defaultBases = [
@@ -70,6 +72,7 @@ final class PluginStore: ObservableObject {
                     source = base
                     status = .loaded(Date())
                     log("🧩 store: \(parsed.count) plugin(s) from \(base.host ?? base.path)")
+                    await loadIcons(parsed, from: base)
                     return
                 } catch {
                     lastError = error.localizedDescription
@@ -81,6 +84,24 @@ final class PluginStore: ObservableObject {
     }
 
     func entry(_ id: String) -> StoreEntry? { entries.first { $0.id == id } }
+
+    /// 商店里这个插件的图标（拉到了、核对过的）。
+    func icon(for entry: StoreEntry) -> NSImage? { entry.icon.flatMap { icons[$0.sha256] } }
+
+    /// 拉目录里各插件的图标：和插件文件同一个地方、同样核对大小和 sha256。拉不到的不管（画符号）。
+    private func loadIcons(_ entries: [StoreEntry], from base: URL) async {
+        for entry in entries {
+            guard let file = entry.icon, icons[file.sha256] == nil else { continue }
+            guard let data = try? await fetch(base.appendingPathComponent(entry.id).appendingPathComponent(file.path), limit: file.size),
+                  data.count == file.size,
+                  SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == file.sha256,
+                  let image = PluginIconLoader.image(data: data) else {
+                log("🧩 store: icon of \(entry.id) unavailable")
+                continue
+            }
+            icons[file.sha256] = image
+        }
+    }
 
     /// 已装的插件有没有新版本（目录里的比装着的新）。
     func update(for plugin: Plugin) -> StoreEntry? {

@@ -48,10 +48,21 @@ struct PluginStoreIndexCheck {
         check("总大小超了跳过", parse(entry(files: #"[{"path":"manifest.json","size":\#(StoreIndex.maxBytes + 1),"sha256":"\#(sha)"}]"#))?.isEmpty == true)
         check("同一个 id 留第一个", parse(entry() + "," + entry())?.count == 1)
 
+        // 图标：必须是包里的一个文件、svg / png、不超过上限，否则当没有（插件照收）
+        func withIcon(_ icon: String, size: Int = 10) -> [StoreEntry]? {
+            let files = #"[{"path":"manifest.json","size":10,"sha256":"\#(sha)"},{"path":"icon.svg","size":\#(size),"sha256":"\#(sha)"},{"path":"a.gif","size":10,"sha256":"\#(sha)"}]"#
+            return parse(entry(files: files).replacingOccurrences(of: #""files":"#, with: #""icon":"\#(icon)","files":"#))
+        }
+        check("图标在包里", withIcon("icon.svg")?.first?.icon?.path == "icon.svg", "\(String(describing: withIcon("icon.svg")))")
+        check("图标不在包里当没有", withIcon("other.svg")?.first.map { $0.icon == nil } == true)
+        check("图标不是 svg / png 当没有", withIcon("a.gif")?.first.map { $0.icon == nil } == true)
+        check("图标太大当没有", withIcon("icon.svg", size: StoreIndex.maxIconBytes + 1)?.first.map { $0.icon == nil } == true)
+
         // 仓库里真的那份（build-index.py 生成的）
         if CommandLine.arguments.count > 1, let data = FileManager.default.contents(atPath: CommandLine.arguments[1]) {
             let real = StoreIndex.parse(data)
             check("仓库里的 index.json 全部能解析", (real?.count ?? 0) >= 7, "\(real?.map(\.id) ?? [])")
+            check("仓库里的插件都带图标", real?.allSatisfy { $0.icon != nil } == true, "\(real?.filter { $0.icon == nil }.map(\.id) ?? [])")
         }
 
         if failures == 0 { print("全部通过") } else { fatalError("\(failures) 条没过") }

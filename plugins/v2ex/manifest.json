@@ -1,6 +1,6 @@
 {
   "id": "v2ex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": {
     "zh-Hans": "V2EX",
     "zh-Hant": "V2EX",
@@ -13,6 +13,7 @@
   },
   "symbol": "bubble.left.and.bubble.right.fill",
   "tint": "gray",
+  "icon": "icon.svg",
   "hosts": [
     "www.v2ex.com"
   ],

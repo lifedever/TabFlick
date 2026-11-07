@@ -1,6 +1,6 @@
 {
   "id": "hackernews",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": {
     "en": "Hacker News",
     "zh-Hans": "Hacker News",
@@ -13,6 +13,7 @@
   },
   "symbol": "newspaper.fill",
   "tint": "orange",
+  "icon": "icon.svg",
   "hosts": [
     "hn.algolia.com"
   ],

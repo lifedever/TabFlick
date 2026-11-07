@@ -31,6 +31,8 @@ protocol Plugin: AnyObject {
     /// 侧边栏图标块里的白色符号（实心的那一版）和底色。
     var symbol: String { get }
     var tint: Color { get }
+    /// 插件的图标（正方形的图，TabFlick 裁圆角，见 PluginIcons.swift）。nil = 画上面的符号 + 底色
+    var icon: NSImage? { get }
     var origin: PluginOrigin { get }
     /// 插件页「在搜索面板里」那一段列的命令（每条能设关键词）。空 = 不列这一段。
     var panelCommands: [PluginCommandInfo] { get }
@@ -44,10 +46,11 @@ protocol Plugin: AnyObject {
 
     /// 搜索面板里进入这个插件列表的命令（打「股票」命中，回车列表换成插件给的行，同「结束进程…」）。nil = 没有列表。
     var listCommand: AppCommand? { get }
-    /// 列表的内容：query 空 = 默认内容（股票的自选），有字 = 搜。回调 nil = 出错（面板留着原来的行）。
-    func list(_ query: String, _ done: @escaping @MainActor ([PluginRow]?) -> Void)
-    /// 对列表里一行执行一个动作，做完回调（面板据此决定刷不刷新列表）。
-    func perform(_ action: String, on row: PluginRow, _ done: @escaping @MainActor () -> Void)
+    /// 列表的内容：query 空 = 默认内容（股票的自选），有字 = 搜。scope = 进到了哪一层（`PluginRowAction.enters`
+    /// 那一行的 id，开发工具箱里的「JWT 解码」），nil = 列表首页。回调 nil = 出错（面板留着原来的行）。
+    func list(_ query: String, scope: String?, _ done: @escaping @MainActor ([PluginRow]?) -> Void)
+    /// 对列表里一行执行一个动作（scope 同上），做完回调（面板据此决定刷不刷新列表）。
+    func perform(_ action: String, on row: PluginRow, scope: String?, _ done: @escaping @MainActor () -> Void)
     /// 列表里输入框的占位、没内容时那句话（nil 用通用的）。
     var listPlaceholder: String? { get }
     var listEmptyText: String? { get }
@@ -58,13 +61,14 @@ protocol Plugin: AnyObject {
 }
 
 extension Plugin {
+    var icon: NSImage? { nil }
     var panelCommands: [PluginCommandInfo] { [] }
     func commands(_ context: PluginContext) -> [AppCommand] { [] }
     func instantRows(_ query: String, _ context: PluginContext) -> [SearchRow] { [] }
     var menu: PluginMenu? { nil }
     var listCommand: AppCommand? { nil }
-    func list(_ query: String, _ done: @escaping @MainActor ([PluginRow]?) -> Void) { done(nil) }
-    func perform(_ action: String, on row: PluginRow, _ done: @escaping @MainActor () -> Void) { done() }
+    func list(_ query: String, scope: String?, _ done: @escaping @MainActor ([PluginRow]?) -> Void) { done(nil) }
+    func perform(_ action: String, on row: PluginRow, scope: String?, _ done: @escaping @MainActor () -> Void) { done() }
     var listPlaceholder: String? { nil }
     var listEmptyText: String? { nil }
     var hasOwnSettings: Bool { false }
@@ -135,8 +139,54 @@ struct PluginRow: Equatable {
     var iconTint: String? = nil
     /// 第一个是回车做的事；⌘↩ 列出全部
     var actions: [PluginRowAction] = []
+    /// 行尾画这个时区此刻的钟（时:分:秒，原生每秒走一下），代替 `value`（世界时钟，用户 2026-11-07 要的：
+    /// 秒要一直在动）。插件不用每秒被调一次；不认这个字段的老版本照旧显示 `value`
+    var clock: TimeZone? = nil
 
     static let maxSpark = 64
+}
+
+/// 插件列表里走的钟：整秒跳一下。只在插件列表里有 `clock` 行时跑（`TabSearchModel` 开关），面板一关就停 ——
+/// 面板常驻、关掉只是 orderOut，不能交给 SwiftUI 的 TimelineView（藏起来照样逐秒重画，同运行中绿点那条）。
+/// 单独一个对象：只有画钟的那几个 Text 跟着刷新，整张列表不动。
+@MainActor
+final class PluginClock: ObservableObject {
+    static let shared = PluginClock()
+
+    @Published private(set) var now = Date()
+    private var timer: Timer?
+
+    func setRunning(_ running: Bool) {
+        guard running != (timer != nil) else { return }
+        timer?.invalidate()
+        timer = nil
+        guard running else { return }
+        now = Date()
+        // 对齐到下一个整秒（多 15ms 余量，防止落在整秒前一点、显示还是上一秒），之后每秒一次；
+        // 重复的 Timer 按首次触发的时刻排，不累积误差
+        let next = (now.timeIntervalSinceReferenceDate.rounded(.down) + 1.015)
+        let timer = Timer(fire: Date(timeIntervalSinceReferenceDate: next), interval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.now = Date() }
+        }
+        timer.tolerance = 0.005
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    private static var formatters: [String: DateFormatter] = [:]
+
+    /// 24 小时制「时:分:秒」，按时区缓存格式器（每秒每行建一个太浪费）。
+    static func text(_ date: Date, in zone: TimeZone) -> String {
+        let formatter = formatters[zone.identifier] ?? {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "HH:mm:ss"
+            f.timeZone = zone
+            formatters[zone.identifier] = f
+            return f
+        }()
+        return formatter.string(from: date)
+    }
 }
 
 struct PluginRowAction: Equatable {
@@ -149,6 +199,24 @@ struct PluginRowAction: Equatable {
     var stays = false
     /// 做完清空输入、回到列表首页，游标落在这一行（搜到了加进自选之后回到自选，用户 2026-11-06 要的）
     var clearsQuery = false
+    /// 不交给插件执行，而是进这一行的下一层（开发工具箱 → JWT 解码，用户 2026-11-07 要的）：列表换成插件按
+    /// `list(query, scope: 行 id)` 给的行，输入框占位 / 空着时那句话用下面两个，Esc 或空着按 ⌫ 退回上一层
+    var enters = false
+    var enterPlaceholder: String? = nil
+    var enterEmpty: String? = nil
+}
+
+/// 插件列表里进到的一层（`PluginRowAction.enters`）。连同进来之前那一层的现场：退回时原样放回去，不闪一下空的。
+struct PluginScope: Equatable {
+    let id: String
+    let title: String
+    let placeholder: String?
+    let empty: String?
+    let savedQuery: String
+    let savedCursorID: String?
+    let savedCursorIndex: Int
+    let savedRows: [PluginRow]
+    let savedRowsQuery: String?
 }
 
 /// 涨跌用什么颜色：A 股习惯红涨绿跌（默认），美股习惯反过来。插件页里改（`PluginPane`），菜单、面板共用。
@@ -277,8 +345,18 @@ final class PluginRegistry: ObservableObject {
         menuOrder.compactMap { id in plugins.first { $0.id == id && $0.menu != nil && isEnabled(id) } }
     }
 
+    /// 系统命令（不挂在 App 上的）一律染成所属插件的颜色，和设置里那个插件图标一样（用户 2026-11-06 要的，
+    /// 第一版只有 JS 插件的入口命令带了颜色，内置的结束进程、锁屏、窗口命令还是灰的）。在这里统一补，
+    /// 各插件自己建命令时不用记着传。
     func commands(_ context: PluginContext) -> [AppCommand] {
-        enabled.flatMap { $0.commands(context) + ($0.listCommand.map { [$0] } ?? []) }
+        enabled.flatMap { plugin in
+            (plugin.commands(context) + (plugin.listCommand.map { [$0] } ?? [])).map { command in
+                guard command.bundleID == nil, command.tint == nil else { return command }
+                var tinted = command
+                tinted.tint = plugin.tint
+                return tinted
+            }
+        }
     }
 
     func instantRows(_ query: String, _ context: PluginContext) -> [SearchRow] {
@@ -313,7 +391,8 @@ final class PluginMenuHost: NSObject {
     /// 状态栏菜单里插件那一行（子菜单先填快照，同时去取新的）。
     func makeItem() -> NSMenuItem {
         let item = NSMenuItem(title: plugin.title, action: nil, keyEquivalent: "")
-        item.icon = NSImage(systemSymbolName: plugin.symbol, accessibilityDescription: nil)
+        // 一律是彩色方块（同浏览器那几行的 App 图标）：有图标画图标，没有画底色 + 白色符号
+        item.icon = PluginIconLoader.menuImage(for: plugin)
         let menu = NSMenu()
         menu.autoenablesItems = false
         submenu = menu

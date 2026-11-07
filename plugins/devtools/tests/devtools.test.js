@@ -176,5 +176,92 @@ const dir = __dirname + "/.."
     assert.strictEqual(value("你好\nab", "字数"), "5 个字 · 9 字节 · 2 行")
   })
 
+  // 工具目录（用户 2026-11-07：「不知道有啥命令」）
+  const NOW = Date.UTC(2026, 10, 6, 10, 30)
+  const JWT = [{ alg: "HS256", typ: "JWT" }, { sub: "42", exp: 1793961000 + 3600 }]
+    .map((x) => Buffer.from(JSON.stringify(x)).toString("base64url")).join(".") + ".sig"
+
+  await test("没输入：列出全部工具，生成类回车拷贝、别的回车进去", () => {
+    const rows = load(dir).sandbox.list("", undefined, NOW)
+    const ids = rows.map((r) => r.id)
+    assert.deepStrictEqual(plain(ids.slice(0, 2)), ["tool:uuid", "tool:now"])
+    for (const id of ["jwt", "json", "time", "base64", "url", "unicode", "html", "jsonstr", "radix", "color", "amount", "case", "hash", "count", "query"]) {
+      assert.ok(ids.includes("tool:" + id), id)
+    }
+    assert.strictEqual(new Set(ids).size, ids.length, "id 不重复")
+    const now = rows.find((r) => r.id === "tool:now")
+    assert.strictEqual(now.actions[0].id, "copy")
+    assert.ok(now.subtitle.endsWith("1793961000"), now.subtitle)
+    const jwt = rows.find((r) => r.id === "tool:jwt")
+    assert.strictEqual(jwt.actions[0].enter, true)
+    assert.strictEqual(jwt.actions[0].placeholder, "粘贴 JWT")
+    assert.ok(jwt.actions[0].empty, "进去没输入时有说明")
+    assert.ok(rows.every((r) => r.icon && r.icon.text.length <= 2), "行首方块最多两个字")
+  })
+
+  await test("老版本 TabFlick（不认 enter）：目录照样列，进不去的不给动作", () => {
+    const rows = load(dir, { features: null }).sandbox.list("", undefined, NOW)
+    assert.deepStrictEqual(plain(rows.find((r) => r.id === "tool:jwt").actions), [])
+    assert.deepStrictEqual(plain(rows.find((r) => r.id === "tool:uuid").actions.map((a) => a.id)), ["copy"])
+  })
+
+  await test("英文界面没有人民币大写", () => {
+    const ids = load(dir, { locale: "en" }).sandbox.list("", undefined, NOW).map((r) => r.id)
+    assert.ok(!ids.includes("tool:amount"))
+  })
+
+  await test("有输入：照旧自动识别，名字对得上的工具排最前；粘贴的长内容不找工具", () => {
+    const p = load(dir)
+    assert.strictEqual(p.sandbox.list("jwt")[0].id, "tool:jwt")
+    assert.strictEqual(p.sandbox.list("base64")[0].id, "tool:base64")
+    assert.strictEqual(p.sandbox.list("sjc")[0].id, "tool:now", "拼音首字母")
+    const pasted = p.sandbox.list(JWT)
+    assert.ok(!pasted.some((r) => r.id.startsWith("tool:")))
+    assert.strictEqual(pasted[0].subtitle, "JWT 载荷")
+  })
+
+  await test("工具那一层：只列这个工具的结果；没输入回空；认不出说一句、不给拷贝", () => {
+    const p = load(dir)
+    assert.deepStrictEqual(plain(p.sandbox.list("", "tool:jwt", NOW)), [])
+    const rows = p.sandbox.list(JWT, "tool:jwt", NOW)
+    assert.deepStrictEqual(plain(rows.map((r) => r.subtitle.split(" · ")[0])), ["JWT 载荷", "JWT 头", "JWT 过期时间"])
+    const bad = p.sandbox.list("hello", "tool:jwt", NOW)
+    assert.strictEqual(bad.length, 1)
+    assert.strictEqual(bad[0].title, "不是 JWT")
+    assert.deepStrictEqual(plain(bad[0].actions), [])
+    assert.deepStrictEqual(plain(p.sandbox.list("255", "tool:radix").map((r) => r.title)), ["255", "0xff", "0b11111111", "0o377"])
+    assert.deepStrictEqual(plain(p.sandbox.list("1762425000", "tool:time").map((r) => r.title)), ["2025-11-06 18:30:00", "2025-11-06T10:30:00.000Z"])
+    assert.strictEqual(p.sandbox.list("#ff9500", "tool:color")[0].icon.tint, "#ff9500")
+    assert.strictEqual(p.sandbox.list("你好", "tool:count")[0].title, "2 个字 · 6 字节 · 1 行")
+    assert.strictEqual(p.sandbox.list("x", "tool:nope").length, 0, "不认识的工具回空")
+  })
+
+  await test("每个工具：各种输入都不抛错", () => {
+    const p = load(dir)
+    const samples = ["", " ", "abc", "{", "0xff", "#fff", "1762425000", "a\nb", "%E4%BD%A0", "\\u4f60", "&amp;", "x".repeat(140000)]
+    for (const tool of p.sandbox.list("", undefined, NOW)) {
+      for (const sample of samples) {
+        const rows = p.sandbox.list(sample, tool.id, NOW)
+        assert.ok(Array.isArray(rows), tool.id)
+      }
+    }
+    assert.strictEqual(p.sandbox.list("x".repeat(140000), "tool:hash")[0].actions.length, 0, "太长不算哈希")
+  })
+
+  await test("当前时间戳那一层；UUID 刷新时不变，拷走之后换新的", () => {
+    const p = load(dir)
+    assert.deepStrictEqual(plain(p.sandbox.list("", "tool:now", NOW).map((r) => r.title)),
+                           ["1793961000", "1793961000000", "2026-11-06T10:30:00.000Z", "2026-11-06 18:30:00"])
+    const first = p.sandbox.list("", "tool:uuid")
+    assert.strictEqual(p.sandbox.list("", "tool:uuid")[0].title, first[0].title, "定时刷新不换")
+    assert.strictEqual(first[1].title, first[0].title.toUpperCase())
+    assert.strictEqual(first[2].title, first[0].title.replace(/-/g, ""))
+    assert.strictEqual(p.sandbox.list("", undefined)[0].subtitle.split(" · ")[1], first[0].title, "目录里那一行同一个")
+    p.sandbox.list("", "tool:uuid")
+    p.sandbox.perform("copy", "r2")
+    assert.strictEqual(p.copied[0], first[0].title.replace(/-/g, ""))
+    assert.notStrictEqual(p.sandbox.list("", "tool:uuid")[0].title, first[0].title, "拷走之后换新的")
+  })
+
   done()
 })()

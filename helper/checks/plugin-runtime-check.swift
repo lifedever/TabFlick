@@ -49,6 +49,7 @@ struct PluginRuntimeCheck {
               boom: () => { throw new Error("boom") },
               nope: () => Promise.reject(new Error("no")),
               locale: () => tabflick.locale,
+              features: () => tabflick.features.join(","),
               wait: () => new Promise(r => setTimeout(() => r("done"), 50)),
             })
             """)
@@ -63,6 +64,8 @@ struct PluginRuntimeCheck {
         check("没注册的函数回调 nil", missing.done && missing.value == nil)
         check("异常之后还能接着调", (call(basic, "add", [1, 1]).value as? NSNumber)?.intValue == 2)
         check("locale", call(basic, "locale").value as? String == "zh")
+        // 插件靠它判断能不能给多层列表、走秒的钟（老版本没有这一项）
+        check("features", call(basic, "features").value as? String == "enter,clock")
         check("setTimeout", call(basic, "wait").value as? String == "done")
 
         // 加载失败

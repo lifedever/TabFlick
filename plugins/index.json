@@ -3,7 +3,7 @@
  "plugins": [
   {
    "id": "currency",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "name": {
     "zh-Hans": "汇率",
     "zh-Hant": "匯率",
@@ -21,10 +21,16 @@
    },
    "symbol": "dollarsign.arrow.circlepath",
    "tint": "green",
+   "icon": "icon.svg",
    "hosts": [
     "open.er-api.com"
    ],
    "files": [
+    {
+     "path": "icon.svg",
+     "size": 1183,
+     "sha256": "ff35cb865772c8c408958eec3bce7b5dee18539f1466582aff9b1795a89d86d9"
+    },
     {
      "path": "main.js",
      "size": 11623,
@@ -32,14 +38,14 @@
     },
     {
      "path": "manifest.json",
-     "size": 1319,
-     "sha256": "a6b226c2ce988ce8904ed6b6a416ec505b0809180ec134f009e0b969bb86622a"
+     "size": 1341,
+     "sha256": "53caba0e21c0083c1920ac0b1f1be5c63d35b444d6927168ecfe5a9217b901ed"
     }
    ]
   },
   {
    "id": "devtools",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "name": {
     "zh-Hans": "开发工具箱",
     "zh-Hant": "開發工具箱",
@@ -51,29 +57,35 @@
     "de": "Entwickler-Werkzeugkasten"
    },
    "summary": {
-    "zh-Hans": "输入一段文字，列出能做的转换：Base64、URL、Unicode、HTML 编解码，时间戳和日期，JSON 格式化和转义，JWT 解析，进制、颜色互转，网址参数，MD5 / SHA，人民币大写。回车拷贝。不联网。",
-    "zh-Hant": "輸入一段文字，列出能做的轉換：Base64、URL、Unicode、HTML 編解碼，時間戳和日期，JSON 格式化和跳脫，JWT 解析，進位、顏色互轉，網址參數，MD5 / SHA，中文大寫金額。按 ↩ 拷貝。不連網。",
-    "en": "Type some text to see what it converts to: Base64, URL, Unicode and HTML encoding, timestamps and dates, JSON formatting and escaping, JWT decoding, number bases, colors, URL query parameters, MD5 / SHA hashes. ↩ copies. Works offline."
+    "zh-Hans": "Base64、URL、Unicode、HTML 编解码，时间戳和日期，JSON 格式化和转义，JWT 解析，进制、颜色互转，网址参数，MD5 / SHA，人民币大写，UUID。打开先列出全部工具；直接粘贴，列出能做的转换，回车拷贝。不联网。",
+    "zh-Hant": "Base64、URL、Unicode、HTML 編解碼，時間戳和日期，JSON 格式化和跳脫，JWT 解析，進位、顏色互轉，網址參數，MD5 / SHA，中文大寫金額，UUID。打開先列出全部工具；直接貼上，列出能做的轉換，按 ↩ 拷貝。不連網。",
+    "en": "Base64, URL, Unicode and HTML encoding, timestamps and dates, JSON formatting and escaping, JWT decoding, number bases, colors, URL query parameters, MD5 / SHA hashes, UUIDs. Opens with a list of every tool; paste something to see what it converts to. ↩ copies. Works offline."
    },
    "symbol": "wrench.and.screwdriver.fill",
-   "tint": "gray",
+   "tint": "teal",
+   "icon": "icon.svg",
    "hosts": [],
    "files": [
     {
+     "path": "icon.svg",
+     "size": 888,
+     "sha256": "d5dbbab60f206a4c69cf136ba0ec92e5bc517473d2cfc51b5904b6a0b5157b0a"
+    },
+    {
      "path": "main.js",
-     "size": 25815,
-     "sha256": "9845b22be121bb419275fa6f87e3e05bcbdf85a46b2ab8b5ca6d13b0a564839b"
+     "size": 44301,
+     "sha256": "b18b28073723c59d3bafe0fd4a0323bda1588e224431b3876486d6157512c42b"
     },
     {
      "path": "manifest.json",
-     "size": 2254,
-     "sha256": "2ba8b12971510fe2bae52ea8e5ad5292870719ad789f376aef5469abb537809c"
+     "size": 2379,
+     "sha256": "06618d39ba270197dd42ef5b6c0d2acc64c139fdc8b2c6ca326f37c497b7f1d8"
     }
    ]
   },
   {
    "id": "hackernews",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "name": {
     "en": "Hacker News",
     "zh-Hans": "Hacker News",
@@ -86,10 +98,16 @@
    },
    "symbol": "newspaper.fill",
    "tint": "orange",
+   "icon": "icon.svg",
    "hosts": [
     "hn.algolia.com"
    ],
    "files": [
+    {
+     "path": "icon.svg",
+     "size": 736,
+     "sha256": "b83749cc28cc31787132233612c03c269506dba260ad77c99e63df4a90c70261"
+    },
     {
      "path": "main.js",
      "size": 5183,
@@ -97,14 +115,14 @@
     },
     {
      "path": "manifest.json",
-     "size": 2399,
-     "sha256": "e7838895676f109bd505b500aea0c63ebde71e09c5d374f80f91c25d3ca64a32"
+     "size": 2421,
+     "sha256": "933f9db85204efd9c06564c80b51899c7d578659a1b1191d6a5f3fd75019c757"
     }
    ]
   },
   {
    "id": "stocks",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "name": {
     "zh-Hans": "股票",
     "zh-Hant": "股票",
@@ -122,6 +140,7 @@
    },
    "symbol": "chart.line.uptrend.xyaxis",
    "tint": "red",
+   "icon": "icon.svg",
    "hosts": [
     "qt.gtimg.cn",
     "web.ifzq.gtimg.cn",
@@ -131,20 +150,25 @@
    ],
    "files": [
     {
+     "path": "icon.svg",
+     "size": 863,
+     "sha256": "4b000c80daab0a7b661a5dc188e1d4f0b5905b2ab2fa83caf36fee57c019ee3b"
+    },
+    {
      "path": "main.js",
      "size": 25109,
      "sha256": "6a0edf9954cce5b42ee7d26581143b5a44294e35a9ed276cc4a6a4c3ee3d80d2"
     },
     {
      "path": "manifest.json",
-     "size": 1834,
-     "sha256": "6253431ace0bde6f4115b10f75ac8aad074964d719d43b1bf2215c7837df7cad"
+     "size": 1856,
+     "sha256": "594a440b25957768c83c98dd2cc24d914dcc0abe7a88ddc39af3c601933c6cbe"
     }
    ]
   },
   {
    "id": "v2ex",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "name": {
     "zh-Hans": "V2EX",
     "zh-Hant": "V2EX",
@@ -157,10 +181,16 @@
    },
    "symbol": "bubble.left.and.bubble.right.fill",
    "tint": "gray",
+   "icon": "icon.svg",
    "hosts": [
     "www.v2ex.com"
    ],
    "files": [
+    {
+     "path": "icon.svg",
+     "size": 824,
+     "sha256": "947ee3216826d54625ee74622f4322e547bb02e9587a786de08663e01ed1cc3e"
+    },
     {
      "path": "main.js",
      "size": 4081,
@@ -168,14 +198,14 @@
     },
     {
      "path": "manifest.json",
-     "size": 2474,
-     "sha256": "4690e950148f1c83141758d25c639f7f7ad7f39cecdf390cfc713bf53c29f5b4"
+     "size": 2496,
+     "sha256": "64bc7852303626e732b26152e674f903e0e6702d2adf49bdeb00a65dddc42e58"
     }
    ]
   },
   {
    "id": "weather",
-   "version": "2.1.0",
+   "version": "2.1.1",
    "name": {
     "zh-Hans": "天气",
     "zh-Hant": "天氣",
@@ -193,10 +223,16 @@
    },
    "symbol": "cloud.sun.fill",
    "tint": "cyan",
+   "icon": "icon.svg",
    "hosts": [
     "*.qweatherapi.com"
    ],
    "files": [
+    {
+     "path": "icon.svg",
+     "size": 788,
+     "sha256": "132a3563415471673c0a1723bf4464b927323060e97c9196698787122fdd07d4"
+    },
     {
      "path": "main.js",
      "size": 19407,
@@ -204,14 +240,14 @@
     },
     {
      "path": "manifest.json",
-     "size": 3120,
-     "sha256": "dfd3e0467f83d2af0d0c22ce3a224db3e0279b71ce162e5c6c0472c1fd86a156"
+     "size": 3142,
+     "sha256": "c88be3f519556ff921813df9bf146a6463c8ed8e2ad134337f0b057389d29335"
     }
    ]
   },
   {
    "id": "worldclock",
-   "version": "1.1.0",
+   "version": "1.2.0",
    "name": {
     "zh-Hans": "世界时钟",
     "zh-Hant": "世界時鐘",
@@ -229,17 +265,23 @@
    },
    "symbol": "globe.asia.australia.fill",
    "tint": "indigo",
+   "icon": "icon.svg",
    "hosts": [],
    "files": [
     {
+     "path": "icon.svg",
+     "size": 965,
+     "sha256": "5ac9e82ce0daa7eeabdc3e0b94b2e2a804279516f02d2748b779dba5e6393cb1"
+    },
+    {
      "path": "main.js",
-     "size": 21234,
-     "sha256": "48f7b5695647c8a77b9352a2d501044ddade1cef7fb67f125850a7e41868dab7"
+     "size": 21396,
+     "sha256": "294c0f82b051c144bbd9c3e7bc259111b3e3379cf5fbb2939f6f7e05b55fd85c"
     },
     {
      "path": "manifest.json",
-     "size": 1697,
-     "sha256": "c48683a22df562d3d5ee2375bf2f17cf094bc55cf72a85dda309bf6a8f77365b"
+     "size": 1719,
+     "sha256": "a631cd61c3951604eddd2ad0e552f0c822765c1e5e359e3e9b6240c5e7e2dc27"
     }
    ]
   }

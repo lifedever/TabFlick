@@ -23,6 +23,7 @@ final class CalculatorPlugin: Plugin {
     }
     let symbol = "plus.forwardslash.minus"
     var tint: Color { .gray }
+    var icon: NSImage? { BuiltinPluginIcons.calculator }
     let origin = PluginOrigin.builtin
 
     func instantRows(_ query: String, _ context: PluginContext) -> [SearchRow] {
@@ -42,6 +43,7 @@ final class AppCommandsPlugin: Plugin {
     }
     let symbol = "command"
     var tint: Color { .orange }
+    var icon: NSImage? { BuiltinPluginIcons.appCommands }
     let origin = PluginOrigin.builtin
 
     var panelCommands: [PluginCommandInfo] {
@@ -74,6 +76,7 @@ final class WindowCommandsPlugin: Plugin {
     }
     let symbol = "macwindow"
     var tint: Color { .indigo }
+    var icon: NSImage? { BuiltinPluginIcons.windowCommands }
     let origin = PluginOrigin.builtin
 
     var panelCommands: [PluginCommandInfo] {
@@ -94,14 +97,20 @@ final class ProcessesPlugin: Plugin {
                "Find a process by name or port and kill it after confirming.")
     }
     let symbol = ProcessesCommand.symbol
-    var tint: Color { .red }
+    var tint: Color { ProcessesCommand.tint }
+    var icon: NSImage? { BuiltinPluginIcons.processes }
     let origin = PluginOrigin.builtin
 
     var panelCommands: [PluginCommandInfo] {
         [PluginCommandInfo(id: ProcessesCommand.command.id, title: ProcessesCommand.title, symbol: ProcessesCommand.symbol)]
     }
 
-    func commands(_ context: PluginContext) -> [AppCommand] { [ProcessesCommand.command] }
+    /// 这条命令就是插件本身，画插件的图标（窗口命令、锁屏各有各的符号，只染插件的颜色）
+    func commands(_ context: PluginContext) -> [AppCommand] {
+        var command = ProcessesCommand.command
+        command.icon = icon
+        return [command]
+    }
 
     let processMenu = ProcessMenu()
     var menu: PluginMenu? { processMenu }

@@ -42,8 +42,11 @@ struct AppCommand: Identifiable {
     var symbol = "command"
     /// 行的第二行。nil = 写命令的主人（App 名，系统命令写 macOS）；窗口命令写要动的是谁的窗口。
     var subtitle: String? = nil
-    /// 图标方块的底色。nil = 灰（系统命令）；插件的入口命令用插件自己的颜色，和设置里那个图标一样（用户 2026-11-06）
+    /// 图标方块的底色。nil = 灰；经插件进面板的系统命令由 `PluginRegistry.commands` 补成插件自己的颜色，
+    /// 和设置里那个图标一样（用户 2026-11-06）。不归插件的（「打开方式…」）留灰
     var tint: Color? = nil
+    /// 代表整个插件的命令（「结束进程…」、插件列表的入口）画插件的图标，和设置里的一样。nil = 方块里画 `symbol`
+    var icon: NSImage? = nil
     let action: Action
 }
 
@@ -192,6 +195,8 @@ enum OpenWithCommand {
 /// 回车列表换成你自己的进程（`ProcessList.swift`）。系统命令，和锁屏一样列在「应用」段末尾。
 enum ProcessesCommand {
     static let symbol = "xmark.octagon.fill"
+    /// 插件图标的底色（设置里、面板命令行、进程列表底栏三处同一个）
+    static let tint = Color.red
     @MainActor static var title: String { L10n.t("结束进程…", "Kill Process…") }
 
     @MainActor static var command: AppCommand {

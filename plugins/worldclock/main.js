@@ -298,6 +298,8 @@ function cityRow(c, nowMs, localOffset, isSaved) {
     title: cityName(c),
     subtitle: [countryName(c), describeDiff(k.diff)].concat(k.dayDiff ? [describeDay(k.dayDiff)] : []).filter(Boolean).join(" · "),
     value: k.time,
+    // TabFlick 按这个时区自己画「时:分:秒」、每秒走一下（不用每秒调插件）；不认它的老版本照旧显示 value
+    clock: c[4],
     icon: { text: cityName(c).slice(0, 1), tint: "indigo" },
     actions: isSaved
       ? [{ id: "copy", title: t("拷贝时间", "拷貝時間", "Copy Time"), symbol: "doc.on.doc.fill" },

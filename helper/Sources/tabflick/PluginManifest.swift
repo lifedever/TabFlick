@@ -25,6 +25,7 @@ struct PluginManifest: Equatable {
         case badHost(String)
         case noName
         case unknownContribution(String)
+        case badIcon(String)
     }
 
     let id: String
@@ -42,6 +43,8 @@ struct PluginManifest: Equatable {
     let contributes: Set<Contribution>
     /// 入口脚本，相对插件目录
     let main: String
+    /// 图标，相对插件目录（.svg / .png，正方形、画满，TabFlick 裁圆角）。nil = 用 symbol + tint 画
+    var icon: String? = nil
     /// 列表入口命令：名字、搜它用的关键词（拼音、英文别名）、列表里输入框的占位、没内容时那句话
     var listTitles: [String: String] = [:]
     var listKeywords: [String] = []
@@ -90,6 +93,13 @@ struct PluginManifest: Equatable {
         return !path.split(separator: "/").contains { $0 == ".." || $0 == "." || $0.isEmpty }
     }
 
+    /// 图标：插件目录里的一个 .svg / .png，规矩同入口脚本（不许往上走、不许绝对路径）。
+    nonisolated static func isValidIcon(_ path: String) -> Bool {
+        let lower = path.lowercased()
+        guard lower.hasSuffix(".svg") || lower.hasSuffix(".png"), !path.hasPrefix("/"), !path.contains("\\") else { return false }
+        return !path.split(separator: "/", omittingEmptySubsequences: false).contains { $0 == ".." || $0 == "." || $0.isEmpty }
+    }
+
     nonisolated static func parse(_ data: Data) -> Result<PluginManifest, Problem> {
         guard let object = try? JSONSerialization.jsonObject(with: data), let json = object as? [String: Any] else {
             return .failure(.notJSON)
@@ -122,6 +132,12 @@ struct PluginManifest: Equatable {
         }
         let main = (json["main"] as? String) ?? "main.js"
         guard isValidMain(main) else { return .failure(.missing("main")) }
+        // 图标写了就得是合规的路径（写错了要在日志里看得到，而不是悄悄退回符号）；文件读不出来是加载时的事
+        var icon: String?
+        if let value = json["icon"] {
+            guard let path = value as? String, isValidIcon(path) else { return .failure(.badIcon(String(describing: value))) }
+            icon = path
+        }
         // 关键词：字符串、去空白、去重，最多 20 个，每个最多 30 个字
         var keywords: [String] = []
         for case let word as String in (listInfo["keywords"] as? [Any]) ?? [] {
@@ -136,7 +152,7 @@ struct PluginManifest: Equatable {
             id: id, version: version, names: names, summaries: localized(json["summary"]),
             symbol: (json["symbol"] as? String) ?? "puzzlepiece.fill",
             tint: (json["tint"] as? String) ?? "gray",
-            minAppVersion: minApp, hosts: hosts, contributes: contributes, main: main,
+            minAppVersion: minApp, hosts: hosts, contributes: contributes, main: main, icon: icon,
             listTitles: localized(listInfo["title"]), listKeywords: keywords,
             listPlaceholders: localized(listInfo["placeholder"]), listEmpty: localized(listInfo["empty"]),
             usesUpDownColors: (settings?["upDownColors"] as? Bool) == true,

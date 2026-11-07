@@ -14,13 +14,15 @@ const plain = (x) => JSON.parse(JSON.stringify(x))
  * 起一份插件。routes(url, options) 返回 {status, text}，抛错表示网络失败；不给就一律失败（本地插件不该联网）。
  * 返回沙箱（能直接调顶层函数）、注册的 handlers、发过的请求、打开过的网址、拷贝过的文字、toast、存储。
  */
-function load(dir, { locale = "zh", stored = {}, routes = null, settings = {} } = {}) {
+// features：这个版本的 TabFlick 认哪些后来加的能力（同 JSPluginRuntime.features）；传 null 模拟没有这一项的老版本
+function load(dir, { locale = "zh", stored = {}, routes = null, settings = {}, features = ["enter", "clock"] } = {}) {
   const source = fs.readFileSync(path.join(dir, "main.js"), "utf8")
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"))
   const out = { requests: [], opened: [], copied: [], toasts: [], settingsOpened: 0, storage: { ...stored }, handlers: null }
   const sandbox = {
     tabflick: {
       locale,
+      ...(features ? { features } : {}),
       register: (h) => { out.handlers = h },
       storage: {
         get: (k) => out.storage[k],

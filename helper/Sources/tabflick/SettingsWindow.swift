@@ -1033,20 +1033,13 @@ private func hotkeyNote(_ zh: L10nText, _ en: L10nText) -> some View {
 
 // MARK: - 插件
 
-/// 插件图标块：彩色圆角方块 + 白色实心符号（同侧边栏、搜索面板的 ActionTile）。
+/// 插件图标块：插件自己的图标；没有的画彩色圆角方块 + 白色实心符号（同侧边栏、搜索面板）。
 private struct PluginTile: View {
     let plugin: Plugin
     var side: CGFloat = 26
 
     var body: some View {
-        RoundedRectangle(cornerRadius: side * 0.27, style: .continuous)
-            .fill(plugin.tint.gradient)
-            .frame(width: side, height: side)
-            .overlay(
-                Image(systemName: plugin.symbol)
-                    .font(.system(size: side * 0.5, weight: .semibold))
-                    .foregroundStyle(.white)
-            )
+        PluginIconTile(icon: plugin.icon, symbol: plugin.symbol, tint: plugin.tint, side: side)
     }
 }
 
@@ -1098,7 +1091,7 @@ private struct PluginsPane: View {
         Form {
             Section {
                 ForEach(builtins, id: \.id) { plugin in
-                    PluginListRow(symbol: plugin.symbol, tint: plugin.tint, title: plugin.title,
+                    PluginListRow(icon: plugin.icon, symbol: plugin.symbol, tint: plugin.tint, title: plugin.title,
                                   badge: L10n.t("内置", "Built-in"), summary: plugin.summary) {
                         enabledToggle(plugin)
                     }
@@ -1116,7 +1109,7 @@ private struct PluginsPane: View {
                 }
                 ForEach(installed, id: \.id) { plugin in
                     let update = store.update(for: plugin)
-                    PluginListRow(symbol: plugin.symbol, tint: plugin.tint, title: plugin.title,
+                    PluginListRow(icon: plugin.icon, symbol: plugin.symbol, tint: plugin.tint, title: plugin.title,
                                   badge: plugin.originLabel, summary: plugin.summary) {
                         if let update {
                             if store.busy.contains(plugin.id) {
@@ -1243,7 +1236,7 @@ private struct PluginsPane: View {
         let hosts = entry.hosts.isEmpty
             ? L10n.t("不联网", "Works offline")
             : L10n.t("会访问 \(entry.hosts.joined(separator: L10n.listSeparator))", "Connects to \(entry.hosts.joined(separator: ", "))")
-        return PluginListRow(symbol: entry.symbol, tint: PluginTint.color(entry.tint),
+        return PluginListRow(icon: store.icon(for: entry), symbol: entry.symbol, tint: PluginTint.color(entry.tint),
                              title: PluginManifest.pick(entry.names, language: language) ?? entry.id,
                              badge: entry.version,
                              summary: PluginManifest.pick(entry.summaries, language: language) ?? "",
@@ -1279,6 +1272,7 @@ private struct PluginsPane: View {
 
 /// 插件列表的一行：图标块、名字 + 小标签、说明（和一行灰字），右边放按钮和开关。
 private struct PluginListRow<Trailing: View>: View {
+    let icon: NSImage?
     let symbol: String
     let tint: Color
     let title: String
@@ -1289,7 +1283,7 @@ private struct PluginListRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            PluginSymbolTile(symbol: symbol, tint: tint, side: 26)
+            PluginIconTile(icon: icon, symbol: symbol, tint: tint, side: 26)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(title)

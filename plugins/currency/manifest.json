@@ -1,6 +1,6 @@
 {
   "id": "currency",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": { "zh-Hans": "汇率", "zh-Hant": "匯率", "en": "Exchange Rates", "ja": "為替レート", "ko": "환율", "es": "Divisas", "fr": "Taux de change", "de": "Wechselkurse" },
   "summary": {
     "zh-Hans": "打「100 usd」直接换算，常用币种可以放进菜单栏。数据每天更新一次。",
@@ -9,6 +9,7 @@
   },
   "symbol": "dollarsign.arrow.circlepath",
   "tint": "green",
+  "icon": "icon.svg",
   "hosts": ["open.er-api.com"],
   "contributes": {
     "menu": true,

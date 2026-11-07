@@ -21,11 +21,15 @@ struct StoreEntry: Equatable, Identifiable {
     let hosts: [String]
     let minAppVersion: String?
     let files: [File]
+    /// 图标在 files 里的哪一个（没装的插件在商店里也画它的图标）。nil = 用 symbol + tint
+    var icon: File? = nil
 }
 
 enum StoreIndex {
     static let maxFiles = 20
     static let maxBytes = 4 << 20
+    /// 同 `PluginIconLoader.maxBytes`（这个文件是纯逻辑，校验程序单独编，不引它）
+    static let maxIconBytes = 256 << 10
 
     /// 文件路径：字母数字和 . _ -，用 / 分段，不许空段、. 和 ..、不许以 / 开头。
     nonisolated static func isSafePath(_ path: String) -> Bool {
@@ -71,7 +75,12 @@ enum StoreIndex {
                 symbol: (item["symbol"] as? String) ?? "puzzlepiece.fill", tint: (item["tint"] as? String) ?? "gray",
                 hosts: ((item["hosts"] as? [Any]) ?? []).compactMap { $0 as? String }.filter(PluginManifest.isValidHost),
                 minAppVersion: minApp.flatMap { PluginManifest.isValidVersion($0) ? $0 : nil },
-                files: files))
+                files: files,
+                // 图标必须是包里的一个文件（大小、sha256 才有得核对），路径和后缀不对、太大的当没有
+                icon: (item["icon"] as? String).flatMap { path in
+                    guard PluginManifest.isValidIcon(path) else { return nil }
+                    return files.first { $0.path == path && $0.size <= maxIconBytes }
+                }))
         }
         return out
     }

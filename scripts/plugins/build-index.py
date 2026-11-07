@@ -18,6 +18,27 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "plu
 PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 MAX_FILES = 20
 MAX_BYTES = 4 << 20
+MAX_ICON_BYTES = 256 << 10
+
+
+def check_icon(path):
+    """图标要能被 TabFlick 读出来：SVG 是正方形 viewBox、画满；PNG 至少 128×128 的正方形。"""
+    data = open(path, "rb").read()
+    if path.lower().endswith(".png"):
+        if data[:8] != b"\x89PNG\r\n\x1a\n":
+            sys.exit(f"✗ {path}: 不是 PNG")
+        width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+        if width != height or width < 128:
+            sys.exit(f"✗ {path}: PNG 要是至少 128×128 的正方形（现在 {width}×{height}）")
+        return
+    text = data.decode("utf-8", "replace")
+    match = re.search(r'viewBox="\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"', text)
+    if "<svg" not in text or not match or float(match.group(3)) != float(match.group(4)):
+        sys.exit(f"✗ {path}: SVG 要有正方形的 viewBox")
+    # 只许引用文件里自己定义的东西（url(#bg)、href="#x"），外部地址、data: 一律不收
+    if re.search(r"<(script|image|foreignObject|use)\b", text, re.I) or \
+            re.search(r"href\s*=\s*[\"']\s*(?!#)", text) or re.search(r"url\(\s*[\"']?\s*(?!#)", text):
+        sys.exit(f"✗ {path}: SVG 里不能有脚本、图片和外部引用")
 
 
 def plugin_files(directory):
@@ -57,7 +78,16 @@ def build():
             source = open(os.path.join(directory, main), encoding="utf-8").read()
             if not re.search(r"register\(\{[\s\S]*?\btest\b", source):
                 sys.exit(f"✗ {name}: 有要用户填的设置项（settings.inputs），register 里必须有 test")
-        entry = {k: manifest[k] for k in ("id", "version", "name", "summary", "symbol", "tint", "hosts", "minAppVersion")
+        # 图标：插件目录里的 .svg / .png，不超过 256 KB（同 PluginIconLoader.maxBytes）。商店里没装的插件也画它
+        icon = manifest.get("icon")
+        if icon is not None:
+            match = next((f for f in files if f["path"] == icon), None)
+            if not isinstance(icon, str) or not icon.lower().endswith((".svg", ".png")) or match is None:
+                sys.exit(f"✗ {name}: icon 必须是插件目录里的一个 .svg / .png：{icon!r}")
+            if match["size"] > MAX_ICON_BYTES:
+                sys.exit(f"✗ {name}: 图标超过 {MAX_ICON_BYTES} 字节")
+            check_icon(os.path.join(directory, icon))
+        entry = {k: manifest[k] for k in ("id", "version", "name", "summary", "symbol", "tint", "icon", "hosts", "minAppVersion")
                  if k in manifest}
         entry["files"] = files
         plugins.append(entry)

@@ -70,6 +70,12 @@ enum SettingsPage: Hashable, Identifiable {
         }
     }
 
+    /// 插件页用插件自己的图标（有的话），别的页画符号 + 底色。
+    @MainActor var icon: NSImage? {
+        if case .plugin = self { return pluginEntry?.icon }
+        return nil
+    }
+
     /// 图标块底色，照系统设置：每页一种，相邻的不撞色。
     @MainActor var tint: Color {
         switch self {
@@ -189,14 +195,18 @@ struct SettingsSidebar: View {
     private func row(_ page: SettingsPage) -> some View {
         let isSelected = nav.selection == page
         return HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(page.tint.gradient)
-                .frame(width: 22, height: 22)
-                .overlay(
-                    Image(systemName: page.symbol)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(.white)
-                )
+            if let icon = page.icon {
+                PluginIconTile(icon: icon, symbol: page.symbol, tint: page.tint, side: 22)
+            } else {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(page.tint.gradient)
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        Image(systemName: page.symbol)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(.white)
+                    )
+            }
             Text(page.title)
                 .font(.system(size: 13))
                 .lineLimit(1)
