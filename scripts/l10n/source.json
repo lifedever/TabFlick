@@ -409,7 +409,7 @@
   "zh": "端口 {0}",
   "refs": [
    "BuiltinPlugins.swift:202",
-   "TabSearchPanel.swift:3685"
+   "TabSearchPanel.swift:3681"
   ]
  },
  {
@@ -481,7 +481,7 @@
   "zh": "「{0}」还没退出",
   "refs": [
    "BuiltinPlugins.swift:240",
-   "TabSearchPanel.swift:3968"
+   "TabSearchPanel.swift:3964"
   ]
  },
  {
@@ -496,7 +496,7 @@
   "zh": "没有权限结束「{0}」",
   "refs": [
    "BuiltinPlugins.swift:246",
-   "TabSearchPanel.swift:3974"
+   "TabSearchPanel.swift:3970"
   ]
  },
  {
@@ -504,7 +504,7 @@
   "zh": "没能结束「{0}」",
   "refs": [
    "BuiltinPlugins.swift:248",
-   "TabSearchPanel.swift:3976"
+   "TabSearchPanel.swift:3972"
   ]
  },
  {
@@ -2828,7 +2828,7 @@
    "TabSearchPanel.swift:3227",
    "TabSearchPanel.swift:3348",
    "TabSearchPanel.swift:3361",
-   "TabSearchPanel.swift:3729"
+   "TabSearchPanel.swift:3725"
   ]
  },
  {
@@ -2921,14 +2921,14 @@
   "key": "Ports {0}",
   "zh": "端口 {0}",
   "refs": [
-   "TabSearchPanel.swift:3685"
+   "TabSearchPanel.swift:3681"
   ]
  },
  {
   "key": "Use Force Kill in the ⌘↩ actions.",
   "zh": "⌘↩ 里可以强制结束。",
   "refs": [
-   "TabSearchPanel.swift:3969"
+   "TabSearchPanel.swift:3965"
   ]
  },
  {
