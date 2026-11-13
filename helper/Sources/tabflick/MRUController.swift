@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 struct TabInfo: Decodable {
     let id: Int
@@ -80,6 +81,25 @@ final class IconCache {
             Task { @MainActor in
                 self.fileInflight.remove(key)
                 guard let image else { return }   // 文件没了：照旧画占位
+                self.images[key] = IconInfo(image: image, isLight: false)
+                onLoaded()
+            }
+        }
+        return nil
+    }
+
+    /// 按文件类型取的图标（最近文件的行用），键 `type:<UTI>`。不碰文件本身：文稿、下载受隐私保护，
+    /// 按路径取图标会读文件、可能弹授权框（见 RecentFiles.swift）。类型就那么几十种，缓存不用设上限。
+    func typeIcon(_ identifier: String, onLoaded: @escaping () -> Void) -> IconInfo? {
+        let key = "type:" + identifier
+        if let hit = images[key] { return hit }
+        guard !fileInflight.contains(key) else { return nil }
+        fileInflight.insert(key)
+        fileIconQueue.async {
+            let image = Self.downscaled(NSWorkspace.shared.icon(for: UTType(identifier) ?? .data), to: 64)
+            Task { @MainActor in
+                self.fileInflight.remove(key)
+                guard let image else { return }
                 self.images[key] = IconInfo(image: image, isLight: false)
                 onLoaded()
             }
@@ -842,6 +862,11 @@ final class MRUController {
                         self?.scheduleSearchIconReload()
                     }
                     if let info { map[key] = info }
+                } else if key.hasPrefix("type:") {
+                    let info = self.icons.typeIcon(String(key.dropFirst(5))) { [weak self] in
+                        self?.scheduleSearchIconReload()
+                    }
+                    if let info { map[key] = info }
                 } else if let info = self.icons.image(for: key) {
                     map[key] = info
                 }
@@ -851,6 +876,7 @@ final class MRUController {
         search.model.onMissingIcons = { [weak self] pairs in self?.requestFavicons(pairs) }
         search.openSettingsHandler = { [weak self] in self?.openSettings?() }
         search.openWithHandler = { [weak self] in self?.beginOpenWith() }
+        search.fileOpenWithHandler = { [weak self] file in self?.beginOpenWith(file: file) }
         search.modeHandler = { [weak self] mode in
             // 切到历史记录模式（或设成列历史的「全部」）时没输入也要拉一次最近访问的
             guard let self else { return }
@@ -1583,6 +1609,36 @@ final class MRUController {
                     }
                 }
             }
+        case .file(let file):
+            // 用默认的 App 打开；成功不弹 toast（App 自己会到前台），失败才说。日志不写文件名，只写类型
+            log("🔍 open recent file (\(file.contentType))")
+            let name = file.name
+            NSWorkspace.shared.open(URL(fileURLWithPath: file.path), configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                guard let error else { return }
+                Task { @MainActor in
+                    log("⚠️  open recent file failed: \(error.localizedDescription)")
+                    Toast.show(L10n.t("打不开「\(name)」", "Couldn't open “\(name)”"),
+                               detail: error.localizedDescription, kind: .failure)
+                }
+            }
+        }
+    }
+
+    /// 最近文件 ⌘↩ 里的「打开方式…」：查能打开它的 App（问 Launch Services，第一次近 100ms，放后台），
+    /// 查完从这个文件的操作列表换成它们（同访达的「打开方式…」那份：默认的在前、点过的按最近用过排，
+    /// 打字从所有 App 里找；Esc 退回文件列表）。查完时用户已经退出了这个文件的操作列表，就不管了。
+    private func beginOpenWith(file: RecentFile) {
+        let path = file.path
+        DispatchQueue.global(qos: .userInitiated).async {
+            let handlers = OpenerCatalog.fileHandlers(for: [path])
+            Task { @MainActor [weak self] in
+                guard let self, self.search.isVisible, self.search.model.inRecentFiles,
+                      case .file(let shown)? = self.search.model.actionTarget, shown.path == path else { return }
+                let openers = self.selectionOpenerProvider?(handlers) ?? []
+                log("🔍 open with: recent file, \(openers.count) app(s)")
+                self.search.model.leaveActions()
+                self.search.showOpenWith(FileSelection(paths: [path]), openers: openers)
+            }
         }
     }
 
@@ -1724,6 +1780,16 @@ final class MRUController {
             running.forEach { _ = ProcessEnder.quit($0, force: false) }
         case .forceQuit:
             return   // 进程列表里的，面板自己接（要确认、不关面板），走不到这里
+        case .copyFile:
+            // 文件本身进剪贴板：文件 URL + 老的文件名列表（照 PasteMemo：微信这类只认后者）
+            guard let path = target.filePath else { return }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.writeObjects([URL(fileURLWithPath: path) as NSURL])
+            pasteboard.setPropertyList([path], forType: NSPasteboard.PasteboardType("NSFilenamesPboardType"))
+            Toast.show(L10n.t("已拷贝文件", "File copied"), detail: (path as NSString).lastPathComponent)
+        case .openWithApp:
+            return   // 面板自己接（不关面板，列表换成 App），走不到这里
         case .pasteResult:
             // 贴回打开面板前在用的那个 App（光标原来在哪就贴到哪）。剪贴板换成结果，和拷贝一样；
             // 成功不弹 toast，字自己会出现

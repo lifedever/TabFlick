@@ -27,6 +27,8 @@ struct AppCommand: Identifiable {
         case openWith
         /// 「结束进程…」：面板不关，列表换成进程（`ProcessesCommand`）
         case processes
+        /// 「最近文件…」：面板不关，列表换成 30 天内打开过的文件（`RecentFilesCommand`）
+        case recentFiles
         /// 插件的列表（股票…）：面板不关，列表换成插件给的行。参数是插件 id
         case pluginList(String)
     }
@@ -124,7 +126,7 @@ enum AppCommands {
         case .window(let action, let target):
             WindowMover.perform(action, on: target)
             return
-        case .openWith, .processes, .pluginList:
+        case .openWith, .processes, .recentFiles, .pluginList:
             return   // 面板自己接（选中它不关面板），走不到这里
         case .appleScript(let source, let reporter):
             script = source
@@ -207,5 +209,24 @@ enum ProcessesCommand {
                               "force quit", "强制退出", "Activity Monitor", "活动监视器"],
                    symbol: symbol,
                    action: .processes)
+    }
+}
+
+/// 「最近文件…」（2026-11-13 用户要的）：打「最近」「recent」「文件」命中，回车列表换成 30 天内打开过的文件
+///（`RecentFiles.swift`，和访达「最近使用」同一个来源）。系统命令，和「结束进程…」一样列在「应用」段末尾。
+enum RecentFilesCommand {
+    static let symbol = "doc.badge.clock.fill"
+    /// 插件图标的底色（设置里、面板命令行、列表底栏三处同一个）
+    static let tint = Color.blue
+    /// 插件名（设置侧边栏、列表底栏、输入框右边的胶囊）
+    @MainActor static var name: String { L10n.t("最近文件", "Recent Files") }
+    @MainActor static var title: String { L10n.t("最近文件…", "Recent Files…") }
+
+    @MainActor static var command: AppCommand {
+        AppCommand(id: "system.recentFiles", bundleID: nil,
+                   title: title,
+                   keywords: ["Recent Files", "最近文件", "recent", "recents", "最近使用", "最近打开", "文件", "file", "files"],
+                   symbol: symbol,
+                   action: .recentFiles)
     }
 }

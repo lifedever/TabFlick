@@ -454,5 +454,17 @@
   "No response": "応答がありません",
   "Try again in a moment.": "しばらくしてからもう一度お試しください。",
   "Menu Bar Order": "メニューバーでの順序",
-  "Plugins with “Show in Menu Bar” turned on are listed here.": "プラグインのページで「メニューバーに表示」をオンにしたものがここに並びます。"
+  "Plugins with “Show in Menu Bar” turned on are listed here.": "プラグインのページで「メニューバーに表示」をオンにしたものがここに並びます。",
+  "Recent Files": "最近のファイル",
+  "Recent Files…": "最近のファイル…",
+  "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.": "過去 30 日間に開いたファイルを一覧表示します。Finderの「最近の項目」と同じです。ターミナルやエディタで直接開いたファイルは含まれません。",
+  "Couldn't open “{0}”": "「{0}」を開けませんでした",
+  "File copied": "ファイルをコピーしました",
+  "Copy file": "ファイルをコピー",
+  "Filter by file name or location": "ファイル名や場所で絞り込む",
+  "Couldn't read from Spotlight": "Spotlight から読み込めませんでした",
+  "No files opened in the last 30 days": "過去 30 日間に開いたファイルはありません",
+  "No matching files": "一致するファイルはありません",
+  "opened {0}": "{0}に開いた",
+  "iCloud Drive": "iCloud Drive"
 }

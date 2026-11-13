@@ -454,5 +454,17 @@
   "No response": "응답 없음",
   "Try again in a moment.": "잠시 후 다시 시도하세요.",
   "Menu Bar Order": "메뉴 막대 순서",
-  "Plugins with “Show in Menu Bar” turned on are listed here.": "플러그인 페이지에서 ‘메뉴 막대에 표시’를 켠 플러그인이 여기에 나옵니다."
+  "Plugins with “Show in Menu Bar” turned on are listed here.": "플러그인 페이지에서 ‘메뉴 막대에 표시’를 켠 플러그인이 여기에 나옵니다.",
+  "Recent Files": "최근 파일",
+  "Recent Files…": "최근 파일…",
+  "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.": "최근 30일 동안 연 파일을 보여 줍니다. Finder의 '최근 항목'과 같습니다. 터미널이나 편집기에서 바로 연 파일은 포함되지 않습니다.",
+  "Couldn't open “{0}”": "“{0}”을(를) 열 수 없음",
+  "File copied": "파일 복사됨",
+  "Copy file": "파일 복사",
+  "Filter by file name or location": "파일 이름 또는 위치로 필터링",
+  "Couldn't read from Spotlight": "Spotlight에서 읽을 수 없음",
+  "No files opened in the last 30 days": "최근 30일 동안 연 파일 없음",
+  "No matching files": "일치하는 파일 없음",
+  "opened {0}": "{0} 열림",
+  "iCloud Drive": "iCloud Drive"
 }

@@ -454,5 +454,17 @@
   "No response": "沒有回應",
   "Try again in a moment.": "過一會兒再試。",
   "Menu Bar Order": "選單列裡的順序",
-  "Plugins with “Show in Menu Bar” turned on are listed here.": "在外掛程式頁打開「在選單列顯示」的外掛程式列在這裡。"
+  "Plugins with “Show in Menu Bar” turned on are listed here.": "在外掛程式頁打開「在選單列顯示」的外掛程式列在這裡。",
+  "Recent Files": "最近檔案",
+  "Recent Files…": "最近檔案…",
+  "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.": "列出 30 天內打開過的檔案，和 Finder 的「最近項目」一樣。在終端機、編輯器裡直接打開的不算。",
+  "Couldn't open “{0}”": "無法打開「{0}」",
+  "File copied": "已拷貝檔案",
+  "Copy file": "拷貝檔案",
+  "Filter by file name or location": "依檔名或位置篩選",
+  "Couldn't read from Spotlight": "讀不到 Spotlight 的記錄",
+  "No files opened in the last 30 days": "30 天內沒有打開過的檔案",
+  "No matching files": "沒有符合的檔案",
+  "opened {0}": "{0}打開",
+  "iCloud Drive": "iCloud 雲碟"
 }

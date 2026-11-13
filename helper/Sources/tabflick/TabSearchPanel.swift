@@ -108,6 +108,8 @@ enum SearchRow: Identifiable {
     case pluginItem(PluginRow)
     /// 插件列表一行的 ⌘↩ 里的一个动作
     case pluginAction(PluginRowAction, PluginRow)
+    /// 「最近文件…」展开后的一行：30 天内打开过的一个文件（`RecentFiles`），回车用默认的 App 打开
+    case file(RecentFile)
 
     var id: String {
         switch self {
@@ -133,6 +135,7 @@ enum SearchRow: Identifiable {
         case .calculation:       return "calc"
         case .pluginItem(let r): return "plugin#\(r.pluginID)#\(r.id)"
         case .pluginAction(let a, let r): return "pluginact#\(a.id)#\(r.pluginID)#\(r.id)"
+        case .file(let f):       return "file#" + f.path
         }
     }
 
@@ -159,6 +162,8 @@ enum SearchRow: Identifiable {
         // 几百个进程第一次画就是几百次同步的图标查询，压在主线程上
         case .process(let p):    return p.isApp ? "file:" + p.path : "file:/bin/sh"
         case .calculation:       return "file:" + kCalculatorAppPath
+        // 最近文件按类型取图标，不碰文件本身（文稿、下载受隐私保护，读它可能弹授权框，见 RecentFiles.swift）
+        case .file(let f):       return "type:" + f.contentType
         case .command(.primary, let target): return target.favIconUrl
         case .action, .command, .pluginItem, .pluginAction: return ""
         }
@@ -204,6 +209,7 @@ enum SearchRow: Identifiable {
         case .calculation(let c, _): return c.display
         case .pluginItem(let r): return r.title
         case .pluginAction(let a, _): return a.title
+        case .file(let f):       return f.name
         }
     }
 
@@ -240,6 +246,7 @@ enum SearchRow: Identifiable {
         case .calculation:       return L10n.t("拷贝结果", "Copy result")
         case .pluginItem(let r): return r.actions.first?.title ?? L10n.t("打开", "Open")
         case .pluginAction(let a, _): return a.title
+        case .file:              return L10n.t("打开", "Open")
         }
     }
 
@@ -260,7 +267,7 @@ enum SearchRow: Identifiable {
         case .window(let w):     return w.id
         // 换个浏览器打开也是「这个输入要的就是这一页」
         case .command(.primary, let target), .openWith(_, let target): return target.memoryIdentity
-        case .action, .command, .selection, .selectionOpener, .process, .calculation, .pluginItem, .pluginAction: return nil
+        case .action, .command, .selection, .selectionOpener, .process, .calculation, .pluginItem, .pluginAction, .file: return nil
         }
     }
 
@@ -295,6 +302,7 @@ enum SearchRow: Identifiable {
         case .app(let a):    return a.path
         case .selection(let s): return s.paths.first
         case .process(let p): return p.path
+        case .file(let f):   return f.path
         default:             return nil
         }
     }
@@ -391,6 +399,10 @@ enum RowCommand: String {
     case copyPID, copyCommandLine
     /// 计算结果的四条：拷贝结果、拷贝「算式 = 结果」、粘贴到打开面板前在用的 App、输入框换成结果接着算
     case copyResult, copyCalculation, pasteResult, continueCalculation
+    /// 最近文件：列表换成能打开它的 App（同访达的「打开方式…」，面板不关）
+    case openWithApp
+    /// 最近文件：把文件本身放进剪贴板，到访达、聊天窗口里粘贴（照 PasteMemo 的写法）
+    case copyFile
 
     /// 关闭 / 删除类：标红。
     var isDestructive: Bool {
@@ -436,6 +448,8 @@ enum RowCommand: String {
             return L10n.t("粘贴", "Paste")
         case .copyCalculation: return L10n.t("拷贝算式和结果", "Copy calculation")
         case .continueCalculation: return L10n.t("用结果接着算", "Continue with result")
+        case .openWithApp:    return L10n.t("打开方式…", "Open With…")
+        case .copyFile:       return L10n.t("拷贝文件", "Copy file")
         }
     }
 
@@ -454,8 +468,9 @@ enum RowCommand: String {
         // 拷贝类共用一个图标、靠字区分（Raycast / Alfred 都这样）：四个各画各的图，
         // 列表里就是四种形状抢眼，反而看不出它们是一类
         case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine,
-             .copyResult, .copyCalculation: return "doc.on.doc.fill"
+             .copyResult, .copyCalculation, .copyFile: return "doc.on.doc.fill"
         case .pasteResult:    return "doc.on.clipboard.fill"
+        case .openWithApp:    return "arrow.up.forward.app.fill"
         case .continueCalculation: return "plus.forwardslash.minus"
         case .revealInFinder: return "folder.fill"
         case .getInfo:        return "info"
@@ -474,7 +489,7 @@ enum RowCommand: String {
         if isDestructive { return .red }
         switch self {
         case .copyURL, .copyTitle, .copyMarkdown, .copyPath, .copyPID, .copyCommandLine,
-             .copyResult, .copyCalculation: return .gray
+             .copyResult, .copyCalculation, .copyFile: return .gray
         case .revealInFinder, .getInfo, .showPackageContents: return .blue
         case .reloadTab:      return .green
         case .returnToPinned, .unfavorite: return .orange
@@ -501,6 +516,8 @@ enum SearchPick {
     case app(AppEntry)
     case appCommand(AppCommand, AppEntry?)
     case window(AppWindow)
+    /// 用默认的 App 打开一个最近打开过的文件
+    case file(RecentFile)
 }
 
 // MARK: - 视图模型
@@ -590,6 +607,20 @@ final class TabSearchModel: ObservableObject {
     /// 重开面板回到进程列表时，第一份采样到了再把游标（和它的操作列表）放回去。
     private var pendingProcessRestore: (cursorID: String?, actions: SubState.Actions?)?
 
+    // MARK: 最近文件（「最近文件…」）
+
+    /// 「最近文件…」展开了文件列表（子状态，同进程列表：Esc / 输入空着按 ⌫ 退回原列表，里面还能 ⌘↩ 一层）。
+    @Published private(set) var inRecentFiles = false
+    /// 第一份查到了没有（没到写「正在读取」）；第一份就查失败了写「读不到」。
+    @Published private(set) var recentFilesLoaded = false
+    @Published private(set) var recentFilesFailed = false
+    /// 列表开 / 关（面板据此去查 Spotlight；只在进来时查一次，平时不跑）。
+    var onRecentFilesChange: ((Bool) -> Void)?
+    private var recentFiles: [RecentFile] = []
+    private var recentFilesSavedQuery = ""
+    private var recentFilesSavedCursorID: String?
+    private var recentFilesSavedCursorIndex = 0
+
     // MARK: 插件列表（股票…）
 
     /// 进了哪个插件的列表（子状态，同进程列表：Esc / 输入空着按 ⌫ 退回原列表，里面还能 ⌘↩ 一层）。nil = 不在。
@@ -648,7 +679,7 @@ final class TabSearchModel: ObservableObject {
     var pluginScope: PluginScope? { pluginScopes.last }
 
     /// 在某个二级里（操作列表、进程列表、插件列表）：输入框左边画「‹」，空着按 ⌫ 退回。
-    var inSubList: Bool { actionTarget != nil || inProcesses || pluginListID != nil }
+    var inSubList: Bool { actionTarget != nil || inProcesses || pluginListID != nil || inRecentFiles }
     /// 输入框右边那个胶囊：在哪一层写哪一层（JWT 解码），首页写插件名
     var pluginListTitle: String? { pluginScope?.title ?? pluginListID.flatMap { plugins.plugin($0)?.title } }
 
@@ -682,8 +713,15 @@ final class TabSearchModel: ObservableObject {
             /// 进到的层（每一层带着它上一层的现场），重开回到同一层、Esc 照样一层层退
             var scopes: [PluginScope] = []
         }
+        struct RecentFiles {
+            let query: String
+            let cursorID: String?
+            /// 关面板那一刻的列表：重开时先画它，重新查回来原地换
+            let files: [RecentFile]
+        }
         var processes: Processes?
         var pluginList: PluginList?
+        var recentFiles: RecentFiles?
         var actions: Actions?
         var openWith: (selection: FileSelection, openers: [OpenerApp], query: String, cursorID: String?)?
     }
@@ -701,6 +739,11 @@ final class TabSearchModel: ObservableObject {
                                                    cursorID: actionTarget != nil ? savedCursorID : selectedRow?.id,
                                                    rows: pluginRows, rowsQuery: pluginRowsQuery, scopes: pluginScopes)
         }
+        if inRecentFiles {
+            state.recentFiles = SubState.RecentFiles(query: actionTarget != nil ? savedQuery : query,
+                                                     cursorID: actionTarget != nil ? savedCursorID : selectedRow?.id,
+                                                     files: recentFilesLoaded ? recentFiles : [])
+        }
         if let target = actionTarget {
             if case .selection(let selection) = target {
                 state.openWith = (selection, selectionOpeners, query, selectedRow?.id)
@@ -708,11 +751,18 @@ final class TabSearchModel: ObservableObject {
                 state.actions = SubState.Actions(targetID: target.id, query: query, cursorID: selectedRow?.id)
             }
         }
-        return state.processes == nil && state.pluginList == nil && state.actions == nil && state.openWith == nil ? nil : state
+        return state.processes == nil && state.pluginList == nil && state.recentFiles == nil
+            && state.actions == nil && state.openWith == nil ? nil : state
     }
 
     /// 主列表已经按上次的输入和游标恢复好了，再一层层进去。对象不在了（标签关了、进程退了）就停在上一层。
     func restore(_ state: SubState) {
+        // 最近文件下面还能再有一层（⌘↩ 的操作、某个文件的「打开方式…」）：先回到文件列表，再往下
+        if let files = state.recentFiles {
+            showRecentFiles(cached: files.files.isEmpty ? nil : files.files)
+            setQueryQuietly(files.query)
+            refilter(keepCursorOn: files.cursorID)
+        }
         if let openWith = state.openWith {
             showOpenWith(openWith.selection, openers: openWith.openers)
             restoreLayerInput(openWith.query, cursorID: openWith.cursorID)
@@ -794,8 +844,8 @@ final class TabSearchModel: ObservableObject {
                 requestPluginRows(immediately: query.trimmingCharacters(in: .whitespaces).isEmpty)
                 return
             }
-            // 操作列表、进程列表里的输入只是在过滤它们，不去问历史记录
-            guard actionTarget == nil, !inProcesses, pluginListID == nil else { return }
+            // 操作列表、进程列表、最近文件里的输入只是在过滤它们，不去问历史记录
+            guard actionTarget == nil, !inProcesses, pluginListID == nil, !inRecentFiles else { return }
             onQueryChange?(query.trimmingCharacters(in: .whitespaces))
         }
     }
@@ -979,7 +1029,7 @@ final class TabSearchModel: ObservableObject {
     func cycleMode(_ delta: Int) {
         // 操作列表里 Tab 不切模式（先 Esc 退回去）；进程列表里点模式标签是换排序
         if inProcesses, actionTarget == nil { toggleProcessSort(); return }
-        guard pluginListID == nil else { return }
+        guard pluginListID == nil, !inRecentFiles else { return }
         guard actionTarget == nil, let index = modes.firstIndex(of: mode), modes.count > 1 else { return }
         select(modes[(index + delta + modes.count) % modes.count])
     }
@@ -999,7 +1049,7 @@ final class TabSearchModel: ObservableObject {
             toggleProcessSort()
             return
         }
-        guard pluginListID == nil else { return }
+        guard pluginListID == nil, !inRecentFiles else { return }
         if delta > 0, actionTarget == nil, mode == .all,
            let jump = sections.first(where: { $0.range.contains(cursor) })?.jump {
             select(jump, keepCursorOn: selectedRow?.id)
@@ -1030,6 +1080,15 @@ final class TabSearchModel: ObservableObject {
                 noteUserEdit()
             } else {
                 leaveProcesses()
+            }
+            return true
+        }
+        if inRecentFiles {
+            if !query.isEmpty {
+                query = ""
+                noteUserEdit()
+            } else {
+                leaveRecentFiles()
             }
             return true
         }
@@ -1088,7 +1147,7 @@ final class TabSearchModel: ObservableObject {
     /// （用户 2026-09-26 反馈：标签多时关一个就回到顶上）。没选过就留在新排序的默认位置。
     private func refreshInPlace(keep: String?, previousIndex: Int) {
         // 进程列表（连同它里面的操作列表）不靠这些数据：别跟着重算，重算会挪游标、把等确认的那一下作废
-        guard !inProcesses, pluginListID == nil else { return }
+        guard !inProcesses, pluginListID == nil, !inRecentFiles else { return }
         let touched = cursorTouched
         refilter(keepCursorOn: nil)
         guard !rows.isEmpty else { return }
@@ -1108,11 +1167,13 @@ final class TabSearchModel: ObservableObject {
 
     /// 主列表层面的输入和选中项：在操作列表 / 进程列表里就取展开前的那份（恢复现场用）。
     var baseQuery: String {
-        pluginListID != nil ? pluginSavedQuery : inProcesses ? processSavedQuery : actionTarget != nil ? savedQuery : query
+        pluginListID != nil ? pluginSavedQuery : inProcesses ? processSavedQuery
+            : inRecentFiles ? recentFilesSavedQuery : actionTarget != nil ? savedQuery : query
     }
     var baseCursorID: String? {
         pluginListID != nil ? pluginSavedCursorID
-            : inProcesses ? processSavedCursorID : actionTarget != nil ? savedCursorID : selectedRow?.id
+            : inProcesses ? processSavedCursorID : inRecentFiles ? recentFilesSavedCursorID
+            : actionTarget != nil ? savedCursorID : selectedRow?.id
     }
 
     /// ⌘↩：展开游标那一行的操作。这一行没有二级（搜索、网址直达、操作本身）就什么都不做。
@@ -1160,11 +1221,12 @@ final class TabSearchModel: ObservableObject {
         actionTarget = nil
         closeProcesses()
         closePluginList()
+        closeRecentFiles()
     }
 
     /// 「结束进程…」：列表换成进程。和 ⌘↩ 的二级一个用法：打字过滤、Esc / ⌫ 退回原列表并恢复输入。
     func showProcesses() {
-        guard actionTarget == nil, !inProcesses, pluginListID == nil else { return }
+        guard actionTarget == nil, !inProcesses, pluginListID == nil, !inRecentFiles else { return }
         processSavedQuery = query
         processSavedCursorID = selectedRow?.id
         processSavedCursorIndex = cursor
@@ -1203,10 +1265,83 @@ final class TabSearchModel: ObservableObject {
         onProcessesChange?(false)
     }
 
+    /// 「最近文件…」：列表换成 30 天内打开过的文件。和进程列表一个用法：打字过滤、Esc / ⌫ 退回原列表并恢复输入。
+    /// `cached` = 上一次查到的（重进列表、重开面板）：先画它不闪一下空的，重新查回来原地换。
+    func showRecentFiles(cached: [RecentFile]? = nil) {
+        guard actionTarget == nil, !inProcesses, pluginListID == nil, !inRecentFiles else { return }
+        recentFilesSavedQuery = query
+        recentFilesSavedCursorID = selectedRow?.id
+        recentFilesSavedCursorIndex = cursor
+        inRecentFiles = true
+        recentFiles = cached ?? []
+        recentFilesLoaded = cached != nil
+        recentFilesFailed = false
+        setQueryQuietly("")
+        refilter(keepCursorOn: nil)
+        onRecentFilesChange?(true)
+    }
+
+    /// 退回原列表：输入和游标都恢复。
+    func leaveRecentFiles() {
+        guard inRecentFiles else { return }
+        closeRecentFiles()
+        setQueryQuietly(recentFilesSavedQuery)
+        refilter(keepCursorOn: recentFilesSavedCursorID)
+        if let id = recentFilesSavedCursorID, rows.firstIndex(where: { $0.id == id }) == nil, !rows.isEmpty {
+            setCursor(min(recentFilesSavedCursorIndex, rows.count - 1), source: .keyboard)
+        }
+    }
+
+    /// 不在看了（退回、面板关了）：还在查的那次不要了。
+    func closeRecentFiles() {
+        guard inRecentFiles else { return }
+        inRecentFiles = false
+        onRecentFilesChange?(false)
+    }
+
+    /// 查回来了（nil = 查询失败）。第一份按当前输入排；先画过缓存的，就只换内容、游标留在原来那一项（同插件列表）。
+    func setRecentFiles(_ files: [RecentFile]?) {
+        guard inRecentFiles else { return }
+        guard let files else {
+            if !recentFilesLoaded {
+                recentFilesLoaded = true
+                recentFilesFailed = true
+                if actionTarget == nil { refilter(keepCursorOn: nil) }
+            }
+            return
+        }
+        let first = !recentFilesLoaded
+        recentFiles = files
+        recentFilesLoaded = true
+        recentFilesFailed = false
+        guard actionTarget == nil else { return }   // 在某个文件的操作里：退回来时再按新的排
+        if first {
+            refilter(keepCursorOn: nil)
+            return
+        }
+        let keep = selectedRow?.id
+        let touched = cursorTouched
+        let previous = cursor
+        rows = recentFileRows(query.trimmingCharacters(in: .whitespaces))
+        if touched, let keep, let index = rows.firstIndex(where: { $0.id == keep }) {
+            setCursor(index, source: .mouse)
+        } else if !rows.isEmpty {
+            setCursor(min(previous, rows.count - 1), source: .mouse, touched: touched)
+        }
+    }
+
+    /// 最近文件的行：没输入按打开时间从新到旧；有输入按文件名（认拼音）筛，所在位置也算
+    ///（打「Downloads」「iCloud」筛出那里的），名字命中的排前，一样的保持时间顺序。
+    private func recentFileRows(_ trimmed: String) -> [SearchRow] {
+        guard !trimmed.isEmpty else { return recentFiles.map(SearchRow.file) }
+        let candidates = recentFiles.map { candidate(title: $0.name, url: $0.folder, identity: $0.path) }
+        return TabSearch.rank(candidates, query: trimmed).map { .file(recentFiles[$0]) }
+    }
+
     /// 插件的列表（股票…）：列表换成插件给的行。和进程列表一个用法：打字交给插件去搜、Esc / ⌫ 退回原列表。
     /// 没输入时（股票的自选）面板开着每 5 秒刷新一次，面板关了、退出列表就停（没在看就不取）。
     func showPluginList(_ id: String, restoring saved: SubState.PluginList? = nil) {
-        guard actionTarget == nil, !inProcesses, pluginListID == nil, plugins.plugin(id) != nil else { return }
+        guard actionTarget == nil, !inProcesses, pluginListID == nil, !inRecentFiles, plugins.plugin(id) != nil else { return }
         pluginSavedQuery = query
         pluginSavedCursorID = selectedRow?.id
         pluginSavedCursorIndex = cursor
@@ -1591,6 +1726,10 @@ final class TabSearchModel: ObservableObject {
         case .pluginItem(let row):
             // 插件给的动作，原样排（插件自己把回车的那个放第一、删除类放最后）
             return row.actions.map { .pluginAction($0, row) }
+        case .file:
+            // 打开（= 回车）→ 打开方式… → 显示类 → 拷贝类（同 App 那一行：显示类在拷贝类前面）
+            return [RowCommand.primary, .openWithApp, .revealInFinder, .getInfo, .copyFile, .copyPath]
+                .map { .command($0, target) }
         case .url, .action, .opener, .command, .openWith, .selectionOpener, .appCommand, .window, .pluginAction:
             return []
         }
@@ -1702,6 +1841,8 @@ final class TabSearchModel: ObservableObject {
         let next: [SearchRow]
         if inProcesses, actionTarget == nil {
             next = processRows(trimmed)
+        } else if inRecentFiles, actionTarget == nil {
+            next = recentFileRows(trimmed)
         } else if pluginListID != nil, actionTarget == nil {
             // 插件自己搜好、排好了；输入变了还没回来时先留着上一份（新的回来再换），不闪一下空的
             next = pluginRows.map(SearchRow.pluginItem)
@@ -2688,8 +2829,10 @@ private struct TabSearchView: View {
             // 胶囊，和底栏同一种形状语言
             // 进程列表里是排序（CPU / 内存），Tab 或点一下换
             // 插件列表里写插件名，不带 ⇥（这一层 Tab 不做事）
-            let inPlugin = model.pluginListID != nil && model.actionTarget == nil
-            Text(inPlugin ? (model.pluginListTitle ?? "")
+            // 最近文件同插件列表：写它自己的名字，不带 ⇥
+            let inPlugin = (model.pluginListID != nil || model.inRecentFiles) && model.actionTarget == nil
+            Text(model.inRecentFiles && model.actionTarget == nil ? RecentFilesCommand.name
+                 : inPlugin ? (model.pluginListTitle ?? "")
                  : model.inProcesses && model.actionTarget == nil ? model.processSort.label : model.mode.label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.75))
@@ -2717,6 +2860,7 @@ private struct TabSearchView: View {
             return L10n.t("「\(short)」的操作", "Actions for “\(short)”")
         }
         if model.inProcesses { return L10n.t("按名称、端口或 PID 过滤", "Filter by name, port or PID") }
+        if model.inRecentFiles { return L10n.t("按文件名或位置过滤", "Filter by file name or location") }
         if let id = model.pluginListID, let plugin = model.plugins.plugin(id) {
             if let scope = model.pluginScope { return scope.placeholder ?? L10n.t("搜索\(scope.title)", "Search \(scope.title)") }
             return plugin.listPlaceholder ?? L10n.t("搜索\(plugin.title)", "Search \(plugin.title)")
@@ -2744,6 +2888,12 @@ private struct TabSearchView: View {
         if model.inProcesses {
             if !model.processesLoaded { return L10n.t("正在读取进程", "Loading processes") }
             return noQuery ? L10n.t("没有可以结束的进程", "No processes to kill") : L10n.t("没有匹配的进程", "No matching processes")
+        }
+        if model.inRecentFiles {
+            if !model.recentFilesLoaded { return L10n.t("正在读取…", "Loading…") }
+            if model.recentFilesFailed { return L10n.t("读不到 Spotlight 的记录", "Couldn't read from Spotlight") }
+            return noQuery ? L10n.t("30 天内没有打开过的文件", "No files opened in the last 30 days")
+                           : L10n.t("没有匹配的文件", "No matching files")
         }
         if let id = model.pluginListID {
             if !model.pluginLoaded { return L10n.t("正在读取…", "Loading…") }
@@ -2817,6 +2967,21 @@ private struct TabSearchView: View {
                         .foregroundStyle(Color.primary.opacity(0.75))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                }
+                .modifier(GlassCapsule(leading: kSearchRowInset))
+                .contentShape(Capsule())
+                .onTapGesture { _ = model.escape() }
+                .layoutPriority(-1)
+            } else if model.inRecentFiles {
+                // 最近文件：左边写在哪一层（同进程列表），点它返回
+                HStack(spacing: kSearchIconGap) {
+                    PluginIconTile(icon: BuiltinPluginIcons.recentFiles, symbol: RecentFilesCommand.symbol,
+                                   tint: RecentFilesCommand.tint, side: 17)
+                        .frame(width: kSearchRowIconSize)
+                    Text(RecentFilesCommand.name)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.primary.opacity(0.75))
+                        .lineLimit(1)
                 }
                 .modifier(GlassCapsule(leading: kSearchRowInset))
                 .contentShape(Capsule())
@@ -3037,13 +3202,13 @@ private struct SearchRowIcon: View {
             } else {
                 ActionTile(symbol: command.symbol, tint: .gray, side: tileSide)
             }
-        case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window, .process, .calculation:
+        case .folder, .opener, .openWith, .selection, .selectionOpener, .app, .appCommand, .window, .process, .calculation, .file:
             // 本机文件 / App 的图标由 iconProvider 同步取（`file:` 键）；命令画它那个 App 的图标，
             // 计算结果画「计算器」的
             if let icon {
                 let isApp: Bool = {
                     switch row {
-                    case .folder, .selection: return false
+                    case .folder, .selection, .file: return false
                     default: return true
                     }
                 }()
@@ -3053,7 +3218,7 @@ private struct SearchRowIcon: View {
                 Image(systemName: {
                     switch row {
                     case .folder:    return "folder"
-                    case .selection: return "doc"
+                    case .selection, .file: return "doc"
                     case .process(let p) where !p.isApp: return "terminal"
                     case .calculation: return "plus.forwardslash.minus"
                     default:         return "app"
@@ -3243,6 +3408,8 @@ private struct SearchRowView: View {
             return ["PID \(p.pid)", p.commandLine.isEmpty ? (p.path as NSString).abbreviatingWithTildeInPath : p.commandLine]
                 .joined(separator: " · ")
         case .pluginItem(let r): return r.subtitle ?? ""
+        // 所在位置（家目录写成 ~，iCloud 云盘写「iCloud 云盘」），同名文件靠它分
+        case .file(let f):       return f.folder
         case .command, .openWith, .selection, .selectionOpener, .calculation, .pluginAction: return ""
         }
     }
@@ -3527,6 +3694,12 @@ private struct SearchRowView: View {
                 }
             case .pluginItem(let r):
                 PluginRowTrailing(row: r)
+            case .file(let f):
+                if let ago = relativeTime(msEpoch: f.lastUsed.timeIntervalSince1970 * 1000) {
+                    Text(L10n.t("\(ago)打开", "opened \(ago)"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.30))
+                }
             case .command, .openWith, .selection, .selectionOpener, .calculation, .pluginAction:
                 EmptyView()
             }
@@ -3939,6 +4112,10 @@ final class TabSearchPanel {
     var openWithHandler: (() -> Void)?
     /// 「结束进程…」的采样（列表开着才跑）。
     private let processMonitor = ProcessMonitor()
+    /// 「最近文件…」的 Spotlight 查询（进列表时查一次）。
+    private let recentFileLoader = RecentFileLoader()
+    /// 最近文件 ⌘↩ 里选了「打开方式…」：面板还开着，MRUController 去查能打开它的 App，查回来调 `showOpenWith`。
+    var fileOpenWithHandler: ((RecentFile) -> Void)?
 
     /// 结束一个进程 / 退出一个 App（已经确认过了）。
     ///
@@ -3983,6 +4160,7 @@ final class TabSearchPanel {
         guard shown else { return }
         if model.actionTarget != nil { model.leaveActions() }
         model.leavePluginList()
+        model.leaveRecentFiles()
         model.showProcesses()
     }
 
@@ -3991,6 +4169,7 @@ final class TabSearchPanel {
         guard shown else { return }
         if model.actionTarget != nil { model.leaveActions() }
         model.leaveProcesses()
+        model.leaveRecentFiles()
         if model.pluginListID != id {
             model.leavePluginList()
             model.showPluginList(id)
@@ -4044,6 +4223,12 @@ final class TabSearchPanel {
             // 原列表再执行，数据刷新后列表原地收缩）；其余关面板再执行。
             if case .command(let command, let target) = row {
                 if command == .primary { self.model.onPick?(target); return }
+                // 最近文件的「打开方式…」：面板不关，列表换成能打开它的 App。查 App 要一会儿（近 100ms），
+                // 查完再从操作列表换过去：先退回文件列表再等的话，这一下里按回车会用默认 App 打开它
+                if command == .openWithApp, case .file(let file) = target {
+                    self.fileOpenWithHandler?(file)
+                    return
+                }
                 // 用结果接着算：面板不关，输入框换成结果、光标放到最后
                 if command == .continueCalculation, case .calculation(let calculation, _) = target {
                     self.model.leaveActions()
@@ -4084,6 +4269,11 @@ final class TabSearchPanel {
             // 「结束进程…」：面板不关，列表换成进程
             if case .appCommand(let command, _) = row, case .processes = command.action {
                 self.model.showProcesses()
+                return
+            }
+            // 「最近文件…」：面板不关，列表换成最近打开过的文件（上次查到的先画上）
+            if case .appCommand(let command, _) = row, case .recentFiles = command.action {
+                self.model.showRecentFiles(cached: self.recentFileLoader.cached)
                 return
             }
             // 插件的列表（股票…）：面板不关，列表换成插件给的行
@@ -4141,6 +4331,7 @@ final class TabSearchPanel {
             case .process:           break   // 上面已处理
             case .calculation:       break   // 上面已处理
             case .pluginItem, .pluginAction: break   // 上面已处理
+            case .file(let f):       pick?(.file(f))
             }
         }
         model.memory = SearchMemory.shared
@@ -4153,6 +4344,15 @@ final class TabSearchPanel {
         }
         processMonitor.onUpdate = { [weak self] items, members in
             self?.model.setProcesses(items, members: members)
+        }
+        // 最近文件：进列表查一次 Spotlight，退出、关面板就把还在查的那次作废
+        model.onRecentFilesChange = { [weak self] open in
+            guard let self else { return }
+            guard open else { self.recentFileLoader.cancel(); return }
+            self.recentFileLoader.load(iCloudName: L10n.t("iCloud 云盘", "iCloud Drive")) { [weak self] files, ms in
+                log("📄 recent files: \(files.map { "\($0.count)" } ?? "query failed") in \(ms) ms")
+                self?.model.setRecentFiles(files)
+            }
         }
         model.onCloseTab = { [weak self] itemID in self?.closeHandler?(itemID) }
         model.onExtensionUpdateTap = { [weak self] in
@@ -4292,6 +4492,7 @@ final class TabSearchPanel {
         defer {
             model.closeProcesses()
             model.closePluginList()
+            model.closeRecentFiles()
         }
         lastSession = Session(closedAt: Date(), completed: closingAfterPick, global: isGlobal,
                               query: model.baseQuery, mode: model.mode,

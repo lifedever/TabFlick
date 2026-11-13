@@ -1,13 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// 内置插件：原来写死在搜索面板里的四样，改成插件后能在设置里单独关（2026-11-06）。
-/// 功能本身没变，各自的实现还在原来的文件里（Calculator / AppCommands / WindowCommands / ProcessList），
+/// 内置插件：原来写死在搜索面板里的四样，改成插件后能在设置里单独关（2026-11-06），后来加了最近文件（2026-11-13）。
+/// 各自的实现在各自的文件里（Calculator / AppCommands / WindowCommands / ProcessList / RecentFiles），
 /// 这里只是把它们接到插件协议上。
 enum BuiltinPlugins {
     /// 顺序 = 设置侧边栏里的顺序，也是命令在面板里同分时的先后（锁屏、结束进程、窗口命令，同插件化之前）。
     @MainActor static func all() -> [Plugin] {
-        [CalculatorPlugin(), AppCommandsPlugin(), ProcessesPlugin(), WindowCommandsPlugin()]
+        [CalculatorPlugin(), AppCommandsPlugin(), ProcessesPlugin(), WindowCommandsPlugin(), RecentFilesPlugin()]
     }
 }
 
@@ -114,6 +114,33 @@ final class ProcessesPlugin: Plugin {
 
     let processMenu = ProcessMenu()
     var menu: PluginMenu? { processMenu }
+}
+
+// MARK: - 最近文件
+
+@MainActor
+final class RecentFilesPlugin: Plugin {
+    let id = "recentFiles"
+    var title: String { RecentFilesCommand.name }
+    var summary: String {
+        L10n.t("列出 30 天内打开过的文件，和访达的「最近使用」一样。终端、编辑器里直接打开的不算。",
+               "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.")
+    }
+    let symbol = RecentFilesCommand.symbol
+    var tint: Color { RecentFilesCommand.tint }
+    var icon: NSImage? { BuiltinPluginIcons.recentFiles }
+    let origin = PluginOrigin.builtin
+
+    var panelCommands: [PluginCommandInfo] {
+        [PluginCommandInfo(id: RecentFilesCommand.command.id, title: RecentFilesCommand.title, symbol: RecentFilesCommand.symbol)]
+    }
+
+    /// 这条命令就是插件本身，画插件的图标（同「结束进程…」）
+    func commands(_ context: PluginContext) -> [AppCommand] {
+        var command = RecentFilesCommand.command
+        command.icon = icon
+        return [command]
+    }
 }
 
 /// 状态栏里「结束进程 ▸」：占用最高的几个进程，点一个先确认再结束。

@@ -454,5 +454,17 @@
   "No response": "Keine Antwort",
   "Try again in a moment.": "Versuch es gleich noch einmal.",
   "Menu Bar Order": "Reihenfolge in der Menüleiste",
-  "Plugins with “Show in Menu Bar” turned on are listed here.": "Hier stehen die Plug-ins, bei denen „In der Menüleiste anzeigen“ an ist."
+  "Plugins with “Show in Menu Bar” turned on are listed here.": "Hier stehen die Plug-ins, bei denen „In der Menüleiste anzeigen“ an ist.",
+  "Recent Files": "Zuletzt geöffnete Dateien",
+  "Recent Files…": "Zuletzt geöffnete Dateien …",
+  "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.": "Zeigt Dateien, die in den letzten 30 Tagen geöffnet wurden, wie „Zuletzt benutzt“ im Finder. Direkt im Terminal oder Editor geöffnete Dateien fehlen.",
+  "Couldn't open “{0}”": "„{0}“ konnte nicht geöffnet werden",
+  "File copied": "Datei kopiert",
+  "Copy file": "Datei kopieren",
+  "Filter by file name or location": "Nach Dateiname oder Ort filtern",
+  "Couldn't read from Spotlight": "Spotlight konnte nicht gelesen werden",
+  "No files opened in the last 30 days": "Keine Dateien in den letzten 30 Tagen geöffnet",
+  "No matching files": "Keine passenden Dateien",
+  "opened {0}": "{0} geöffnet",
+  "iCloud Drive": "iCloud Drive"
 }

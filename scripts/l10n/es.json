@@ -454,5 +454,17 @@
   "No response": "Sin respuesta",
   "Try again in a moment.": "Vuelve a intentarlo en un momento.",
   "Menu Bar Order": "Orden en la barra de menús",
-  "Plugins with “Show in Menu Bar” turned on are listed here.": "Aquí aparecen los complementos con «Mostrar en la barra de menús» activado."
+  "Plugins with “Show in Menu Bar” turned on are listed here.": "Aquí aparecen los complementos con «Mostrar en la barra de menús» activado.",
+  "Recent Files": "Archivos recientes",
+  "Recent Files…": "Archivos recientes…",
+  "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.": "Muestra los archivos abiertos en los últimos 30 días, igual que Recientes en Finder. No incluye los abiertos directamente en un terminal o editor.",
+  "Couldn't open “{0}”": "No se pudo abrir “{0}”",
+  "File copied": "Archivo copiado",
+  "Copy file": "Copiar archivo",
+  "Filter by file name or location": "Filtrar por nombre de archivo o ubicación",
+  "Couldn't read from Spotlight": "No se pudo leer de Spotlight",
+  "No files opened in the last 30 days": "Ningún archivo abierto en los últimos 30 días",
+  "No matching files": "Ningún archivo coincide",
+  "opened {0}": "abierto {0}",
+  "iCloud Drive": "iCloud Drive"
 }
