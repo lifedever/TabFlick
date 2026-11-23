@@ -7,7 +7,7 @@ import AppKit
 /// （辅助功能权限是键盘钩子的前提，本来就有）；不去点各 App 的「窗口 → 移动与调整大小」菜单：
 /// 菜单名跟着系统语言变，Electron 这类 App 还不一定有。
 ///
-/// 和锁屏一样是系统命令：只在有输入且命中时出现，列在「应用」段末尾；二级（⌘↩）里没有。
+/// 和锁屏一样是系统命令：只在有输入且命中时出现，列在「插件」段；二级（⌘↩）里没有。
 enum WindowAction: String, CaseIterable {
     case center, maximize, leftHalf, rightHalf, restore, nextDisplay, minimize, fullScreen
 
@@ -89,7 +89,9 @@ enum WindowCommands {
     /// 这一轮面板里能用的窗口命令。前台没有可动的 App 时一条都没有。
     @MainActor static func commands(for target: WindowTarget?) -> [AppCommand] {
         guard let target else { return [] }
-        let subtitle = L10n.t("窗口", "Window") + " · " + target.name
+        // 直接写要动的是谁的窗口。原来写「窗口 · Muxy」，和 App 命令的副标题（写 App 名）一个格式，
+        // 读起来像是 Muxy 自己的功能（用户 2026-11-23 截图）
+        let subtitle = L10n.t("\(target.name) 的窗口", "\(target.name) window")
         return WindowAction.allCases.compactMap { action in
             if action == .restore && !target.canRestore { return nil }
             if action == .nextDisplay && target.displayCount < 2 { return nil }

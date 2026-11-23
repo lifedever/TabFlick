@@ -20,7 +20,7 @@ struct SearchSection {
 
 /// 「全部」里一段装的是什么：决定分组头的名字，以及截断后 Tab 跳去哪个模式。
 enum SearchSectionKind: String {
-    case calc, top, ops, apps, folders, tabs, closed, bookmarks, history, search, recent, suggested
+    case calc, top, ops, apps, plugins, folders, tabs, closed, bookmarks, history, search, recent, suggested
 
     /// 分组头写什么。计算结果那一段没有头：它本身就是一眼看得出的答案（示意图 C）。
     var title: String? {
@@ -31,6 +31,9 @@ enum SearchSectionKind: String {
         case .top:       return L10n.t("最佳匹配", "Top Hit")
         case .ops:       return L10n.t("操作", "Actions")
         case .apps:      return L10n.t("应用", "Apps")
+        // 插件给的（窗口命令、结束进程、股票…、App 命令）单独一段，和设置里的「插件」对上：混在「应用」下面
+        // 看着就是 App（用户 2026-11-23 截图）。面板里不再有「命令」这个说法
+        case .plugins:   return L10n.t("插件", "Plugins")
         case .folders:   return L10n.t("文件夹", "Folders")
         case .tabs:      return L10n.t("浏览器标签", "Browser tabs")
         case .closed:    return L10n.t("最近关闭", "Recently closed")
@@ -42,7 +45,7 @@ enum SearchSectionKind: String {
 
     var mode: SearchMode? {
         switch self {
-        case .calc, .top, .ops, .recent, .suggested: return nil
+        case .calc, .top, .ops, .recent, .suggested, .plugins: return nil
         case .search:    return .actions
         case .apps:      return .apps
         case .folders:   return .folders
@@ -94,8 +97,8 @@ enum SearchRow: Identifiable {
     case selection(FileSelection)
     /// 能打开访达选中项目的一个 App（「打开方式…」展开后的列表）
     case selectionOpener(OpenerApp, FileSelection)
-    /// 内置命令（`AppCommands`）：有输入且命中时跟在它的 App 下面，App 的 ⌘↩ 里也有。
-    /// App 为 nil 是系统命令（锁屏），一级里单独列在「应用」段末尾
+    /// 内置命令（`AppCommands`）：有输入且命中时列在「插件」段，App 的 ⌘↩ 里也有。
+    /// App 为 nil 是系统命令（锁屏），一级里列在「插件」段（「打开方式…」在「操作」段）
     case appCommand(AppCommand, AppEntry?)
     /// 某个 App 里一个具体的窗口（微信的小程序、单独弹出的聊天窗口），回车直接跳过去
     case window(AppWindow)
@@ -813,6 +816,24 @@ final class TabSearchModel: ObservableObject {
     private(set) var recentLeftAt: [String: Double] = [:]
     /// 列表此刻就是「最近使用」那张混排表（上面可能还有一段「推荐」，行的画法和它一样）。
     var showingRecent: Bool { layout.contains { $0.kind == .recent } }
+    /// 第 index 行所在的段（没分段的表是 nil）。
+    func sectionKind(at index: Int) -> SearchSectionKind? {
+        guard mode == .all, actionTarget == nil else { return nil }
+        var start = 0
+        for spec in layout {
+            if index < start + spec.count { return spec.kind }
+            start += spec.count
+        }
+        return nil
+    }
+    /// 混排的段（最近使用、推荐、最佳匹配）：分组头说不出这一行是什么，行的副标题开头写分类名
+    ///（「最近关闭 · github.com」），别的段由分组头说（用户 2026-11-23 定的统一写法）。
+    func inMixedSection(_ index: Int) -> Bool {
+        switch sectionKind(at: index) {
+        case .recent, .suggested, .top: return true
+        default: return false
+        }
+    }
     /// 打开面板、改完输入后游标默认落在哪一行。一般是第 0 行；首页上面有「推荐」时落在「最近使用」
     /// 第一行 —— 回车照旧回到上一个（用户 2026-09-29 定的规矩），按 ↑ 才进推荐。
     private var defaultCursor = 0
@@ -1801,6 +1822,7 @@ final class TabSearchModel: ObservableObject {
 
     /// 「全部」模式里各段最多列这么多条（截掉的写在分组头上）；单独模式放宽到 `soloLimit`。
     static let appLimit = 4
+    static let folderLimit = 4
     static let tabLimit = 8
     static let closedLimit = 5
     static let bookmarkLimit = 5
@@ -1937,9 +1959,8 @@ final class TabSearchModel: ObservableObject {
             let candidates = folders.map { candidate(title: $0.name, url: $0.path) }
             next = TabSearch.rank(candidates, query: trimmed, boosts: boosts).prefix(Self.soloLimit).map { .folder(folders[$0]) }
         case .apps:
-            // 英文原名和 bundle id 放进「网址」栏参与匹配（得分低于标题命中）
-            next = appSectionRows(appAndWindowHits(trimmed), commands: commandHits(trimmed),
-                                  limit: Self.soloLimit, query: trimmed).rows
+            // 只列 App 和 App 里的窗口；插件、「打开方式…」在「全部」里找（用户 2026-11-23 定的：一个模式只列一类）
+            next = Array(appAndWindowHits(trimmed).prefix(Self.soloLimit))
         }
         return next
     }
@@ -1998,8 +2019,15 @@ final class TabSearchModel: ObservableObject {
 
         // 各段先拿全量命中（段内排好序），最后统一截断：截掉几条要写在分组头上，
         // 「最佳匹配」也得在截断前挑。
-        var appHits = appAndWindowHits(trimmed)
-        var builtinHits = commandHits(trimmed)
+        let appHits = appAndWindowHits(trimmed)
+        let builtinHits = commandHits(trimmed)
+        // 输入像网址时「操作」段是「在新标签打开」那几行，「打开方式…」并进去（同一种段只能有一个）
+        let urlTarget = TabSearch.urlCandidate(trimmed)
+        let front = frontSections(appHits, commands: builtinHits, limit: Self.appLimit, query: trimmed,
+                                  opsInline: urlTarget == nil)
+        // 收藏的文件夹（用户 2026-11-23 要的：原来只有 ⇥ 到「文件夹」才搜得到）
+        var folderHits = TabSearch.rank(folders.map(allFolderCandidate), query: trimmed, boosts: boosts)
+            .map { SearchRow.folder(folders[$0]) }
         let liveCandidates = all.map { candidate(title: $0.tab.title, url: $0.tab.url) }
         var liveOrder = TabSearch.rank(liveCandidates, query: trimmed, boosts: boosts)
         // 输入像网址：开着的同站标签提到标签段最前（回车切过去），没有就让「在新标签打开」排最前
@@ -2055,12 +2083,15 @@ final class TabSearchModel: ObservableObject {
         // 输入像网址时不挑：回车落点已经定了（开着的同站标签，或「在新标签打开」）。
         // 有开着的标签命中时，最近关闭 / 书签 / 历史不参与（2026-10-27 用户截图）：它们回车是新开一个标签，
         // 从这里打开过的又攒了记忆分，越点越靠前，打「mack」每回车一次就多一个重复的 MacKed。
-        // 精准叫出了某条内置命令时不挑：「应用」段排在最前、命令在段首，回车就是它（见 `appSectionRows`）
+        // 精准叫出了某个插件的命令（或「打开方式…」）时不挑：它那段排在最前，回车就是它（见 `frontSections`）
+        // 插件 / 应用 / 操作这几段拿排在最前那段的段首来比（打「cen」时是「居中」）：只比 App 的话，标题里带
+        // 「cen」的标签会被挑到它前面。这几段本来就排在其他段前面，所以它们自己永远不会被提走
+        //（在场时就是 `leaders.first`）。
         var topHit: SearchRow?
         if sitePrefix == nil && !builtinHits.contains(where: { calledByName($0, trimmed) }) {
             let contenders = liveHits.isEmpty
-                ? [appHits, liveHits, closedHits, bookmarkHits, historyHits]
-                : [appHits, liveHits]
+                ? [front.rows, folderHits, liveHits, closedHits, bookmarkHits, historyHits]
+                : [front.rows, folderHits, liveHits]
             let leaders = contenders.enumerated()
                 .compactMap { group, rows -> (group: Int, row: SearchRow, score: Int)? in
                     guard let row = rows.first, let score = score(of: row, query: trimmed) else { return nil }
@@ -2072,10 +2103,10 @@ final class TabSearchModel: ObservableObject {
                 if best.score > first.score {
                     topHit = best.row
                     switch best.group {
-                    case 0: appHits.removeFirst()
-                    case 1: liveHits.removeFirst()
-                    case 2: closedHits.removeFirst()
-                    case 3: bookmarkHits.removeFirst()
+                    case 1: folderHits.removeFirst()
+                    case 2: liveHits.removeFirst()
+                    case 3: closedHits.removeFirst()
+                    case 4: bookmarkHits.removeFirst()
                     default: historyHits.removeFirst()
                     }
                 }
@@ -2100,11 +2131,12 @@ final class TabSearchModel: ObservableObject {
         // 有当前标签时下面再跟一行「在当前标签打开」（2026-10-09 用户要的）；回车默认仍是新标签。
         // 别的 App 前台按 ⌥Space 没有当前标签，就没有这一行。
         func placeURL() {
-            guard let url = TabSearch.urlCandidate(trimmed) else { return }
+            guard let url = urlTarget else { return }
             var rows: [SearchRow] = [.url(url, into: nil)]
             if let currentID, let current = all.first(where: { $0.id == currentID }) {
                 rows.append(.url(url, into: current))
             }
+            rows += front.opsInline ? [] : front.ops
             specs.append(SectionSpec(kind: .ops, count: rows.count))
             body += rows
         }
@@ -2117,19 +2149,13 @@ final class TabSearchModel: ObservableObject {
         }
         if sitePrefix != nil && !siteOpen { placeURL() }
 
-        if let topHit {
-            // 被提到最前的是 App 的话，它的命令跟着过去（「amp」→ Amphetamine 和它的两条命令一起在最前）
-            let attached = attach(builtinHits, to: [topHit])
-            builtinHits = attached.rest
-            cut(.top, attached.rows, attached.rows.count)
+        if let topHit { cut(.top, [topHit], 1) }
+        for section in front.ordered {
+            specs.append(SectionSpec(kind: section.kind, count: section.rows.count,
+                                     hidden: section.kind == .apps ? appHits.count - front.shownApps : 0))
+            body += section.rows
         }
-        // 应用段：上限按 App 数算，命令不占名额（每个 App 就两三条，挑过的）
-        let appSection = appSectionRows(appHits, commands: builtinHits, limit: Self.appLimit, query: trimmed)
-        if !appSection.rows.isEmpty {
-            specs.append(SectionSpec(kind: .apps, count: appSection.rows.count,
-                                     hidden: appHits.count - appSection.shownApps))
-            body += appSection.rows
-        }
+        cut(.folders, folderHits, Self.folderLimit)
         cut(.tabs, liveHits, Self.tabLimit)
         if siteOpen { placeURL() }
         cut(.closed, closedHits, Self.closedLimit)
@@ -2227,42 +2253,101 @@ final class TabSearchModel: ObservableObject {
         guard !trimmed.isEmpty else { return [] }
         let pairs = availableCommands()
         let candidates = pairs.map { commandCandidate($0.command, $0.app) }
-        return TabSearch.rank(candidates, query: trimmed, boosts: boosts).map { SearchRow.appCommand(pairs[$0].command, pairs[$0].app) }
+        let order = TabSearch.rank(candidates, query: trimmed, boosts: boosts)
+        // 模糊命中只在一条都没严格命中时留（打错字找命令）。命令就十几条，严格命中不到 3 条是常事，模糊那遍
+        // 几乎每次都跑：打「cen」会把「结束当前会话」（current）带进「插件」段，段又排在「应用」前面，很怪
+        let strict = order.filter { TabSearch.score(candidates[$0], query: trimmed) != nil }
+        return (strict.isEmpty ? order : strict).map { SearchRow.appCommand(pairs[$0].command, pairs[$0].app) }
     }
 
-    /// 命令名进标题（认拼音）；另一种语言的名字、别名、App 名放「网址」栏：打「amp」时
-    /// App 下面跟出它的命令，打「end」「结束」直接命中命令。一级和二级的过滤共用这一份。
+    /// 命令名进标题（认拼音）；另一种语言的名字、别名、用户设的关键词是别名，和标题同档（同 App 的英文原名）：
+    /// 中文界面打「cen」时「居中」靠 Center 拿开头的 8 分，原来放在「网址」栏只有 2 分，
+    /// 和 bundle id 里带 tencent 的微信、QQ 一样（用户 2026-11-23 报的）。App 名留在「网址」栏：
+    /// 打「amp」时 App 下面跟出它的命令就够了。一级和二级的过滤共用这一份。
     private func commandCandidate(_ command: AppCommand, _ app: AppEntry?) -> SearchCandidate {
         candidate(title: command.title,
-                  url: (command.keywords + commandKeywords(command.id) + [app?.name, app?.alternateName].compactMap { $0 })
-                      .joined(separator: " "),
-                  identity: "appcmd:" + command.id)
+                  url: [app?.name, app?.alternateName].compactMap { $0 }.joined(separator: " "),
+                  identity: "appcmd:" + command.id,
+                  alias: (command.keywords + commandKeywords(command.id)).joined(separator: " "))
     }
 
-    /// 「应用」段的行（「全部」和「应用」模式共用）：命令跟在自己的 App 后面，App 没列出来的命令
-    /// （打「end」只命中命令）垫在段尾。精准叫出来的命令（`TabSearch.callsByName`：打「打开」「open」，
-    /// 不是「方式」）排到段首（2026-11-06 用户要的）。和名字也精准命中的 App 谁在前，看命令是怎么被叫中的：
-    /// - 叫的是它自己的名字、或者用户给它设的关键词 → 命令在前（打「天气」要的是天气插件，不是系统的「天气」App，
-    ///   用户 2026-11-06 截图）；
-    /// - 只是内置别名命中 → App 在前（打「活动监视器」要的是那个 App，不是把它当别名的「结束进程…」）。
-    /// `shownApps` 是列出来的 App 行数（算「还有 N 条」）。
-    private func appSectionRows(_ appHits: [SearchRow], commands: [SearchRow], limit: Int,
-                                query: String) -> (rows: [SearchRow], shownApps: Int) {
-        let called = commands.filter { calledByName($0, query) }
-        guard !called.isEmpty else {
-            let shown = Array(appHits.prefix(limit))
-            let attached = attach(commands, to: shown)
-            return (attached.rows + attached.rest, shown.count)
+    /// 「全部」打字时排在最前的几段：插件、应用、操作（「打开方式…」）。
+    private struct FrontSections {
+        /// App 和 App 里的窗口
+        let apps: [SearchRow]
+        /// 插件给的：窗口命令、结束进程、最近文件、锁屏、App 命令、JS 插件的列表入口
+        let plugins: [SearchRow]
+        /// 「打开方式…」：核心功能、不归插件（设置里它在「搜索面板」页，不在「插件」组）
+        let ops: [SearchRow]
+        /// false：输入像网址，「打开方式…」并进「在新标签打开」那个「操作」段，这里不单独摆
+        let opsInline: Bool
+        /// 段的先后
+        let order: [SearchSectionKind]
+        /// 列出来的 App 行数（算「还有 N 条」）
+        let shownApps: Int
+
+        /// 按摆放顺序的段，空的不算。
+        var ordered: [(kind: SearchSectionKind, rows: [SearchRow])] {
+            order.compactMap { kind in
+                let rows: [SearchRow]
+                switch kind {
+                case .apps:    rows = apps
+                case .plugins: rows = plugins
+                default:       rows = opsInline ? ops : []
+                }
+                return rows.isEmpty ? nil : (kind, rows)
+            }
         }
-        let calledIDs = Set(called.map(\.id))
+        var rows: [SearchRow] { ordered.flatMap(\.rows) }
+    }
+
+    /// 插件给的都进「插件」段，App 自己的命令也是（副标题写 App 名，一眼看得出是谁的；用户 2026-11-23 定的，
+    /// 原来跟在 App 下面）；「打开方式…」进「操作」段。几段谁在前：
+    /// - 精准叫出来的（`TabSearch.callsByName`：打「打开」「open」，不是「方式」）排在它那段最前（2026-11-06）。
+    ///   叫的是它自己的名字、或者用户给它设的关键词 → 那段在最前（打「天气」要的是天气插件，不是系统的「天气」App）；
+    ///   名字精准命中的 App → 「应用」段其次；只是内置别名命中 → 再其次（打「活动监视器」要的是那个 App，
+    ///   不是把它当别名的「结束进程…」）。
+    /// - 都没被叫中：比段首的分（打「cen」时「居中」靠 Center 开头 8 分，压过 bundle id 里带 tencent 的微信 2 分）；
+    ///   同分「应用」在前。
+    private func frontSections(_ appHits: [SearchRow], commands: [SearchRow], limit: Int,
+                               query: String, opsInline: Bool) -> FrontSections {
+        let called = commands.filter { calledByName($0, query) }
         let byOwnName = called.filter { calledByOwnName($0, query) }
         let byAlias = called.filter { !calledByOwnName($0, query) }
-        let lead = Array(appHits.filter { calledByName($0, query) }.prefix(limit))
+        let calledIDs = Set(called.map(\.id))
+        let ordered = byOwnName + byAlias + commands.filter { !calledIDs.contains($0.id) }
+        let isOps: (SearchRow) -> Bool = { row in
+            if case .appCommand(let command, _) = row, case .openWith = command.action { return true }
+            return false
+        }
+        let plugins = ordered.filter { !isOps($0) }
+        let ops = ordered.filter(isOps)
+        // 有命令被叫中时，名字也精准命中的 App 排在「应用」段最前
+        let lead = called.isEmpty ? [] : Array(appHits.filter { calledByName($0, query) }.prefix(limit))
         let leadIDs = Set(lead.map(\.id))
-        let others = Array(appHits.filter { !leadIDs.contains($0.id) }.prefix(limit - lead.count))
-        let first = attach(commands.filter { !calledIDs.contains($0.id) }, to: lead)
-        let second = attach(first.rest, to: others)
-        return (byOwnName + first.rows + byAlias + second.rows + second.rest, lead.count + others.count)
+        let apps = lead + Array(appHits.filter { !leadIDs.contains($0.id) }.prefix(limit - lead.count))
+
+        // 段的先后：先比「怎么被叫中的」，再比段首的分，再按 应用 → 插件 → 操作
+        func rank(_ kind: SearchSectionKind, _ rows: [SearchRow]) -> (tier: Int, score: Int) {
+            guard let first = rows.first else { return (-1, 0) }
+            let tier: Int
+            if kind == .apps {
+                tier = rows.contains { calledByName($0, query) } ? 2 : 0
+            } else {
+                tier = calledByOwnName(first, query) ? 3 : calledByName(first, query) ? 1 : 0
+            }
+            // 模糊命中的严格得分是 nil，当最低
+            return (tier, score(of: first, query: query) ?? 0)
+        }
+        let candidates: [(kind: SearchSectionKind, rank: (tier: Int, score: Int))] =
+            [(.apps, rank(.apps, apps)), (.plugins, rank(.plugins, plugins)), (.ops, rank(.ops, opsInline ? ops : []))]
+        let order = candidates.enumerated().sorted { a, b in
+            if a.element.rank.tier != b.element.rank.tier { return a.element.rank.tier > b.element.rank.tier }
+            if a.element.rank.score != b.element.rank.score { return a.element.rank.score > b.element.rank.score }
+            return a.offset < b.offset
+        }.map(\.element.kind)
+        return FrontSections(apps: apps, plugins: plugins, ops: ops, opsInline: opsInline, order: order,
+                             shownApps: apps.count)
     }
 
     /// 这一行是不是被输入精准叫出了名字：命令看标题和别名，App 看名字和英文原名（不看访达注释和 bundle id）。
@@ -2281,23 +2366,6 @@ final class TabSearchModel: ObservableObject {
     private func calledByOwnName(_ row: SearchRow, _ query: String) -> Bool {
         guard case .appCommand(let command, _) = row else { return false }
         return TabSearch.callsByName(query, names: [command.title] + commandKeywords(command.id))
-    }
-
-    /// 把命令插到各自 App 那一行后面。没跟上的（App 没在这几行里）放进 `rest`，由调用方垫在段尾。
-    private func attach(_ commands: [SearchRow], to rows: [SearchRow]) -> (rows: [SearchRow], rest: [SearchRow]) {
-        guard !commands.isEmpty else { return (rows, []) }
-        var used = Set<String>()
-        var out: [SearchRow] = []
-        for row in rows {
-            out.append(row)
-            guard case .app(let app) = row else { continue }
-            for command in commands {
-                guard case .appCommand(_, let owner) = command, owner?.path == app.path, !used.contains(command.id) else { continue }
-                used.insert(command.id)
-                out.append(command)
-            }
-        }
-        return (out, commands.filter { !used.contains($0.id) })
     }
 
     /// 「应用」段：App 和 App 里的具体窗口一起按得分排（打「豌豆」时小程序和同名的 App 比分），
@@ -2344,12 +2412,20 @@ final class TabSearchModel: ObservableObject {
                   identity: app.path, name: app.name, alias: app.alternateName, abbreviations: true)
     }
 
-    /// 某一行对当前输入的得分（「最佳匹配」跨段比分用）。
+    /// 「全部」里文件夹只比名字：路径里的 Documents、Dev 会让一串项目文件夹全命中，把标签挤下去。
+    /// 「文件夹」模式照旧连路径一起比（只有文件夹，打上一级目录名找一组正好）。记忆按路径记，两边同一本账。
+    private func allFolderCandidate(_ folder: FavoriteFolder) -> SearchCandidate {
+        candidate(title: folder.name, url: "", identity: folder.path)
+    }
+
+    /// 某一行对当前输入的得分（「最佳匹配」跨段比分、前面几段谁在前）。
     private func score(of row: SearchRow, query: String) -> Int? {
         let c: SearchCandidate
         switch row {
         case .app(let a):        c = appCandidate(a)
         case .window(let w):     c = windowCandidate(w)
+        case .appCommand(let command, let app): c = commandCandidate(command, app)
+        case .folder(let f):     c = allFolderCandidate(f)
         case .tab(let item):     c = candidate(title: item.tab.title, url: item.tab.url)
         case .closed(let entry): c = candidate(title: entry.title, url: entry.url)
         case .bookmark(let bm):  c = candidate(title: bm.title, url: bm.url)
@@ -2702,8 +2778,8 @@ private struct TabSearchView: View {
             defaultOpenerIcon: model.openers.first.flatMap { model.icons["file:" + $0.path] },
             compact: model.actionTarget != nil,
             duplicates: { if case .tab(let item) = row { return model.duplicateCount(of: item) } else { return 1 } }(),
-            inRecent: model.showingRecent,
-            recentAgo: model.showingRecent ? relativeTime(msEpoch: model.recentLeftAt[row.id]) : nil,
+            mixed: model.inMixedSection(index),
+            leftAgo: relativeTime(msEpoch: model.recentLeftAt[row.id]),
             appRunning: { if case .app(let app) = row { return model.isRunning(app) } else { return false } }(),
             armed: model.armedID == row.id,
             processExited: model.exitedProcesses.contains(row.id),
@@ -3318,7 +3394,7 @@ private struct SearchRowView: View {
     let closable: Bool
     /// 非 nil 时行首图标右下角叠这个浏览器的图标（跨浏览器搜索、多浏览器；「最近使用」里一律画）。
     let browserBadge: String?
-    /// 跨浏览器搜索、同一个浏览器开了多个 Profile：行尾写是哪个 Profile 的（「最近使用」里写在第二行）。
+    /// 跨浏览器搜索、同一个浏览器开了多个 Profile：行尾写是哪个 Profile 的（混排段里写在第二行）。
     var profileBadge: String? = nil
     /// 「搜索」操作行行首画的浏览器（搜索会发给它）。
     let searchBrowser: String?
@@ -3329,10 +3405,11 @@ private struct SearchRowView: View {
     var compact = false
     /// 活标签：同网址的一共几个（>1 行尾标「重复」）。
     var duplicates = 1
-    /// 在「最近使用」里（标签和 App 混排）：App 行第二行写「应用」而不是所在目录。
-    var inRecent = false
-    /// 「最近使用」里行尾写的「x 前」：离开它多久了（不是切到它多久了）。
-    var recentAgo: String? = nil
+    /// 在混排段里（最近使用、推荐、最佳匹配）：副标题开头写分类名（标签写浏览器名）。
+    var mixed = false
+    /// 标签、App、窗口行尾写的「x 前」：离开它多久了（不是切到它多久了，用户 2026-09-29 定的口径，
+    /// 2026-11-23 起所有表都这么写）。
+    var leftAgo: String? = nil
     /// App 行：正在运行（模型缓存的结果，见 `TabSearchModel.runningApps`）。
     var appRunning = false
     /// 按了一次回车、等第二次确认（结束进程、退出 App）：字标红，行尾写「再按 ↩ 确认」。
@@ -3371,29 +3448,32 @@ private struct SearchRowView: View {
         return false
     }
 
-    /// 书签的副标题是「文件夹 · 完整地址」（用户要看到地址；放不下末尾省略），根下的只有地址。
+    /// 副标题写它在哪、属于谁（统一写法，用户 2026-11-23 定的）。分在哪一类由分组头说；混排段（`mixed`）
+    /// 没有这样的分组头，开头加分类名（「最近关闭 · github.com」）。「运行中」不在这里，由 `showsRunning`
+    /// 接在末尾、带一个绿点。书签是「书签文件夹 · 完整地址」（用户要看到地址；放不下末尾省略），根下的只有地址。
     private var subtitle: String {
+        func kind(_ name: String, _ rest: String) -> String {
+            guard mixed else { return rest }
+            return rest.isEmpty ? name : name + " · " + rest
+        }
         switch row {
-        // 「最近使用」里和「应用 · 运行中」对称：「Chrome · 域名」，多 Profile 时「Chrome · 工作 · 域名」
-        case .tab(let item) where inRecent:
+        // 标签在混排段里开头写浏览器名（「Chrome · 域名」，多 Profile 时「Chrome · 工作 · 域名」）：
+        // 和「应用 · 运行中」对称，浏览器名就说明了它是网页
+        case .tab(let item):
             let host = Self.host(of: item.tab.url)
+            guard mixed else { return host }
             return [browserBadge.map(BrowserSupport.displayName), profileBadge, host.isEmpty ? nil : host]
                 .compactMap { $0 }.joined(separator: " · ")
-        case .tab(let item):     return Self.host(of: item.tab.url)
-        case .closed(let entry): return Self.host(of: entry.url)
+        case .closed(let entry): return kind(L10n.t("最近关闭", "Recently closed"), Self.host(of: entry.url))
         case .url(let url, _):   return url
-        case .bookmark(let bm):  return bm.path.isEmpty ? bm.url : "\(bm.path) · \(bm.url)"
-        case .history(let h):    return Self.host(of: h.url)
+        case .bookmark(let bm):  return kind(L10n.t("浏览器书签", "Browser bookmark"), bm.path.isEmpty ? bm.url : "\(bm.path) · \(bm.url)")
+        case .history(let h):    return kind(L10n.t("历史记录", "History"), Self.host(of: h.url))
         case .action(let a):     return a.subtitle
-        case .folder(let f):     return (f.path as NSString).abbreviatingWithTildeInPath
+        case .folder(let f):     return kind(L10n.t("文件夹", "Folder"), (f.path as NSString).abbreviatingWithTildeInPath)
         case .opener(_, let f):  return L10n.t("打开「\(f.name)」", "Open “\(f.name)”")
-        // 「最近使用」里和标签混排：第二行写「应用」说明是什么（写网址的是标签），不写所在目录——
-        // 运行中的 App 多半都在 /Applications，那行字等于没说（用户 2026-09-29 定的）
-        // 开着的写「运行中」（行尾统一写离开多久了，「运行中」挪到这里，用户 2026-09-29 选的）
-        case .app(let a) where inRecent:
-            return [Self.appKind(a), appRunning ? L10n.t("运行中", "Running") : nil, a.comment]
-                .compactMap { $0 }.joined(separator: " · ")
         case .app(let a):
+            // 混排段：「应用 · 注释」「网页应用 · 注释」，开头的词说明是什么（写网址的是标签）
+            if mixed { return [Self.appKind(a), a.comment].compactMap { $0 }.joined(separator: " · ") }
             // 网页应用写「Chrome 网页应用 · v2ex.com」：所在目录（~/Applications/Chrome Apps.localized）说明不了它是什么。
             // 只靠这行字和普通 App 分开，不画浏览器角标：网站 logo + 角标就是标签行的长相（用户 2026-11-23 看过实物否掉的）
             if let web = a.webApp {
@@ -3404,10 +3484,13 @@ private struct SearchRowView: View {
                 let host = Self.host(of: web.url)
                 return [a.comment, kind, host.isEmpty ? nil : host].compactMap { $0 }.joined(separator: " · ")
             }
-            // 有访达注释就先写注释：搜注释命中时能看出是因为它
-            return [a.comment, (a.path as NSString).deletingLastPathComponent].compactMap { $0 }.joined(separator: " · ")
-        // 副标题写命令的主人：App 的写 App 名，系统命令写 macOS（品牌名不翻译；别用 L10n.t("系统", "System")，
-        // 英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）
+            // 访达注释（搜注释命中时看得出是因为它）、运行中；两样都没有才写所在目录（运行中的 App 多半都在
+            // /Applications，那行字等于没说，用户 2026-09-29 定的；但第二行也别空着）
+            if let comment = a.comment { return comment }
+            return appRunning ? "" : (a.path as NSString).deletingLastPathComponent
+        // 副标题写作用对象或主人：窗口命令写「Muxy 的窗口」，App 的命令写 App 名，系统级的写 macOS（品牌名不翻译；
+        // 别用 L10n.t("系统", "System")，英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）。
+        // 插件列表的入口（股票…）给的是空串：标题就是插件名，分组头又写着「插件」
         case .appCommand(let c, let a): return c.subtitle ?? a?.name ?? "macOS"
         case .window(let w):     return w.subtitle
         // App：「应用 · 18 个进程」；单独的进程：「PID 123 · 命令行」——十几个 node 时只看名字分不出谁是谁，
@@ -3423,6 +3506,15 @@ private struct SearchRowView: View {
         // 所在位置（家目录写成 ~，iCloud 云盘写「iCloud 云盘」），同名文件靠它分
         case .file(let f):       return f.folder
         case .command, .openWith, .selection, .selectionOpener, .calculation, .pluginAction: return ""
+        }
+    }
+
+    /// 副标题末尾接「运行中 ●」：开着的 App（哪张表里都一样，原来「全部」里是行尾呼吸的绿点）、小程序（开着才有窗口）。
+    private var showsRunning: Bool {
+        switch row {
+        case .app: return appRunning
+        case .window(let w): return w.kind == .miniProgram
+        default: return false
         }
     }
 
@@ -3523,39 +3615,26 @@ private struct SearchRowView: View {
                         .background(Capsule().fill(Color.primary.opacity(0.08)))
                 }
             }
-            if !compact, !subtitle.isEmpty {
-                if inRecent, case .app(let app) = row, appRunning {
-                    // 「最近使用」里开着的 App：「应用 · 运行中 ●」，灰点「·」分隔、绿点在最后（用户 2026-09-29 定的，
-                    // 试过「应用 · ● 运行中」两个点挨着、「应用 ● 运行中」都不要）。有访达注释放中间，绿点总在行尾。
-                    // 5pt 和小字的小写高度相当；不呼吸：这张表里开着的 App 有十来个，一起呼吸太抢眼
-                    HStack(spacing: 4) {
-                        Text([Self.appKind(app), app.comment, L10n.t("运行中", "Running")]
-                            .compactMap { $0 }.joined(separator: " · "))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Circle()
-                            .fill(Color(nsColor: .systemGreen))
-                            .frame(width: 5, height: 5)
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
-                } else if case .window(let window) = row, window.kind == .miniProgram {
-                    // 小程序开着才有窗口：和开着的 App 一个写法「小程序 · 运行中 ●」
-                    HStack(spacing: 4) {
-                        Text(window.subtitle + " · " + L10n.t("运行中", "Running"))
-                        Circle()
-                            .fill(Color(nsColor: .systemGreen))
-                            .frame(width: 5, height: 5)
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
-                } else {
-                    Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
+            if !compact, showsRunning {
+                // 开着的 App、小程序：「应用 · 运行中 ●」，灰点「·」分隔、绿点在最后（用户 2026-09-29 定的，
+                // 试过「应用 · ● 运行中」两个点挨着、「应用 ● 运行中」都不要）。有访达注释放中间，绿点总在行尾。
+                // 5pt 和小字的小写高度相当；不呼吸：开着的 App 一列十来个，一起呼吸太抢眼
+                HStack(spacing: 4) {
+                    Text((subtitle.isEmpty ? "" : subtitle + " · ") + L10n.t("运行中", "Running"))
                         .lineLimit(1)
-                        .truncationMode(.tail)
+                        .truncationMode(.middle)
+                    Circle()
+                        .fill(Color(nsColor: .systemGreen))
+                        .frame(width: 5, height: 5)
                 }
+                .font(.system(size: 11))
+                .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
+            } else if !compact, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.primary.opacity(dimmed ? 0.32 : 0.42))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3600,8 +3679,10 @@ private struct SearchRowView: View {
             .buttonStyle(.plain)
             .help(L10n.t("关闭标签", "Close tab"))
         } else {
-            // 浏览器图标在行首角标上，行尾只剩 Profile 名（「最近使用」里它写在第二行）和时间
-            if let profileBadge, !inRecent {
+            // 行尾只放时间和状态，不写分类名（用户 2026-11-23 定的统一写法：分类由分组头、混排段由副标题开头说）。
+            // 时间一律「x 前」，含义按分类固定：标签 / App / 窗口是离开它多久了，最近关闭是关闭时间，历史是访问时间，
+            // 文件是打开时间。浏览器图标在行首角标上，Profile 名写在这里（混排段里写在第二行）
+            if let profileBadge, !mixed {
                 Text(profileBadge)
                     .font(.system(size: 10))
                     .foregroundStyle(Color.primary.opacity(0.45))
@@ -3623,14 +3704,14 @@ private struct SearchRowView: View {
                     Text(L10n.t("当前", "Current"))
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
-                } else if let ago = inRecent ? recentAgo : item.tab.relativeLastAccessed {
+                } else if let ago = leftAgo ?? item.tab.relativeLastAccessed {
                     Text(ago)
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
             case .closed(let entry):
                 if let ago = relativeTime(msEpoch: entry.closedAt) {
-                    Text(L10n.t("\(ago)关闭", "closed \(ago)"))
+                    Text(ago)
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
@@ -3639,12 +3720,10 @@ private struct SearchRowView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Color.primary.opacity(0.30))
             case .bookmark:
-                Text(L10n.t("浏览器书签", "Browser bookmark"))
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color.primary.opacity(0.30))
+                EmptyView()
             case .history(let h):
                 if let ago = relativeTime(msEpoch: h.lastVisitTime) {
-                    Text(L10n.t("\(ago)访问", "visited \(ago)"))
+                    Text(ago)
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
@@ -3659,37 +3738,14 @@ private struct SearchRowView: View {
                         .frame(width: 18, height: 18)
                         .help(opener.name)
                 }
-            case .app(let a):
-                // 「最近使用」里前台那个 App 和当前标签一样标「当前」
+            case .app, .window:
+                // 前台那个 App（小程序）和当前标签一样标「当前」；开没开着写在第二行
                 if isCurrent {
                     Text(L10n.t("当前", "Current"))
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
-                } else if inRecent {
-                    // 「最近使用」里行尾统一写离开多久了；开没开着写在第二行
-                    if let recentAgo {
-                        Text(recentAgo)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color.primary.opacity(0.30))
-                    }
-                } else if appRunning {
-                    RunningDot()
-                }
-            case .window:
-                // 窗口都开着，不画「运行中」；「最近使用」里和别的行一样写离开多久了
-                if isCurrent {
-                    Text(L10n.t("当前", "Current"))
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.primary.opacity(0.30))
-                } else if inRecent, let recentAgo {
-                    Text(recentAgo)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.primary.opacity(0.30))
-                }
-            case .appCommand:
-                // 一级里它和 App 挨着、图标一样，写明是命令；二级里全是操作，不用写
-                if !compact {
-                    Text(L10n.t("命令", "Command"))
+                } else if let leftAgo {
+                    Text(leftAgo)
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
@@ -3713,11 +3769,12 @@ private struct SearchRowView: View {
                 PluginRowTrailing(row: r)
             case .file(let f):
                 if let ago = relativeTime(msEpoch: f.lastUsed.timeIntervalSince1970 * 1000) {
-                    Text(L10n.t("\(ago)打开", "opened \(ago)"))
+                    Text(ago)
                         .font(.system(size: 10))
                         .foregroundStyle(Color.primary.opacity(0.30))
                 }
-            case .command, .openWith, .selection, .selectionOpener, .calculation, .pluginAction:
+            // 插件的命令：分在哪一类由分组头说，行尾不再写「命令」（用户 2026-11-23：面板里没有「命令」这个说法）
+            case .appCommand, .command, .openWith, .selection, .selectionOpener, .calculation, .pluginAction:
                 EmptyView()
             }
         }
@@ -3894,96 +3951,6 @@ private struct ProcessMetric: View {
                 .frame(minWidth: width, alignment: .trailing)
         }
         .foregroundStyle(Color.primary.opacity(0.55))
-    }
-}
-
-/// 运行中的 App 行尾：呼吸的绿点 + 「运行中」（用户 2026-09-27 定的；只放点不放字被否了，
-/// 光一个点看不出是什么意思）。系统开了「减少动态效果」就是静止的点。
-///
-/// 呼吸是图层上的 `CABasicAnimation`（`BreathingDotView`），**别换回 SwiftUI 的
-/// `.animation(.repeatForever)` 或 TimelineView**：那两种都由 SwiftUI 在主线程逐帧重排重画
-/// 整个 hosting view（连行里的 App 图标一起重新栅格化），而面板常驻、关掉只是 orderOut，
-/// 藏起来照样每秒 60 帧。2026-10-13 实测：关面板时列表里留着几个运行中的 App，空闲 CPU
-/// 一直 40%+，直到下次打开换了内容才停。图层动画在渲染服务里跑，显示和藏起来主线程都是 0。
-private struct RunningDot: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: 5) {
-            BreathingDot(animated: !reduceMotion)
-                .frame(width: 7, height: 7)
-            Text(L10n.t("运行中", "Running"))
-                .font(.system(size: 10))
-                .foregroundStyle(Color.primary.opacity(0.30))
-        }
-    }
-}
-
-private struct BreathingDot: NSViewRepresentable {
-    let animated: Bool
-    func makeNSView(context: Context) -> BreathingDotView { BreathingDotView(animated: animated) }
-    func updateNSView(_ view: BreathingDotView, context: Context) { view.animated = animated }
-}
-
-/// 起点对齐到绝对时钟的整周期（`beginTime` 取过去的某个周期起点），各行出现的时刻
-/// 不同也同起同落。
-private final class BreathingDotView: NSView {
-    private static let halfCycle: CFTimeInterval = 1.2
-    var animated: Bool { didSet { if animated != oldValue { restartAnimation() } } }
-    private let dot = CALayer()
-
-    init(animated: Bool) {
-        self.animated = animated
-        super.init(frame: NSRect(x: 0, y: 0, width: 7, height: 7))
-        wantsLayer = true
-        // 子图层默认带隐式动画，改尺寸 / 换深浅色时别让它自己补间
-        dot.actions = ["bounds": NSNull(), "position": NSNull(),
-                       "backgroundColor": NSNull(), "cornerRadius": NSNull()]
-        layer?.addSublayer(dot)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func layout() {
-        super.layout()
-        dot.frame = bounds
-        dot.cornerRadius = bounds.height / 2
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        updateColor()
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        updateColor()
-        restartAnimation()
-    }
-
-    private func updateColor() {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            dot.backgroundColor = NSColor.systemGreen.cgColor
-        }
-    }
-
-    private func restartAnimation() {
-        dot.removeAllAnimations()
-        guard animated, window != nil else { return }
-        let cycle = Self.halfCycle * 2
-        let now = CACurrentMediaTime()
-        let begin = dot.convertTime(now - now.truncatingRemainder(dividingBy: cycle), from: nil)
-        for (keyPath, to) in [("opacity", 0.3), ("transform.scale", 0.8)] {
-            let anim = CABasicAnimation(keyPath: keyPath)
-            anim.fromValue = 1.0
-            anim.toValue = to
-            anim.duration = Self.halfCycle
-            anim.autoreverses = true
-            anim.repeatCount = .infinity
-            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            anim.beginTime = begin
-            dot.add(anim, forKey: "breathe." + keyPath)
-        }
     }
 }
 

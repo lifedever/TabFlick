@@ -1263,8 +1263,10 @@ final class MRUController {
         let items = searchIsGlobal ? globalSearchItems : searchItems
         let closed = searchIsGlobal ? globalSearchClosed : searchClosed
         let bookmarks = searchIsGlobal ? globalSearchBookmarks : searchBookmarks
-        let recent: (rows: [SearchRow], leftAt: [String: Double]) =
-            searchEmptyContent == .recent ? recentSearchRows(items: items) : ([], [:])
+        // 离开时间每次都算：标签、App、窗口的行尾在哪张表里都写「离开它多久了」（2026-11-23 统一写法）；
+        // 这张表本身只有首页设成「最近使用」时才列。前台 App 也从它认（在别的 App 里按 ⌥Space，那一行标「当前」）
+        let recent = recentSearchRows(items: items)
+        let recentRows = searchEmptyContent == .recent ? recent.rows : []
         // 跨浏览器面板开着时浏览器连上 / 全断了：「在浏览器搜索」那行换成对应浏览器的图标
         if searchIsGlobal {
             let browser = webSearchBrowser
@@ -1278,7 +1280,7 @@ final class MRUController {
         }
         search.update(items: items, closed: closed, bookmarks: bookmarks,
                       folders: searchFolders, apps: appCatalog.ordered, openers: openerProvider?() ?? [],
-                      windows: wechatWindows, recent: recent.rows, recentLeftAt: recent.leftAt,
+                      windows: wechatWindows, recent: recentRows, recentLeftAt: recent.leftAt,
                       icons: iconMap(for: items, closed: closed), animated: animated)
     }
 
@@ -1343,8 +1345,10 @@ final class MRUController {
         //（再往前的命中了也就显示 globe，不值得每次打开都发几百个请求）
         icons.prefetch(closed.prefix(60).map(\.favIconUrl)) { [weak self] in self?.refreshOverlayImages() }
         let bookmarks = global ? globalSearchBookmarks : searchBookmarks
-        let recent: (rows: [SearchRow], leftAt: [String: Double]) =
-            searchEmptyContent == .recent ? recentSearchRows(items: items) : ([], [:])
+        // 离开时间每次都算：标签、App、窗口的行尾在哪张表里都写「离开它多久了」（2026-11-23 统一写法）；
+        // 这张表本身只有首页设成「最近使用」时才列。前台 App 也从它认（在别的 App 里按 ⌥Space，那一行标「当前」）
+        let recent = recentSearchRows(items: items)
+        let recentRows = searchEmptyContent == .recent ? recent.rows : []
         // 多浏览器时行尾用浏览器图标认归属；只有一个浏览器时和浏览器内没区别
         let browsers = Set(items.compactMap(\.browser))
         // App 清单：「全部」模式里应用排第一，所以每次打开都保证清单是新的
@@ -1372,7 +1376,7 @@ final class MRUController {
                     siteSearches: settings.siteSearches,
                     modes: global ? settings.activeGlobalSearchModes : settings.activeSearchModes,
                     allEmptyContent: searchEmptyContent, windows: wechatWindows,
-                    recent: recent.rows, recentLeftAt: recent.leftAt,
+                    recent: recentRows, recentLeftAt: recent.leftAt,
                     icons: iconMap(for: items, closed: closed),
                     // 多个浏览器，或同一个浏览器开了多个 Profile（多条连接）都要标归属
                     global: global, showBrowserBadges: global && (browsers.count > 1 || clients.count > 1),
@@ -1414,8 +1418,8 @@ final class MRUController {
     private static let recentQuitWindow: TimeInterval = 24 * 3600
 
     /// 「最近使用」的行：所有浏览器的标签 + 运行中的普通 App + 24 小时内用过、已退出的 App
-    /// （菜单栏小工具、TabFlick 自己不算），按最近用过排（规则在 `RecentMix`）。
-    /// 只在设成「最近使用」时算，打开和刷新面板时各一次。
+    /// （菜单栏小工具、TabFlick 自己不算），按最近用过排（规则在 `RecentMix`），连同每一项离开它的时间。
+    /// 打开和刷新面板时各算一次（不是每次按键）：离开时间各张表的行尾都要用，行只在设成「最近使用」时列。
     private func recentSearchRows(items: [SwitcherItem]) -> (rows: [SearchRow], leftAt: [String: Double]) {
         let own = Bundle.main.bundleIdentifier
         var apps: [AppEntry] = []

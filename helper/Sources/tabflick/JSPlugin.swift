@@ -48,13 +48,14 @@ final class JSPlugin: Plugin {
     }
 
     /// 搜索面板里进列表的命令：名字后面带「…」（回车不执行、而是进一层，同「结束进程…」「打开方式…」）。
-    /// 关键词带上插件各语言的名字：界面是英文时打「股票」也要能找到。
+    /// 关键词带上插件各语言的名字：界面是英文时打「股票」也要能找到。副标题给空串：标题就是插件名，
+    /// 分组头又写着「插件」，原来写的「插件」两个字是重复（用户 2026-11-23）。
     var listCommand: AppCommand? {
         guard manifest.contributes.contains(.list) else { return nil }
         let name = pick(manifest.listTitles) ?? title
         return AppCommand(id: "plugin." + id, bundleID: nil, title: name + "…",
                           keywords: manifest.listKeywords + Array(manifest.names.values) + Array(manifest.listTitles.values),
-                          symbol: symbol, subtitle: L10n.t("插件", "Plugins"), tint: tint, icon: icon, action: .pluginList(id))
+                          symbol: symbol, subtitle: "", tint: tint, icon: icon, action: .pluginList(id))
     }
     var listPlaceholder: String? { pick(manifest.listPlaceholders) }
     var hasOwnSettings: Bool { !manifest.choices.isEmpty || !manifest.inputs.isEmpty || manifest.usesUpDownColors }

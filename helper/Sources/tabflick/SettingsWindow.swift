@@ -919,7 +919,8 @@ private struct SearchPane: View {
                                                              title: L10n.t("打开方式…", "Open With…"),
                                                              symbol: "arrow.up.forward.app"))
             } header: {
-                Text(L10n.t("命令", "Commands"))
+                // 和搜索面板里的分组一个叫法：「打开方式…」在「操作」那段（面板里没有「命令」这个说法，用户 2026-11-23）
+                Text(L10n.t("操作", "Actions"))
             } footer: {
                 CommandKeywordFooter()
             }
@@ -1435,8 +1436,8 @@ private struct CommandKeywordRow: View {
 
 private struct CommandKeywordFooter: View {
     var body: some View {
-        Text(L10n.t("打出关键词，这条命令排在最前，回车就执行。多个关键词用空格分开，不填就按命令名搜。",
-                    "Type a keyword and that command comes first; ↩ runs it. Separate keywords with spaces. Leave it empty to search by the command's name."))
+        Text(L10n.t("打出关键词，这一项排在最前，回车就执行。多个关键词用空格分开，不填就按名字搜。",
+                    "Type a keyword and this item comes first; ↩ runs it. Separate keywords with spaces. Leave it empty to search by name."))
             .font(.system(size: 11))
             .foregroundStyle(.secondary)
     }

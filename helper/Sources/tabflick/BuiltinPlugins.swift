@@ -37,7 +37,7 @@ final class CalculatorPlugin: Plugin {
 @MainActor
 final class AppCommandsPlugin: Plugin {
     let id = "appCommands"
-    var title: String { L10n.t("App 命令", "App Commands") }
+    var title: String { L10n.t("App 快捷操作", "App Actions") }
     var summary: String {
         L10n.t("Amphetamine 开始、结束会话，锁定屏幕。", "Start or end an Amphetamine session, and lock the screen.")
     }
@@ -69,7 +69,7 @@ final class AppCommandsPlugin: Plugin {
 @MainActor
 final class WindowCommandsPlugin: Plugin {
     let id = "windowCommands"
-    var title: String { L10n.t("窗口命令", "Window Commands") }
+    var title: String { L10n.t("窗口管理", "Window Management") }
     var summary: String {
         L10n.t("居中、最大化、左右半屏、移到下一个显示器等，动的是打开搜索面板前在用的那个窗口。",
                "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.")

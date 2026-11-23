@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import SwiftUI
 
 /// 内置命令：按 App 写死的几条高频操作（2026-09-28 用户定的「内置扩展」）。搜索面板里有输入且
-/// 命中时跟在它的 App 下面（一级），App 的 ⌘↩ 里也列（二级）。只列装了的 App 的。
+/// 命中时列在「插件」段、副标题写 App 名（一级；2026-11-23 起不再跟在 App 下面），App 的 ⌘↩ 里也列（二级）。只列装了的 App 的。
 ///
 /// 为什么写死：试过读别的 App 的菜单当命令，用户看了实物说不是要的 —— 菜单里名字五花八门
 ///（Amphetamine 的「无限期」「5分钟」），搜不准；要的是 Raycast 扩展那种挑过的两三条。
@@ -13,7 +13,7 @@ import SwiftUI
 /// 加一个 App = 在 `all` 里加几条。没有脚本接口（`sdef <App路径>` 查不到命令）的 App 做不了。
 ///
 /// 系统命令（`bundleID` 为 nil：锁屏，用户 2026-09-28 点名要的；窗口命令，见 `WindowCommands`）不挂在任何
-/// App 下面：一级命中时单独列在「应用」段末尾，画 SF Symbol、副标题写「macOS」（窗口命令写「窗口 · App 名」），
+/// App 下面：一级命中时列在「插件」段（经插件进面板），画 SF Symbol、副标题写「macOS」（窗口命令写「App 名 的窗口」），
 /// 二级里没有。
 struct AppCommand: Identifiable {
     enum Action {
@@ -178,7 +178,7 @@ enum AppCommands {
 }
 
 /// 「打开方式…」（2026-10-17，照 Raycast 的 Open With）：访达在前台时打开面板，打「open」「打开方式」
-/// 命中它，回车列出能打开访达里选中项目的 App，挑一个打开。系统命令，和锁屏、窗口命令一样列在「应用」段末尾；
+/// 命中它，回车列出能打开访达里选中项目的 App，挑一个打开。系统命令，列在「操作」段（核心功能，不归插件）；
 /// 选中它面板不关，列表换成那些 App（同 ⌘↩ 的二级，Esc 退回）。
 enum OpenWithCommand {
     /// selection 是打开面板时预读到的选中项：副标题写它的名字，回车前就看得到要开的是什么。
@@ -194,7 +194,7 @@ enum OpenWithCommand {
 }
 
 /// 「结束进程…」（2026-10-26 用户要的，照 Raycast 的 Kill Process）：打「kill」「进程」「端口」命中，
-/// 回车列表换成你自己的进程（`ProcessList.swift`）。系统命令，和锁屏一样列在「应用」段末尾。
+/// 回车列表换成你自己的进程（`ProcessList.swift`）。系统命令，和锁屏一样列在「插件」段。
 enum ProcessesCommand {
     static let symbol = "xmark.octagon.fill"
     /// 插件图标的底色（设置里、面板命令行、进程列表底栏三处同一个）
@@ -213,7 +213,7 @@ enum ProcessesCommand {
 }
 
 /// 「最近文件…」（2026-11-13 用户要的）：打「最近」「recent」「文件」命中，回车列表换成 30 天内打开过的文件
-///（`RecentFiles.swift`，和访达「最近使用」同一个来源）。系统命令，和「结束进程…」一样列在「应用」段末尾。
+///（`RecentFiles.swift`，和访达「最近使用」同一个来源）。系统命令，和「结束进程…」一样列在「插件」段。
 enum RecentFilesCommand {
     static let symbol = "doc.badge.clock.fill"
     /// 插件图标的底色（设置里、面板命令行、列表底栏三处同一个）
