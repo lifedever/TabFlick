@@ -466,5 +466,7 @@
   "No files opened in the last 30 days": "Aucun fichier ouvert ces 30 derniers jours",
   "No matching files": "Aucun fichier correspondant",
   "opened {0}": "ouvert {0}",
-  "iCloud Drive": "iCloud Drive"
+  "iCloud Drive": "iCloud Drive",
+  "{0} Web App": "App web de {0}",
+  "Web App": "App web"
 }

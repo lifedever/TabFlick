@@ -466,5 +466,7 @@
   "No files opened in the last 30 days": "過去 30 日間に開いたファイルはありません",
   "No matching files": "一致するファイルはありません",
   "opened {0}": "{0}に開いた",
-  "iCloud Drive": "iCloud Drive"
+  "iCloud Drive": "iCloud Drive",
+  "{0} Web App": "{0} Webアプリ",
+  "Web App": "Webアプリ"
 }

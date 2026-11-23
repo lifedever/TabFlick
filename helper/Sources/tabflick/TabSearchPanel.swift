@@ -2337,8 +2337,10 @@ final class TabSearchModel: ObservableObject {
     private func appCandidate(_ app: AppEntry) -> SearchCandidate {
         // 英文原名是别名、和显示名同档（打 photo 找「照片」）；bundle id 放进「网址」栏，得分低于名字命中
         // 访达注释拼进标题一起匹配（和显示名同档、也认拼音）：名字古怪的 App 靠它起个好认的名字
+        // 网页应用的网站域名也放进「网址」栏：打 v2ex.com 能找到 V2EX 这个网页应用
         candidate(title: [app.name, app.comment].compactMap { $0 }.joined(separator: " "),
-                  url: app.bundleID ?? "",
+                  url: [app.bundleID, app.webApp.flatMap { URL(string: $0.url)?.host }].compactMap { $0 }
+                      .joined(separator: " "),
                   identity: app.path, name: app.name, alias: app.alternateName, abbreviations: true)
     }
 
@@ -3389,11 +3391,21 @@ private struct SearchRowView: View {
         // 运行中的 App 多半都在 /Applications，那行字等于没说（用户 2026-09-29 定的）
         // 开着的写「运行中」（行尾统一写离开多久了，「运行中」挪到这里，用户 2026-09-29 选的）
         case .app(let a) where inRecent:
-            return [L10n.t("应用", "App"), appRunning ? L10n.t("运行中", "Running") : nil, a.comment]
+            return [Self.appKind(a), appRunning ? L10n.t("运行中", "Running") : nil, a.comment]
                 .compactMap { $0 }.joined(separator: " · ")
-        // 有访达注释就先写注释：搜注释命中时能看出是因为它
-        case .app(let a):        return [a.comment, (a.path as NSString).deletingLastPathComponent]
-                                     .compactMap { $0 }.joined(separator: " · ")
+        case .app(let a):
+            // 网页应用写「Chrome 网页应用 · v2ex.com」：所在目录（~/Applications/Chrome Apps.localized）说明不了它是什么。
+            // 只靠这行字和普通 App 分开，不画浏览器角标：网站 logo + 角标就是标签行的长相（用户 2026-11-23 看过实物否掉的）
+            if let web = a.webApp {
+                let kind = web.browser.map { browser in
+                    let name = BrowserSupport.displayName(browser)
+                    return L10n.t("\(name) 网页应用", "\(name) Web App")
+                } ?? L10n.t("网页应用", "Web App")
+                let host = Self.host(of: web.url)
+                return [a.comment, kind, host.isEmpty ? nil : host].compactMap { $0 }.joined(separator: " · ")
+            }
+            // 有访达注释就先写注释：搜注释命中时能看出是因为它
+            return [a.comment, (a.path as NSString).deletingLastPathComponent].compactMap { $0 }.joined(separator: " · ")
         // 副标题写命令的主人：App 的写 App 名，系统命令写 macOS（品牌名不翻译；别用 L10n.t("系统", "System")，
         // 英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）
         case .appCommand(let c, let a): return c.subtitle ?? a?.name ?? "macOS"
@@ -3421,6 +3433,11 @@ private struct SearchRowView: View {
     private var isTab: Bool {
         if case .tab = row { return true }
         return false
+    }
+
+    /// 「最近使用」里 App 行第二行开头那个词：网页应用和普通 App 分开写。
+    private static func appKind(_ app: AppEntry) -> String {
+        app.webApp == nil ? L10n.t("应用", "App") : L10n.t("网页应用", "Web App")
     }
 
     private static func host(of url: String) -> String {
@@ -3512,7 +3529,7 @@ private struct SearchRowView: View {
                     // 试过「应用 · ● 运行中」两个点挨着、「应用 ● 运行中」都不要）。有访达注释放中间，绿点总在行尾。
                     // 5pt 和小字的小写高度相当；不呼吸：这张表里开着的 App 有十来个，一起呼吸太抢眼
                     HStack(spacing: 4) {
-                        Text([L10n.t("应用", "App"), app.comment, L10n.t("运行中", "Running")]
+                        Text([Self.appKind(app), app.comment, L10n.t("运行中", "Running")]
                             .compactMap { $0 }.joined(separator: " · "))
                             .lineLimit(1)
                             .truncationMode(.middle)

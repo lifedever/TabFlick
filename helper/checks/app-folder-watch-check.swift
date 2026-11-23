@@ -10,9 +10,11 @@ import Foundation
 @main
 struct AppFolderWatchCheck {
     static func main() {
-        let roots = ["/Applications", "/Applications/Utilities", "/Users/me/Applications"]
+        let roots = ["/Applications", "/Users/me/Applications"]
         let known: Set<String> = ["/Applications/Safari.app", "/Applications/Google Chrome.app",
-                                  "/Applications/Utilities/Terminal.app", "/Users/me/Applications/Chrome Apps.app"]
+                                  "/Applications/Utilities/Terminal.app", "/Users/me/Applications/Chrome Apps.app",
+                                  "/Users/me/Applications/Chrome Apps.localized/V2EX.app",
+                                  "/Applications/Adobe Photoshop 2025/Adobe Photoshop 2025.app"]
         func check(_ path: String, _ expected: Bool, _ why: String) {
             let got = AppFolderWatcher.isRelevant(path, roots: roots, known: known)
             precondition(got == expected, "\(path): expected \(expected), got \(got) — \(why)")
@@ -37,10 +39,19 @@ struct AppFolderWatchCheck {
         check("/Applications/Utilities/Terminal.app/Contents/Resources/", false, "Utilities 里已有的要按 Utilities 根算")
         check("/Users/me/Applications/Chrome Apps.app/Contents/", false, "家目录里已有的")
 
-        // 包外的杂物、子文件夹里的（只扫一层，不归清单管）
-        check("/Applications/Adobe Photoshop 2025/Photoshop.app/Contents/", false, "子文件夹里的不扫")
+        // 下面一层的文件夹（扫描也只往下一层）：Chrome 的网页应用、厂商文件夹
+        check("/Users/me/Applications/Chrome Apps.localized/", true, "装 / 删网页应用：文件夹本身变了")
+        check("/Users/me/Applications/Chrome Apps.localized/Notion.app/Contents/", true, "文件夹里新装的网页应用")
+        check("/Users/me/Applications/Chrome Apps.localized/V2EX.app/Contents/", false, "文件夹里已有的，浏览器更新时重写它")
+        check("/Applications/Adobe Photoshop 2025/Photoshop Beta.app/Contents/", true, "厂商文件夹里新装的")
+        check("/Applications/Adobe Photoshop 2025/Adobe Photoshop 2025.app/Contents/", false, "厂商文件夹里已有的")
+        check("/Applications/Adobe Photoshop 2025/Presets/Brushes/", false, "厂商文件夹里的杂物")
+        check("/Applications/Adobe Photoshop 2025/Plug-ins/Foo.app/Contents/", false, "两层以下的不扫")
+        check("/Applications/Xcode-tmp/", true, "下面一层的文件夹本身变了，可能放进了 App")
+        check("/Users/me/Applications/Chrome Apps.localized/.localized/", false, "文件夹里的隐藏目录")
+        check("/Applications/.Trashes/", false, "隐藏的文件夹不扫")
+        check("/Applications/.Trashes/Old.app/Contents/", false, "隐藏文件夹里的不扫")
         check("/Applications/.DS_Store", false, "目录里的杂物")
-        check("/Applications/Xcode-tmp/", false, "不是 .app 的子目录")
 
         // 不在任何根下面
         check("/Library/Application Support/", false, "别的目录")

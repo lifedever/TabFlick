@@ -21,6 +21,16 @@ struct AppEntry: Identifiable, Equatable {
     var useCount: Int? = nil
     /// 常用度（0–2 档），`AppCatalog.ordered` 填；有输入时同分的 App 按它排先后（`AppRanking.byPrior`）。
     var prior = 0
+    /// 浏览器装的网页应用（Chrome「安装此网站为应用」生成的 V2EX.app 这种）：搜索面板里副标题写
+    /// 「Chrome 网页应用 · v2ex.com」，和普通 App 分得开。
+    var webApp: WebApp? = nil
+
+    struct WebApp: Equatable {
+        /// 网站地址（Info.plist 的 `CrAppModeShortcutURL`）。
+        let url: String
+        /// 装它的那个浏览器（bundle id）；认不出或那个浏览器已经删了是 nil。
+        let browser: String?
+    }
 
     var id: String { path }
     /// 最近切到时间的记账 key：有 bundle id 用它，没有用路径。
@@ -36,7 +46,7 @@ struct AppEntry: Identifiable, Equatable {
     }
 }
 
-/// 已安装 App 的清单：扫几个固定目录，一层深（Utilities 单独算一个目录）。
+/// 已安装 App 的清单：扫几个固定目录，和它们下面一层的文件夹（Utilities、浏览器装网页应用的「Chrome Apps」）。
 ///
 /// 不走 Spotlight：`NSMetadataQuery` 要起一次索引查询、回调异步、Spotlight 关掉就
 /// 没结果；几个目录 `contentsOfDirectory` 一共几十毫秒，放后台线程扫，够用。
@@ -233,14 +243,13 @@ final class AppCatalog {
         }.map(\.entry)
     }
 
+    /// 扫这几个目录和它们下面一层的文件夹（见 `scan`）。
     private nonisolated static let directories: [URL] = {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
             URL(fileURLWithPath: "/Applications", isDirectory: true),
-            URL(fileURLWithPath: "/Applications/Utilities", isDirectory: true),
             home.appendingPathComponent("Applications", isDirectory: true),
             URL(fileURLWithPath: "/System/Applications", isDirectory: true),
-            URL(fileURLWithPath: "/System/Applications/Utilities", isDirectory: true),
         ]
     }()
 
@@ -291,10 +300,17 @@ final class AppCatalog {
         var seen = Set<String>()
         var result: [AppEntry] = []
         let fm = FileManager.default
-        for dir in directories {
+        let folderKeys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey]
+        for root in directories {
             // 不能用 .skipsHiddenFiles：/Applications/Safari.app 是指向 Cryptex 的符号链接，
             // 系统给它打了 hidden 标志（访达照常显示），跳过隐藏项就搜不到 Safari。只滤点开头的。
-            guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
+            guard var items = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: folderKeys) else { continue }
+            // 下面一层的普通文件夹里的 App 也算：Utilities、浏览器装网页应用的「Chrome Apps」（~/Applications/
+            // Chrome Apps.localized/V2EX.app）、厂商自己建的文件夹（Epson Software、腾讯应用宝）。只往下一层；
+            // 符号链接的文件夹不进：有人在 /Applications 里放了指回它自己的 Applications 链接，进去整份清单重复一遍
+            for folder in items where isPlainFolder(folder) {
+                items += (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+            }
             for url in items where url.pathExtension == "app" && !url.lastPathComponent.hasPrefix(".") {
                 let path = url.standardizedFileURL.path
                 guard !seen.contains(path) else { continue }
@@ -308,16 +324,45 @@ final class AppCatalog {
                 let meta = metadata(of: url)
                 let info = bundle?.infoDictionary ?? [:]
                 result.append(AppEntry(name: name,
-                                       alternateName: raw == name ? nil : raw,
+                                       // 应用宝装的安卓 App，Info.plist 里的名字是包名（com.tencent.macapk.com.ss.android.ugc.aweme），
+                                       // 当别名进索引的话打「com」全命中（同 `otherOpeners` 不比 bundle id 那条）
+                                       alternateName: raw == name || looksLikeBundleID(raw) ? nil : raw,
                                        path: path,
                                        bundleID: bundle?.bundleIdentifier,
                                        lastUsed: meta.lastUsed,
                                        comment: meta.comment,
                                        isAgent: Self.flag(info["LSUIElement"]) || Self.flag(info["LSBackgroundOnly"]),
-                                       useCount: meta.useCount))
+                                       useCount: meta.useCount,
+                                       webApp: webApp(info: info, bundleID: bundle?.bundleIdentifier)))
             }
         }
         return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// 应用目录下一层可以往里找 App 的文件夹：真的文件夹（不是符号链接、不是包）、不是隐藏的。
+    private nonisolated static func isPlainFolder(_ url: URL) -> Bool {
+        guard url.pathExtension != "app", !url.lastPathComponent.hasPrefix("."),
+              let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey])
+        else { return false }
+        return values.isDirectory == true && values.isSymbolicLink != true && values.isPackage != true
+    }
+
+    /// Chromium 系浏览器（Chrome、Brave、Edge、夸克…）装的网页应用：Info.plist 带 `CrAppModeShortcutURL`，
+    /// bundle id 是「浏览器的 bundle id + .app. + 应用 id」（com.google.Chrome.app.bbhbmbkf…）。
+    private nonisolated static func webApp(info: [String: Any], bundleID: String?) -> AppEntry.WebApp? {
+        guard let url = info["CrAppModeShortcutURL"] as? String, !url.isEmpty else { return nil }
+        var browser: String?
+        if let bundleID, let marker = bundleID.range(of: ".app.", options: .backwards) {
+            let id = String(bundleID[..<marker.lowerBound])
+            // 浏览器删了还留着它装的网页应用：不写浏览器名（查不到名字时只剩一串 bundle id）
+            browser = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) == nil ? nil : id
+        }
+        return AppEntry.WebApp(url: url, browser: browser)
+    }
+
+    /// 反向域名样的名字（三段以上、没有空格），是包名不是给人看的名字。
+    private nonisolated static func looksLikeBundleID(_ name: String) -> Bool {
+        !name.contains { $0.isWhitespace } && name.split(separator: ".", omittingEmptySubsequences: false).count >= 3
     }
 
     /// Info.plist 里的布尔值有写成 true、1、"1"、"YES" 的。
@@ -360,7 +405,7 @@ final class AppFolderWatcher {
     }
 
     func start() {
-        // 子目录（Utilities）跟着父目录递归就有，只登记最外层且存在的
+        // FSEvents 本来就递归，根有嵌套时只登记最外层；不存在的不登记
         let watched = roots.filter { root in
             FileManager.default.fileExists(atPath: root)
                 && !roots.contains { $0 != root && root.hasPrefix($0 + "/") }
@@ -393,16 +438,22 @@ final class AppFolderWatcher {
         queue.asyncAfter(deadline: .now() + 1, execute: item)
     }
 
-    /// 这条事件路径要不要管（纯函数，`checks/app-folder-watch-check.swift`）。
-    /// 先比长的根：`/Applications/Utilities` 下的事件要按它算，不按 `/Applications`。
+    /// 这条事件路径要不要管（纯函数，`checks/app-folder-watch-check.swift`）。深度和 `AppCatalog.scan` 一样：
+    /// 根和它下面一层的文件夹（Utilities、Chrome Apps.localized）本身变了（条目增删改名），
+    /// 或者往这两层里一个清单还没有的 `.app` 里写，才算。先比长的根（根有嵌套时按里面那个算）。
     nonisolated static func isRelevant(_ path: String, roots: [String], known: Set<String>) -> Bool {
         let path = normalized(path)
         for root in roots.sorted(by: { $0.count > $1.count }) {
             if path == root { return true }
             guard path.hasPrefix(root + "/") else { continue }
-            let top = path.dropFirst(root.count + 1).split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
-            guard top.hasSuffix(".app") else { return false }   // 目录里的杂物、装在子文件夹里的（不扫一层以下）
-            return !known.contains(root + "/" + top)
+            let parts = path.dropFirst(root.count + 1).split(separator: "/").map(String.init)
+            guard let first = parts.first, !first.hasPrefix(".") else { return false }
+            if first.hasSuffix(".app") { return !known.contains(root + "/" + first) }
+            guard parts.count > 1 else { return true }   // 下面一层的文件夹本身变了
+            let second = parts[1]
+            // 文件夹里的杂物、再往下的（不扫两层以下）
+            guard second.hasSuffix(".app"), !second.hasPrefix(".") else { return false }
+            return !known.contains(root + "/" + first + "/" + second)
         }
         return false
     }

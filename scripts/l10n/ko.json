@@ -466,5 +466,7 @@
   "No files opened in the last 30 days": "최근 30일 동안 연 파일 없음",
   "No matching files": "일치하는 파일 없음",
   "opened {0}": "{0} 열림",
-  "iCloud Drive": "iCloud Drive"
+  "iCloud Drive": "iCloud Drive",
+  "{0} Web App": "{0} 웹 앱",
+  "Web App": "웹 앱"
 }

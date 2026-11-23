@@ -466,5 +466,7 @@
   "No files opened in the last 30 days": "30 天內沒有打開過的檔案",
   "No matching files": "沒有符合的檔案",
   "opened {0}": "{0}打開",
-  "iCloud Drive": "iCloud 雲碟"
+  "iCloud Drive": "iCloud 雲碟",
+  "{0} Web App": "{0} 網頁 App",
+  "Web App": "網頁 App"
 }
