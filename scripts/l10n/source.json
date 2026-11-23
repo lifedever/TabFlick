@@ -62,7 +62,7 @@
   "refs": [
    "AppCommands.swift:188",
    "SettingsWindow.swift:919",
-   "TabSearchPanel.swift:451"
+   "TabSearchPanel.swift:454"
   ]
  },
  {
@@ -126,7 +126,7 @@
   "zh": "浏览器标签",
   "refs": [
    "AppSettings.swift:52",
-   "TabSearchPanel.swift:35"
+   "TabSearchPanel.swift:38"
   ]
  },
  {
@@ -135,7 +135,7 @@
   "refs": [
    "AppSettings.swift:53",
    "SettingsShell.swift:46",
-   "TabSearchPanel.swift:39"
+   "TabSearchPanel.swift:42"
   ]
  },
  {
@@ -143,7 +143,8 @@
   "zh": "历史记录",
   "refs": [
    "AppSettings.swift:54",
-   "TabSearchPanel.swift:38"
+   "TabSearchPanel.swift:41",
+   "TabSearchPanel.swift:3470"
   ]
  },
  {
@@ -151,7 +152,7 @@
   "zh": "浏览器书签",
   "refs": [
    "AppSettings.swift:55",
-   "TabSearchPanel.swift:37"
+   "TabSearchPanel.swift:40"
   ]
  },
  {
@@ -159,7 +160,8 @@
   "zh": "最近关闭",
   "refs": [
    "AppSettings.swift:56",
-   "TabSearchPanel.swift:36"
+   "TabSearchPanel.swift:39",
+   "TabSearchPanel.swift:3467"
   ]
  },
  {
@@ -168,7 +170,7 @@
   "refs": [
    "AppSettings.swift:57",
    "SettingsShell.swift:48",
-   "TabSearchPanel.swift:34"
+   "TabSearchPanel.swift:37"
   ]
  },
  {
@@ -334,8 +336,8 @@
   ]
  },
  {
-  "key": "App Commands",
-  "zh": "App 命令",
+  "key": "App Actions",
+  "zh": "App 快捷操作",
   "refs": [
    "BuiltinPlugins.swift:40"
   ]
@@ -348,8 +350,8 @@
   ]
  },
  {
-  "key": "Window Commands",
-  "zh": "窗口命令",
+  "key": "Window Management",
+  "zh": "窗口管理",
   "refs": [
    "BuiltinPlugins.swift:72"
   ]
@@ -401,7 +403,7 @@
   "zh": "没有可以结束的进程",
   "refs": [
    "BuiltinPlugins.swift:208",
-   "TabSearchPanel.swift:2898"
+   "TabSearchPanel.swift:2968"
   ]
  },
  {
@@ -431,7 +433,7 @@
   "zh": "端口 {0}",
   "refs": [
    "BuiltinPlugins.swift:229",
-   "TabSearchPanel.swift:3876"
+   "TabSearchPanel.swift:3928"
   ]
  },
  {
@@ -439,8 +441,8 @@
   "zh": "退出",
   "refs": [
    "BuiltinPlugins.swift:233",
-   "TabSearchPanel.swift:245",
-   "TabSearchPanel.swift:439",
+   "TabSearchPanel.swift:248",
+   "TabSearchPanel.swift:442",
    "main.swift:17"
   ]
  },
@@ -449,7 +451,7 @@
   "zh": "结束",
   "refs": [
    "BuiltinPlugins.swift:233",
-   "TabSearchPanel.swift:245"
+   "TabSearchPanel.swift:248"
   ]
  },
  {
@@ -457,7 +459,7 @@
   "zh": "强制退出",
   "refs": [
    "BuiltinPlugins.swift:234",
-   "TabSearchPanel.swift:442"
+   "TabSearchPanel.swift:445"
   ]
  },
  {
@@ -465,7 +467,7 @@
   "zh": "强制结束",
   "refs": [
    "BuiltinPlugins.swift:234",
-   "TabSearchPanel.swift:441"
+   "TabSearchPanel.swift:444"
   ]
  },
  {
@@ -473,7 +475,7 @@
   "zh": "取消",
   "refs": [
    "BuiltinPlugins.swift:236",
-   "SettingsWindow.swift:1218",
+   "SettingsWindow.swift:1219",
    "UpdateChecker.swift:425"
   ]
  },
@@ -503,7 +505,7 @@
   "zh": "「{0}」还没退出",
   "refs": [
    "BuiltinPlugins.swift:267",
-   "TabSearchPanel.swift:4163"
+   "TabSearchPanel.swift:4125"
   ]
  },
  {
@@ -518,7 +520,7 @@
   "zh": "没有权限结束「{0}」",
   "refs": [
    "BuiltinPlugins.swift:273",
-   "TabSearchPanel.swift:4169"
+   "TabSearchPanel.swift:4131"
   ]
  },
  {
@@ -526,7 +528,7 @@
   "zh": "没能结束「{0}」",
   "refs": [
    "BuiltinPlugins.swift:275",
-   "TabSearchPanel.swift:4171"
+   "TabSearchPanel.swift:4133"
   ]
  },
  {
@@ -611,7 +613,7 @@
   "zh": "已拷贝路径",
   "refs": [
    "ExtensionInstallGuide.swift:81",
-   "MRUController.swift:1716",
+   "MRUController.swift:1720",
    "StatusItemController.swift:759"
   ]
  },
@@ -664,7 +666,7 @@
   "zh": "在访达中显示",
   "refs": [
    "ExtensionInstallGuide.swift:145",
-   "TabSearchPanel.swift:429"
+   "TabSearchPanel.swift:432"
   ]
  },
  {
@@ -680,8 +682,8 @@
   "refs": [
    "FavoriteFolders.swift:407",
    "MRUController.swift:1094",
-   "MRUController.swift:1675",
-   "MRUController.swift:1691"
+   "MRUController.swift:1679",
+   "MRUController.swift:1695"
   ]
  },
  {
@@ -696,14 +698,6 @@
   "zh": "已在 {0} 打开 {1} 个项目",
   "refs": [
    "FavoriteFolders.swift:414"
-  ]
- },
- {
-  "key": "Plugins",
-  "zh": "插件",
-  "refs": [
-   "JSPlugin.swift:57",
-   "SettingsShell.swift:51"
   ]
  },
  {
@@ -773,150 +767,150 @@
   "key": "Couldn't open {0}",
   "zh": "打不开 {0}",
   "refs": [
-   "MRUController.swift:1607"
+   "MRUController.swift:1611"
   ]
  },
  {
   "key": "Couldn't open “{0}”",
   "zh": "打不开「{0}」",
   "refs": [
-   "MRUController.swift:1620"
+   "MRUController.swift:1624"
   ]
  },
  {
   "key": "Couldn't read the Finder selection",
   "zh": "读不到访达里选中的项目",
   "refs": [
-   "MRUController.swift:1655",
-   "MRUController.swift:1660"
+   "MRUController.swift:1659",
+   "MRUController.swift:1664"
   ]
  },
  {
   "key": "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.",
   "zh": "系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「访达」。",
   "refs": [
-   "MRUController.swift:1656",
-   "MRUController.swift:1837"
+   "MRUController.swift:1660",
+   "MRUController.swift:1841"
   ]
  },
  {
   "key": "URL copied",
   "zh": "已拷贝网址",
   "refs": [
-   "MRUController.swift:1709"
+   "MRUController.swift:1713"
   ]
  },
  {
   "key": "Title copied",
   "zh": "已拷贝标题",
   "refs": [
-   "MRUController.swift:1710"
+   "MRUController.swift:1714"
   ]
  },
  {
   "key": "Markdown link copied",
   "zh": "已拷贝 Markdown 链接",
   "refs": [
-   "MRUController.swift:1711"
+   "MRUController.swift:1715"
   ]
  },
  {
   "key": "PID copied",
   "zh": "已拷贝 PID",
   "refs": [
-   "MRUController.swift:1712"
+   "MRUController.swift:1716"
   ]
  },
  {
   "key": "Command line copied",
   "zh": "已拷贝命令行",
   "refs": [
-   "MRUController.swift:1713"
+   "MRUController.swift:1717"
   ]
  },
  {
   "key": "Result copied",
   "zh": "已拷贝结果",
   "refs": [
-   "MRUController.swift:1714"
+   "MRUController.swift:1718"
   ]
  },
  {
   "key": "Calculation copied",
   "zh": "已拷贝算式和结果",
   "refs": [
-   "MRUController.swift:1715"
+   "MRUController.swift:1719"
   ]
  },
  {
   "key": "Reloaded",
   "zh": "已重新加载",
   "refs": [
-   "MRUController.swift:1723"
+   "MRUController.swift:1727"
   ]
  },
  {
   "key": "File copied",
   "zh": "已拷贝文件",
   "refs": [
-   "MRUController.swift:1790"
+   "MRUController.swift:1794"
   ]
  },
  {
   "key": "Couldn't open Get Info",
   "zh": "打不开简介",
   "refs": [
-   "MRUController.swift:1836"
+   "MRUController.swift:1840"
   ]
  },
  {
   "key": "The extension is too old for this",
   "zh": "扩展版本太旧，做不了这个操作",
   "refs": [
-   "MRUController.swift:1866"
+   "MRUController.swift:1870"
   ]
  },
  {
   "key": "Download the latest extension zip, replace the folder, then reload it in chrome://extensions.",
   "zh": "下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
   "refs": [
-   "MRUController.swift:1867",
-   "TabSearchPanel.swift:2946"
+   "MRUController.swift:1871",
+   "TabSearchPanel.swift:3016"
   ]
  },
  {
   "key": "Window reopened",
   "zh": "已恢复窗口",
   "refs": [
-   "MRUController.swift:2103"
+   "MRUController.swift:2107"
   ]
  },
  {
   "key": "Tab reopened",
   "zh": "已恢复标签",
   "refs": [
-   "MRUController.swift:2103"
+   "MRUController.swift:2107"
   ]
  },
  {
   "key": "Nothing to reopen",
   "zh": "没有可恢复的标签",
   "refs": [
-   "MRUController.swift:2107"
+   "MRUController.swift:2111"
   ]
  },
  {
   "key": "Profile {0}",
   "zh": "个人资料 {0}",
   "refs": [
-   "MRUController.swift:2360"
+   "MRUController.swift:2364"
   ]
  },
  {
   "key": "Returned to the pinned URL",
   "zh": "已回到置顶地址",
   "refs": [
-   "MRUController.swift:2711"
+   "MRUController.swift:2715"
   ]
  },
  {
@@ -976,7 +970,7 @@
   "zh": "粘贴",
   "refs": [
    "MainMenu.swift:62",
-   "TabSearchPanel.swift:448"
+   "TabSearchPanel.swift:451"
   ]
  },
  {
@@ -990,8 +984,7 @@
   "key": "Window",
   "zh": "窗口",
   "refs": [
-   "MainMenu.swift:73",
-   "WindowCommands.swift:92"
+   "MainMenu.swift:73"
   ]
  },
  {
@@ -1077,8 +1070,8 @@
   "zh": "正在读取…",
   "refs": [
    "Plugins.swift:400",
-   "TabSearchPanel.swift:2901",
-   "TabSearchPanel.swift:2907"
+   "TabSearchPanel.swift:2971",
+   "TabSearchPanel.swift:2977"
   ]
  },
  {
@@ -1181,6 +1174,14 @@
   ]
  },
  {
+  "key": "Plugins",
+  "zh": "插件",
+  "refs": [
+   "SettingsShell.swift:51",
+   "TabSearchPanel.swift:36"
+  ]
+ },
+ {
   "key": "About",
   "zh": "关于",
   "refs": [
@@ -1193,7 +1194,7 @@
   "refs": [
    "SettingsShell.swift:242",
    "SettingsShell.swift:284",
-   "TabSearchPanel.swift:3025"
+   "TabSearchPanel.swift:3095"
   ]
  },
  {
@@ -1258,10 +1259,10 @@
   "zh": "打开",
   "refs": [
    "SettingsWindow.swift:71",
-   "TabSearchPanel.swift:236",
-   "TabSearchPanel.swift:242",
-   "TabSearchPanel.swift:247",
-   "TabSearchPanel.swift:249"
+   "TabSearchPanel.swift:239",
+   "TabSearchPanel.swift:245",
+   "TabSearchPanel.swift:250",
+   "TabSearchPanel.swift:252"
   ]
  },
  {
@@ -1588,7 +1589,7 @@
   "zh": "在菜单栏显示",
   "refs": [
    "SettingsWindow.swift:600",
-   "SettingsWindow.swift:1388"
+   "SettingsWindow.swift:1389"
   ]
  },
  {
@@ -1603,7 +1604,7 @@
   "zh": "{0} 个",
   "refs": [
    "SettingsWindow.swift:611",
-   "SettingsWindow.swift:1606"
+   "SettingsWindow.swift:1607"
   ]
  },
  {
@@ -1625,7 +1626,7 @@
   "zh": "菜单栏",
   "refs": [
    "SettingsWindow.swift:624",
-   "SettingsWindow.swift:1402"
+   "SettingsWindow.swift:1403"
   ]
  },
  {
@@ -1655,8 +1656,8 @@
   "zh": "取消收藏",
   "refs": [
    "SettingsWindow.swift:693",
-   "SettingsWindow.swift:1129",
-   "SettingsWindow.swift:1216"
+   "SettingsWindow.swift:1130",
+   "SettingsWindow.swift:1217"
   ]
  },
  {
@@ -1770,7 +1771,7 @@
   "zh": "清除",
   "refs": [
    "SettingsWindow.swift:903",
-   "SettingsWindow.swift:997"
+   "SettingsWindow.swift:998"
   ]
  },
  {
@@ -1781,378 +1782,380 @@
   ]
  },
  {
-  "key": "Commands",
-  "zh": "命令",
+  "key": "Actions",
+  "zh": "操作",
   "refs": [
-   "SettingsWindow.swift:922"
+   "SettingsWindow.swift:923",
+   "TabSearchPanel.swift:32",
+   "TabSearchPanel.swift:3098"
   ]
  },
  {
   "key": "Name",
   "zh": "名字",
   "refs": [
-   "SettingsWindow.swift:934"
+   "SettingsWindow.swift:935"
   ]
  },
  {
   "key": "Delete",
   "zh": "删除",
   "refs": [
-   "SettingsWindow.swift:945"
+   "SettingsWindow.swift:946"
   ]
  },
  {
   "key": "Press shortcut…",
   "zh": "按下快捷键…",
   "refs": [
-   "SettingsWindow.swift:975"
+   "SettingsWindow.swift:976"
   ]
  },
  {
   "key": "Record",
   "zh": "录制",
   "refs": [
-   "SettingsWindow.swift:976"
+   "SettingsWindow.swift:977"
   ]
  },
  {
   "key": "Reset to default",
   "zh": "恢复默认",
   "refs": [
-   "SettingsWindow.swift:998"
+   "SettingsWindow.swift:999"
   ]
  },
  {
   "key": "Built-in",
   "zh": "内置",
   "refs": [
-   "SettingsWindow.swift:1050",
-   "SettingsWindow.swift:1071",
-   "SettingsWindow.swift:1095",
-   "SettingsWindow.swift:1100"
+   "SettingsWindow.swift:1051",
+   "SettingsWindow.swift:1072",
+   "SettingsWindow.swift:1096",
+   "SettingsWindow.swift:1101"
   ]
  },
  {
   "key": "Official",
   "zh": "官方",
   "refs": [
-   "SettingsWindow.swift:1051",
-   "SettingsWindow.swift:1072"
+   "SettingsWindow.swift:1052",
+   "SettingsWindow.swift:1073"
   ]
  },
  {
   "key": "Updated with TabFlick. They can't be removed, only turned off. A plugin that's off no longer shows up in the search panel or the menu bar.",
   "zh": "跟着 TabFlick 一起更新，不能卸载，只能关掉。关掉的插件不再出现在搜索面板和菜单栏里。",
   "refs": [
-   "SettingsWindow.swift:1102"
+   "SettingsWindow.swift:1103"
   ]
  },
  {
   "key": "No plugins installed yet. Pick one under Available.",
   "zh": "还没有装插件，在下面「可安装」里挑。",
   "refs": [
-   "SettingsWindow.swift:1108"
+   "SettingsWindow.swift:1109"
   ]
  },
  {
   "key": "Update to {0}",
   "zh": "更新到 {0}",
   "refs": [
-   "SettingsWindow.swift:1118"
+   "SettingsWindow.swift:1119"
   ]
  },
  {
   "key": "Installed",
   "zh": "已安装",
   "refs": [
-   "SettingsWindow.swift:1134"
+   "SettingsWindow.swift:1135"
   ]
  },
  {
   "key": "Update All",
   "zh": "全部更新",
   "refs": [
-   "SettingsWindow.swift:1137"
+   "SettingsWindow.swift:1138"
   ]
  },
  {
   "key": "Menu Bar Order",
   "zh": "菜单栏里的顺序",
   "refs": [
-   "SettingsWindow.swift:1165"
+   "SettingsWindow.swift:1166"
   ]
  },
  {
   "key": "Plugins with “Show in Menu Bar” turned on are listed here.",
   "zh": "在插件页打开「在菜单栏显示」的插件列在这里。",
   "refs": [
-   "SettingsWindow.swift:1167"
+   "SettingsWindow.swift:1168"
   ]
  },
  {
   "key": "Loading the plugin list…",
   "zh": "正在取插件列表…",
   "refs": [
-   "SettingsWindow.swift:1177"
+   "SettingsWindow.swift:1178"
   ]
  },
  {
   "key": "Couldn't load the plugin list: {0}",
   "zh": "取不到插件列表：{0}",
   "refs": [
-   "SettingsWindow.swift:1180"
+   "SettingsWindow.swift:1181"
   ]
  },
  {
   "key": "Every plugin in the store is installed.",
   "zh": "商店里的插件都装上了。",
   "refs": [
-   "SettingsWindow.swift:1183"
+   "SettingsWindow.swift:1184"
   ]
  },
  {
   "key": "Available",
   "zh": "可安装",
   "refs": [
-   "SettingsWindow.swift:1191"
+   "SettingsWindow.swift:1192"
   ]
  },
  {
   "key": "Checked at {0}",
   "zh": "检查于 {0}",
   "refs": [
-   "SettingsWindow.swift:1194"
+   "SettingsWindow.swift:1195"
   ]
  },
  {
   "key": "Refresh",
   "zh": "刷新",
   "refs": [
-   "SettingsWindow.swift:1198"
+   "SettingsWindow.swift:1199"
   ]
  },
  {
   "key": "Official plugins only. Each one lists the sites it connects to, and anything else is blocked.",
   "zh": "只有官方插件。装之前写明它会访问哪些网站，插件联网出了这个范围一律拦下。",
   "refs": [
-   "SettingsWindow.swift:1203"
+   "SettingsWindow.swift:1204"
   ]
  },
  {
   "key": "Remove “{0}”?",
   "zh": "卸载「{0}」？",
   "refs": [
-   "SettingsWindow.swift:1209"
+   "SettingsWindow.swift:1210"
   ]
  },
  {
   "key": "Remove, Keep Data",
   "zh": "卸载，保留数据",
   "refs": [
-   "SettingsWindow.swift:1213"
+   "SettingsWindow.swift:1214"
   ]
  },
  {
   "key": "Remove and Delete Data",
   "zh": "卸载并删除数据",
   "refs": [
-   "SettingsWindow.swift:1214"
+   "SettingsWindow.swift:1215"
   ]
  },
  {
   "key": "If you keep its data (watchlists, saved cities), it comes back when you reinstall.",
   "zh": "插件存的数据（比如自选、收藏的城市）保留的话，重装回来还在。",
   "refs": [
-   "SettingsWindow.swift:1221"
+   "SettingsWindow.swift:1222"
   ]
  },
  {
   "key": "Works offline",
   "zh": "不联网",
   "refs": [
-   "SettingsWindow.swift:1237"
+   "SettingsWindow.swift:1238"
   ]
  },
  {
   "key": "Connects to {0}",
   "zh": "会访问 {0}",
   "refs": [
-   "SettingsWindow.swift:1238"
+   "SettingsWindow.swift:1239"
   ]
  },
  {
   "key": "Needs TabFlick {0}",
   "zh": "需要 TabFlick {0}",
   "refs": [
-   "SettingsWindow.swift:1245"
+   "SettingsWindow.swift:1246"
   ]
  },
  {
   "key": "Install",
   "zh": "安装",
   "refs": [
-   "SettingsWindow.swift:1251"
+   "SettingsWindow.swift:1252"
   ]
  },
  {
   "key": "Turned off. Turn it on in Plugins for these settings to take effect.",
   "zh": "已关闭。在「插件」页打开后这里的设置才生效。",
   "refs": [
-   "SettingsWindow.swift:1340"
+   "SettingsWindow.swift:1341"
   ]
  },
  {
   "key": "In the Search Panel",
   "zh": "在搜索面板里",
   "refs": [
-   "SettingsWindow.swift:1353"
+   "SettingsWindow.swift:1354"
   ]
  },
  {
   "key": "Adds “{0}” to the menu bar menu; hover it to see the contents.",
   "zh": "状态栏菜单里多一行「{0}」，展开看内容。",
   "refs": [
-   "SettingsWindow.swift:1397"
+   "SettingsWindow.swift:1398"
   ]
  },
  {
-  "key": "Type a keyword and that command comes first; ↩ runs it. Separate keywords with spaces. Leave it empty to search by the command's name.",
-  "zh": "打出关键词，这条命令排在最前，回车就执行。多个关键词用空格分开，不填就按命令名搜。",
+  "key": "Type a keyword and this item comes first; ↩ runs it. Separate keywords with spaces. Leave it empty to search by name.",
+  "zh": "打出关键词，这一项排在最前，回车就执行。多个关键词用空格分开，不填就按名字搜。",
   "refs": [
-   "SettingsWindow.swift:1438"
+   "SettingsWindow.swift:1439"
   ]
  },
  {
   "key": "Test",
   "zh": "测试",
   "refs": [
-   "SettingsWindow.swift:1484"
+   "SettingsWindow.swift:1485"
   ]
  },
  {
   "key": "Testing…",
   "zh": "正在测试…",
   "refs": [
-   "SettingsWindow.swift:1496"
+   "SettingsWindow.swift:1497"
   ]
  },
  {
   "key": "Couldn't run the test",
   "zh": "没能测试",
   "refs": [
-   "SettingsWindow.swift:1523"
+   "SettingsWindow.swift:1524"
   ]
  },
  {
   "key": "No response",
   "zh": "没有回应",
   "refs": [
-   "SettingsWindow.swift:1528"
+   "SettingsWindow.swift:1529"
   ]
  },
  {
   "key": "Try again in a moment.",
   "zh": "过一会儿再试。",
   "refs": [
-   "SettingsWindow.swift:1529"
+   "SettingsWindow.swift:1530"
   ]
  },
  {
   "key": "Up and down colors",
   "zh": "涨跌颜色",
   "refs": [
-   "SettingsWindow.swift:1591"
+   "SettingsWindow.swift:1592"
   ]
  },
  {
   "key": "Red up, green down",
   "zh": "红涨绿跌",
   "refs": [
-   "SettingsWindow.swift:1592"
+   "SettingsWindow.swift:1593"
   ]
  },
  {
   "key": "Green up, red down",
   "zh": "绿涨红跌",
   "refs": [
-   "SettingsWindow.swift:1593"
+   "SettingsWindow.swift:1594"
   ]
  },
  {
   "key": "Show",
   "zh": "列几个",
   "refs": [
-   "SettingsWindow.swift:1604"
+   "SettingsWindow.swift:1605"
   ]
  },
  {
   "key": "Sort by",
   "zh": "排序",
   "refs": [
-   "SettingsWindow.swift:1609"
+   "SettingsWindow.swift:1610"
   ]
  },
  {
   "key": "Version {0}",
   "zh": "版本 {0}",
   "refs": [
-   "SettingsWindow.swift:1634"
+   "SettingsWindow.swift:1635"
   ]
  },
  {
   "key": "What's New",
   "zh": "本版更新内容",
   "refs": [
-   "SettingsWindow.swift:1639"
+   "SettingsWindow.swift:1640"
   ]
  },
  {
   "key": "MRU tab switching, plus tab management and pins that persist.",
   "zh": "按最近使用顺序切换标签，外加标签管理和置顶常驻。",
   "refs": [
-   "SettingsWindow.swift:1646"
+   "SettingsWindow.swift:1647"
   ]
  },
  {
   "key": "Checking…",
   "zh": "检查中…",
   "refs": [
-   "SettingsWindow.swift:1659"
+   "SettingsWindow.swift:1660"
   ]
  },
  {
   "key": "Downloading…",
   "zh": "下载中…",
   "refs": [
-   "SettingsWindow.swift:1661"
+   "SettingsWindow.swift:1662"
   ]
  },
  {
   "key": "Check for Updates",
   "zh": "检查更新",
   "refs": [
-   "SettingsWindow.swift:1663"
+   "SettingsWindow.swift:1664"
   ]
  },
  {
   "key": "Sponsor",
   "zh": "赞助开发",
   "refs": [
-   "SettingsWindow.swift:1671"
+   "SettingsWindow.swift:1672"
   ]
  },
  {
   "key": "Website",
   "zh": "官网",
   "refs": [
-   "SettingsWindow.swift:1676"
+   "SettingsWindow.swift:1677"
   ]
  },
  {
   "key": "Report an Issue",
   "zh": "反馈问题",
   "refs": [
-   "SettingsWindow.swift:1680"
+   "SettingsWindow.swift:1681"
   ]
  },
  {
@@ -2309,7 +2312,7 @@
   "zh": "更多",
   "refs": [
    "StatusItemController.swift:649",
-   "TabSearchPanel.swift:3075"
+   "TabSearchPanel.swift:3145"
   ]
  },
  {
@@ -2324,7 +2327,7 @@
   "zh": "取消收藏",
   "refs": [
    "StatusItemController.swift:706",
-   "TabSearchPanel.swift:436"
+   "TabSearchPanel.swift:439"
   ]
  },
  {
@@ -2363,504 +2366,496 @@
   ]
  },
  {
-  "key": "Actions",
-  "zh": "操作",
-  "refs": [
-   "TabSearchPanel.swift:32",
-   "TabSearchPanel.swift:3028"
-  ]
- },
- {
   "key": "Open in new tab",
   "zh": "在新标签打开",
   "refs": [
-   "TabSearchPanel.swift:194",
-   "TabSearchPanel.swift:232"
+   "TabSearchPanel.swift:197",
+   "TabSearchPanel.swift:235"
   ]
  },
  {
   "key": "Open in current tab",
   "zh": "在当前标签打开",
   "refs": [
-   "TabSearchPanel.swift:195",
-   "TabSearchPanel.swift:233"
+   "TabSearchPanel.swift:198",
+   "TabSearchPanel.swift:236"
   ]
  },
  {
   "key": "Open with {0}",
   "zh": "用 {0} 打开",
   "refs": [
-   "TabSearchPanel.swift:203",
-   "TabSearchPanel.swift:235",
-   "TabSearchPanel.swift:237",
+   "TabSearchPanel.swift:206",
+   "TabSearchPanel.swift:238",
    "TabSearchPanel.swift:240",
-   "TabSearchPanel.swift:241"
+   "TabSearchPanel.swift:243",
+   "TabSearchPanel.swift:244"
   ]
  },
  {
   "key": "Switch to tab",
   "zh": "切换到标签",
   "refs": [
-   "TabSearchPanel.swift:230"
+   "TabSearchPanel.swift:233"
   ]
  },
  {
   "key": "Reopen",
   "zh": "重新打开",
   "refs": [
-   "TabSearchPanel.swift:231"
+   "TabSearchPanel.swift:234"
   ]
  },
  {
   "key": "Open application",
   "zh": "打开应用",
   "refs": [
-   "TabSearchPanel.swift:238"
+   "TabSearchPanel.swift:241"
   ]
  },
  {
   "key": "Switch to window",
   "zh": "切换到窗口",
   "refs": [
-   "TabSearchPanel.swift:244"
+   "TabSearchPanel.swift:247"
   ]
  },
  {
   "key": "Copy result",
   "zh": "拷贝结果",
   "refs": [
-   "TabSearchPanel.swift:246",
-   "TabSearchPanel.swift:445"
+   "TabSearchPanel.swift:249",
+   "TabSearchPanel.swift:448"
   ]
  },
  {
   "key": "Search “{0}” in the browser",
   "zh": "在浏览器搜索“{0}”",
   "refs": [
-   "TabSearchPanel.swift:355"
+   "TabSearchPanel.swift:358"
   ]
  },
  {
   "key": "Search {0} for “{1}”",
   "zh": "在 {0} 搜索“{1}”",
   "refs": [
-   "TabSearchPanel.swift:356"
+   "TabSearchPanel.swift:359"
   ]
  },
  {
   "key": "Browser's default search engine, in a new tab",
   "zh": "浏览器默认搜索引擎，新标签打开",
   "refs": [
-   "TabSearchPanel.swift:362"
+   "TabSearchPanel.swift:365"
   ]
  },
  {
   "key": "Reload",
   "zh": "重新加载",
   "refs": [
-   "TabSearchPanel.swift:423"
+   "TabSearchPanel.swift:426"
   ]
  },
  {
   "key": "Return to pinned URL",
   "zh": "回到置顶地址",
   "refs": [
-   "TabSearchPanel.swift:424"
+   "TabSearchPanel.swift:427"
   ]
  },
  {
   "key": "Copy URL",
   "zh": "拷贝网址",
   "refs": [
-   "TabSearchPanel.swift:425"
+   "TabSearchPanel.swift:428"
   ]
  },
  {
   "key": "Copy title",
   "zh": "拷贝标题",
   "refs": [
-   "TabSearchPanel.swift:426"
+   "TabSearchPanel.swift:429"
   ]
  },
  {
   "key": "Copy Markdown link",
   "zh": "拷贝 Markdown 链接",
   "refs": [
-   "TabSearchPanel.swift:427"
+   "TabSearchPanel.swift:430"
   ]
  },
  {
   "key": "Copy path",
   "zh": "拷贝路径",
   "refs": [
-   "TabSearchPanel.swift:428"
+   "TabSearchPanel.swift:431"
   ]
  },
  {
   "key": "Get Info",
   "zh": "显示简介",
   "refs": [
-   "TabSearchPanel.swift:430"
+   "TabSearchPanel.swift:433"
   ]
  },
  {
   "key": "Show Package Contents",
   "zh": "显示包内容",
   "refs": [
-   "TabSearchPanel.swift:431"
+   "TabSearchPanel.swift:434"
   ]
  },
  {
   "key": "Close tab",
   "zh": "关闭标签",
   "refs": [
-   "TabSearchPanel.swift:432",
-   "TabSearchPanel.swift:3606"
+   "TabSearchPanel.swift:435",
+   "TabSearchPanel.swift:3680"
   ]
  },
  {
   "key": "Close other duplicate tabs",
   "zh": "关闭其余重复的标签",
   "refs": [
-   "TabSearchPanel.swift:433"
+   "TabSearchPanel.swift:436"
   ]
  },
  {
   "key": "Remove from recently closed",
   "zh": "从最近关闭中移除",
   "refs": [
-   "TabSearchPanel.swift:434"
+   "TabSearchPanel.swift:437"
   ]
  },
  {
   "key": "Delete from history",
   "zh": "从历史记录中删除",
   "refs": [
-   "TabSearchPanel.swift:435"
+   "TabSearchPanel.swift:438"
   ]
  },
  {
   "key": "Quit {0}",
   "zh": "退出 {0}",
   "refs": [
-   "TabSearchPanel.swift:438"
+   "TabSearchPanel.swift:441"
   ]
  },
  {
   "key": "Copy PID",
   "zh": "拷贝 PID",
   "refs": [
-   "TabSearchPanel.swift:443"
+   "TabSearchPanel.swift:446"
   ]
  },
  {
   "key": "Copy command line",
   "zh": "拷贝命令行",
   "refs": [
-   "TabSearchPanel.swift:444"
+   "TabSearchPanel.swift:447"
   ]
  },
  {
   "key": "Paste into {0}",
   "zh": "粘贴到 {0}",
   "refs": [
-   "TabSearchPanel.swift:447"
+   "TabSearchPanel.swift:450"
   ]
  },
  {
   "key": "Copy calculation",
   "zh": "拷贝算式和结果",
   "refs": [
-   "TabSearchPanel.swift:449"
+   "TabSearchPanel.swift:452"
   ]
  },
  {
   "key": "Continue with result",
   "zh": "用结果接着算",
   "refs": [
-   "TabSearchPanel.swift:450"
+   "TabSearchPanel.swift:453"
   ]
  },
  {
   "key": "Copy file",
   "zh": "拷贝文件",
   "refs": [
-   "TabSearchPanel.swift:452"
+   "TabSearchPanel.swift:455"
   ]
  },
  {
   "key": "Tab changes sort: {0}",
   "zh": "Tab 切换排序：{0}",
   "refs": [
-   "TabSearchPanel.swift:2856"
+   "TabSearchPanel.swift:2926"
   ]
  },
  {
   "key": "Tab cycles: {0}",
   "zh": "Tab 切换：{0}",
   "refs": [
-   "TabSearchPanel.swift:2858"
+   "TabSearchPanel.swift:2928"
   ]
  },
  {
   "key": "Open “{0}” with…",
   "zh": "「{0}」的打开方式",
   "refs": [
-   "TabSearchPanel.swift:2867"
+   "TabSearchPanel.swift:2937"
   ]
  },
  {
   "key": "Actions for “{0}”",
   "zh": "「{0}」的操作",
   "refs": [
-   "TabSearchPanel.swift:2868"
+   "TabSearchPanel.swift:2938"
   ]
  },
  {
   "key": "Filter by name, port or PID",
   "zh": "按名称、端口或 PID 过滤",
   "refs": [
-   "TabSearchPanel.swift:2870"
+   "TabSearchPanel.swift:2940"
   ]
  },
  {
   "key": "Filter by file name or location",
   "zh": "按文件名或位置过滤",
   "refs": [
-   "TabSearchPanel.swift:2871"
+   "TabSearchPanel.swift:2941"
   ]
  },
  {
   "key": "Search {0}",
   "zh": "搜索{0}",
   "refs": [
-   "TabSearchPanel.swift:2873",
-   "TabSearchPanel.swift:2874"
+   "TabSearchPanel.swift:2943",
+   "TabSearchPanel.swift:2944"
   ]
  },
  {
   "key": "Search everything",
   "zh": "搜索全部",
   "refs": [
-   "TabSearchPanel.swift:2877"
+   "TabSearchPanel.swift:2947"
   ]
  },
  {
   "key": "Search browser tabs",
   "zh": "搜索浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:2878"
+   "TabSearchPanel.swift:2948"
   ]
  },
  {
   "key": "Search the web",
   "zh": "搜索互联网内容",
   "refs": [
-   "TabSearchPanel.swift:2879"
+   "TabSearchPanel.swift:2949"
   ]
  },
  {
   "key": "Search history",
   "zh": "搜索历史记录",
   "refs": [
-   "TabSearchPanel.swift:2880"
+   "TabSearchPanel.swift:2950"
   ]
  },
  {
   "key": "Search browser bookmarks",
   "zh": "搜索浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:2881"
+   "TabSearchPanel.swift:2951"
   ]
  },
  {
   "key": "Search recently closed tabs",
   "zh": "搜索最近关闭的标签",
   "refs": [
-   "TabSearchPanel.swift:2882"
+   "TabSearchPanel.swift:2952"
   ]
  },
  {
   "key": "Search favorite folders",
   "zh": "搜索收藏的文件夹",
   "refs": [
-   "TabSearchPanel.swift:2883"
+   "TabSearchPanel.swift:2953"
   ]
  },
  {
   "key": "Search apps",
   "zh": "搜索应用",
   "refs": [
-   "TabSearchPanel.swift:2884"
+   "TabSearchPanel.swift:2954"
   ]
  },
  {
   "key": "No app can open it",
   "zh": "没有能打开它的应用",
   "refs": [
-   "TabSearchPanel.swift:2892"
+   "TabSearchPanel.swift:2962"
   ]
  },
  {
   "key": "No matching apps",
   "zh": "没有匹配的应用",
   "refs": [
-   "TabSearchPanel.swift:2893",
-   "TabSearchPanel.swift:2920"
+   "TabSearchPanel.swift:2963",
+   "TabSearchPanel.swift:2990"
   ]
  },
  {
   "key": "No matching actions",
   "zh": "没有匹配的操作",
   "refs": [
-   "TabSearchPanel.swift:2895"
+   "TabSearchPanel.swift:2965"
   ]
  },
  {
   "key": "Loading processes",
   "zh": "正在读取进程",
   "refs": [
-   "TabSearchPanel.swift:2897"
+   "TabSearchPanel.swift:2967"
   ]
  },
  {
   "key": "No matching processes",
   "zh": "没有匹配的进程",
   "refs": [
-   "TabSearchPanel.swift:2898"
+   "TabSearchPanel.swift:2968"
   ]
  },
  {
   "key": "Couldn't read from Spotlight",
   "zh": "读不到 Spotlight 的记录",
   "refs": [
-   "TabSearchPanel.swift:2902"
+   "TabSearchPanel.swift:2972"
   ]
  },
  {
   "key": "No files opened in the last 30 days",
   "zh": "30 天内没有打开过的文件",
   "refs": [
-   "TabSearchPanel.swift:2903"
+   "TabSearchPanel.swift:2973"
   ]
  },
  {
   "key": "No matching files",
   "zh": "没有匹配的文件",
   "refs": [
-   "TabSearchPanel.swift:2904"
+   "TabSearchPanel.swift:2974"
   ]
  },
  {
   "key": "Couldn't load. Try again in a moment.",
   "zh": "取不到数据，过一会儿再试。",
   "refs": [
-   "TabSearchPanel.swift:2908"
+   "TabSearchPanel.swift:2978"
   ]
  },
  {
   "key": "Nothing here yet",
   "zh": "还没有内容",
   "refs": [
-   "TabSearchPanel.swift:2910"
+   "TabSearchPanel.swift:2980"
   ]
  },
  {
   "key": "No results",
   "zh": "没有匹配的结果",
   "refs": [
-   "TabSearchPanel.swift:2911"
+   "TabSearchPanel.swift:2981"
   ]
  },
  {
   "key": "No browser tabs yet",
   "zh": "还没有浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:2914"
+   "TabSearchPanel.swift:2984"
   ]
  },
  {
   "key": "No matching browser tabs",
   "zh": "没有匹配的浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:2914"
+   "TabSearchPanel.swift:2984"
   ]
  },
  {
   "key": "Type something to search for",
   "zh": "输入要搜的内容",
   "refs": [
-   "TabSearchPanel.swift:2915"
+   "TabSearchPanel.swift:2985"
   ]
  },
  {
   "key": "No history yet",
   "zh": "还没有历史记录",
   "refs": [
-   "TabSearchPanel.swift:2916"
+   "TabSearchPanel.swift:2986"
   ]
  },
  {
   "key": "No matching history",
   "zh": "没有匹配的历史记录",
   "refs": [
-   "TabSearchPanel.swift:2916"
+   "TabSearchPanel.swift:2986"
   ]
  },
  {
   "key": "No browser bookmarks yet",
   "zh": "还没有浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:2917"
+   "TabSearchPanel.swift:2987"
   ]
  },
  {
   "key": "No matching browser bookmarks",
   "zh": "没有匹配的浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:2917"
+   "TabSearchPanel.swift:2987"
   ]
  },
  {
   "key": "Nothing closed yet",
   "zh": "还没有关闭过标签",
   "refs": [
-   "TabSearchPanel.swift:2918"
+   "TabSearchPanel.swift:2988"
   ]
  },
  {
   "key": "No matching closed tabs",
   "zh": "没有匹配的已关闭标签",
   "refs": [
-   "TabSearchPanel.swift:2918"
+   "TabSearchPanel.swift:2988"
   ]
  },
  {
   "key": "No favorite folders yet. Add one from the menu bar.",
   "zh": "还没有收藏文件夹。状态栏菜单里可以添加。",
   "refs": [
-   "TabSearchPanel.swift:2919"
+   "TabSearchPanel.swift:2989"
   ]
  },
  {
   "key": "No matching folders",
   "zh": "没有匹配的文件夹",
   "refs": [
-   "TabSearchPanel.swift:2919"
+   "TabSearchPanel.swift:2989"
   ]
  },
  {
   "key": "Loading apps",
   "zh": "正在读取应用列表",
   "refs": [
-   "TabSearchPanel.swift:2920"
+   "TabSearchPanel.swift:2990"
   ]
  },
  {
   "key": "Extension update required",
   "zh": "扩展需要更新",
   "refs": [
-   "TabSearchPanel.swift:2938",
+   "TabSearchPanel.swift:3008",
    "main.swift:433"
   ]
  },
@@ -2868,168 +2863,143 @@
   "key": "Confirm",
   "zh": "确认",
   "refs": [
-   "TabSearchPanel.swift:3018"
+   "TabSearchPanel.swift:3088"
   ]
  },
  {
   "key": "{0} more",
   "zh": "还有 {0} 条",
   "refs": [
-   "TabSearchPanel.swift:3076"
-  ]
- },
- {
-  "key": "Open “{0}”",
-  "zh": "打开「{0}」",
-  "refs": [
-   "TabSearchPanel.swift:3395"
-  ]
- },
- {
-  "key": "Running",
-  "zh": "运行中",
-  "refs": [
-   "TabSearchPanel.swift:3400",
-   "TabSearchPanel.swift:3537",
-   "TabSearchPanel.swift:3550",
-   "TabSearchPanel.swift:3920"
-  ]
- },
- {
-  "key": "{0} Web App",
-  "zh": "{0} 网页应用",
-  "refs": [
-   "TabSearchPanel.swift:3407"
-  ]
- },
- {
-  "key": "Web App",
-  "zh": "网页应用",
-  "refs": [
-   "TabSearchPanel.swift:3408",
-   "TabSearchPanel.swift:3445"
-  ]
- },
- {
-  "key": "App",
-  "zh": "应用",
-  "refs": [
-   "TabSearchPanel.swift:3422",
-   "TabSearchPanel.swift:3445"
-  ]
- },
- {
-  "key": "{0} processes",
-  "zh": "{0} 个进程",
-  "refs": [
-   "TabSearchPanel.swift:3422"
-  ]
- },
- {
-  "key": "Press ↩ again to confirm",
-  "zh": "再按 ↩ 确认",
-  "refs": [
-   "TabSearchPanel.swift:3590"
-  ]
- },
- {
-  "key": "Duplicate",
-  "zh": "重复",
-  "refs": [
-   "TabSearchPanel.swift:3618"
-  ]
- },
- {
-  "key": "{0} more tab(s) with this page are open; ⌘↩ closes them",
-  "zh": "还开着 {0} 个同样的页面，⌘↩ 可以一起关掉",
-  "refs": [
-   "TabSearchPanel.swift:3624"
-  ]
- },
- {
-  "key": "Current",
-  "zh": "当前",
-  "refs": [
-   "TabSearchPanel.swift:3628",
-   "TabSearchPanel.swift:3670",
-   "TabSearchPanel.swift:3686"
-  ]
- },
- {
-  "key": "closed {0}",
-  "zh": "{0}关闭",
-  "refs": [
-   "TabSearchPanel.swift:3638"
+   "TabSearchPanel.swift:3146"
   ]
  },
  {
   "key": "Browser bookmark",
   "zh": "浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:3647"
+   "TabSearchPanel.swift:3469"
   ]
  },
  {
-  "key": "visited {0}",
-  "zh": "{0}访问",
+  "key": "Folder",
+  "zh": "文件夹",
   "refs": [
-   "TabSearchPanel.swift:3652"
+   "TabSearchPanel.swift:3472"
   ]
  },
  {
-  "key": "Command",
-  "zh": "命令",
+  "key": "Open “{0}”",
+  "zh": "打开「{0}」",
   "refs": [
-   "TabSearchPanel.swift:3697"
+   "TabSearchPanel.swift:3473"
+  ]
+ },
+ {
+  "key": "{0} Web App",
+  "zh": "{0} 网页应用",
+  "refs": [
+   "TabSearchPanel.swift:3482"
+  ]
+ },
+ {
+  "key": "Web App",
+  "zh": "网页应用",
+  "refs": [
+   "TabSearchPanel.swift:3483",
+   "TabSearchPanel.swift:3532"
+  ]
+ },
+ {
+  "key": "App",
+  "zh": "应用",
+  "refs": [
+   "TabSearchPanel.swift:3500",
+   "TabSearchPanel.swift:3532"
+  ]
+ },
+ {
+  "key": "{0} processes",
+  "zh": "{0} 个进程",
+  "refs": [
+   "TabSearchPanel.swift:3500"
+  ]
+ },
+ {
+  "key": "Running",
+  "zh": "运行中",
+  "refs": [
+   "TabSearchPanel.swift:3623"
+  ]
+ },
+ {
+  "key": "Press ↩ again to confirm",
+  "zh": "再按 ↩ 确认",
+  "refs": [
+   "TabSearchPanel.swift:3664"
+  ]
+ },
+ {
+  "key": "Duplicate",
+  "zh": "重复",
+  "refs": [
+   "TabSearchPanel.swift:3694"
+  ]
+ },
+ {
+  "key": "{0} more tab(s) with this page are open; ⌘↩ closes them",
+  "zh": "还开着 {0} 个同样的页面，⌘↩ 可以一起关掉",
+  "refs": [
+   "TabSearchPanel.swift:3700"
+  ]
+ },
+ {
+  "key": "Current",
+  "zh": "当前",
+  "refs": [
+   "TabSearchPanel.swift:3704",
+   "TabSearchPanel.swift:3744"
   ]
  },
  {
   "key": "Exited",
   "zh": "已退出",
   "refs": [
-   "TabSearchPanel.swift:3703"
+   "TabSearchPanel.swift:3754"
   ]
  },
  {
   "key": "Quitting",
   "zh": "正在退出",
   "refs": [
-   "TabSearchPanel.swift:3707"
+   "TabSearchPanel.swift:3758"
   ]
  },
  {
   "key": "Killing",
   "zh": "正在结束",
   "refs": [
-   "TabSearchPanel.swift:3707"
-  ]
- },
- {
-  "key": "opened {0}",
-  "zh": "{0}打开",
-  "refs": [
-   "TabSearchPanel.swift:3721"
+   "TabSearchPanel.swift:3758"
   ]
  },
  {
   "key": "Ports {0}",
   "zh": "端口 {0}",
   "refs": [
-   "TabSearchPanel.swift:3876"
+   "TabSearchPanel.swift:3928"
   ]
  },
  {
   "key": "Use Force Kill in the ⌘↩ actions.",
   "zh": "⌘↩ 里可以强制结束。",
   "refs": [
-   "TabSearchPanel.swift:4164"
+   "TabSearchPanel.swift:4126"
   ]
  },
  {
   "key": "iCloud Drive",
   "zh": "iCloud 云盘",
   "refs": [
-   "TabSearchPanel.swift:4374"
+   "TabSearchPanel.swift:4336"
   ]
  },
  {
@@ -3213,45 +3183,52 @@
   ]
  },
  {
+  "key": "{0} window",
+  "zh": "{0} 的窗口",
+  "refs": [
+   "WindowCommands.swift:94"
+  ]
+ },
+ {
   "key": "No window to move",
   "zh": "没有可调整的窗口",
   "refs": [
-   "WindowCommands.swift:146"
+   "WindowCommands.swift:148"
   ]
  },
  {
   "key": "Full-screen windows can't be moved",
   "zh": "全屏的窗口没法调整",
   "refs": [
-   "WindowCommands.swift:148"
+   "WindowCommands.swift:150"
   ]
  },
  {
   "key": "This window hasn't been moved",
   "zh": "这个窗口没调整过",
   "refs": [
-   "WindowCommands.swift:150"
+   "WindowCommands.swift:152"
   ]
  },
  {
   "key": "Only one display is connected",
   "zh": "只接了一个显示器",
   "refs": [
-   "WindowCommands.swift:152"
+   "WindowCommands.swift:154"
   ]
  },
  {
   "key": "This window can't go full screen",
   "zh": "这个窗口不能全屏",
   "refs": [
-   "WindowCommands.swift:154"
+   "WindowCommands.swift:156"
   ]
  },
  {
   "key": "Couldn't move the window",
   "zh": "没能调整窗口",
   "refs": [
-   "WindowCommands.swift:156"
+   "WindowCommands.swift:158"
   ]
  },
  {
