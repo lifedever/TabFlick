@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import UniformTypeIdentifiers
 
@@ -308,6 +309,8 @@ final class MRUController {
     private let overlay: OverlayPanel
     /// ⌘E 唤出的标签搜索面板。和切换器浮层各管各的，不共享游标和快照。
     private let search = TabSearchPanel()
+    /// 商店目录、装着的插件、正在装的：变了就同步给搜索面板（插件列表底栏的「更新到 x」）。
+    private var pluginStoreWatch: Set<AnyCancellable> = []
     private let icons = IconCache()
 
     /// 网页缩略图缓存（内存 + 磁盘，按 URL 索引）。
@@ -685,6 +688,38 @@ final class MRUController {
 
     /// 点「扩展需要更新」（状态栏、设置页、搜索面板底栏）：文件已经换好的，打开那个浏览器的扩展页让用户
     /// 点 ↻；没换成的（找不到文件夹、开发目录、老得没报 ID）去官网的更新说明。browser 为 nil 时取第一个要更新的。
+    /// 插件列表底栏的「更新到 x」（用户 2026-11-24 要的：进了插件就能看到有新版本、就地更新、更新完刷新这一页）。
+    /// 商店目录平时只在打开设置的插件页时拉，所以进插件列表时也拉一次（10 分钟内拉过就不拉，后台请求不挡键盘）。
+    /// `$entries` / `$plugins` / `$busy` 在赋值之前发，用发出来的新值算，别回头读属性。
+    private func watchPluginUpdates() {
+        let store = PluginStore.shared
+        store.$entries.combineLatest(PluginRegistry.shared.$plugins)
+            .sink { [weak self] entries, plugins in
+                MainActor.assumeIsolated {
+                    let updates = PluginStore.availableUpdates(plugins: plugins, entries: entries)
+                    guard let self, self.search.model.pluginUpdates != updates else { return }
+                    self.search.model.pluginUpdates = updates
+                }
+            }
+            .store(in: &pluginStoreWatch)
+        store.$busy
+            .sink { [weak self] busy in
+                MainActor.assumeIsolated {
+                    guard let self, self.search.model.updatingPlugins != busy else { return }
+                    self.search.model.updatingPlugins = busy
+                }
+            }
+            .store(in: &pluginStoreWatch)
+        search.model.onPluginListOpen = { _ in PluginStore.shared.refresh() }
+        search.model.onPluginUpdate = { [weak self] id in
+            guard let plugin = PluginRegistry.shared.plugin(id), let entry = PluginStore.shared.update(for: plugin) else { return }
+            log("🧩 update \(id) → \(entry.version) from the search panel")
+            PluginStore.shared.install(entry) { ok in
+                if ok { self?.search.model.pluginDidUpdate(id) }
+            }
+        }
+    }
+
     func openExtensionUpdate(browser: String? = nil) {
         let outdated = clients.keys
             .filter { extensionNeedsUpdate($0) && (browser == nil || clients[$0]?.browser == browser) }
@@ -835,6 +870,7 @@ final class MRUController {
         search.model.webOpenerProvider = { WebOpeners.current }
         search.model.suggestions = SuggestionStore.shared
         search.model.plugins = PluginRegistry.shared
+        watchPluginUpdates()
         search.model.commandKeywords = { CommandKeywordStore.shared.words(for: $0) }
         search.model.badgeProvider = { [weak self] row in
             guard let self else { return (nil, nil) }

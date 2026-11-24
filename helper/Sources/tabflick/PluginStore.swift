@@ -54,10 +54,13 @@ final class PluginStore: ObservableObject {
 
     // MARK: - 目录
 
-    /// 拉目录。10 分钟内拉过就不再拉（打开插件页时调；「刷新」按钮 force）。
+    /// 拉目录。10 分钟内拉过就不再拉（打开插件页、进插件列表时调；「刷新」按钮 force）。
+    /// 指到本机仓库（file://，开发时）不等：读文件没成本，改了插件重跑 build-index.py 马上就该看得到新版本
+    /// （2026-11-24 踩的：刚拉过目录、紧接着升了版本，面板里 10 分钟内都不出「更新到 x」）。
     func refresh(force: Bool = false) {
         if status == .loading { return }
-        if !force, case .loaded(let at) = status, Date().timeIntervalSince(at) < 600 { return }
+        let local = source?.isFileURL ?? false
+        if !force, !local, case .loaded(let at) = status, Date().timeIntervalSince(at) < 600 { return }
         status = .loading
         Task {
             var lastError = L10n.t("取不到插件列表", "Couldn't load the plugin list")
@@ -110,6 +113,20 @@ final class PluginStore: ObservableObject {
         return entry
     }
 
+    /// 能直接更新的插件：id → 商店里的版本。要求更新的 TabFlick 的不算（这里点了也装不上）。
+    /// 传进来的是 `$entries` / `$plugins` 发出的新值（@Published 在赋值之前发，那一刻读属性还是旧的）。
+    static func availableUpdates(plugins: [Plugin], entries: [StoreEntry]) -> [String: String] {
+        var out: [String: String] = [:]
+        for plugin in plugins {
+            guard case .official(let installed) = plugin.origin,
+                  let entry = entries.first(where: { $0.id == plugin.id }),
+                  ExtensionFolder.isNewer(entry.version, than: installed),
+                  needsNewerApp(entry) == nil else { continue }
+            out[plugin.id] = entry.version
+        }
+        return out
+    }
+
     /// 这个 app 版本装不了（插件要求更新的 TabFlick）。开发版没有版本号，不拦。
     static func needsNewerApp(_ entry: StoreEntry) -> String? {
         guard let need = entry.minAppVersion,
@@ -120,7 +137,11 @@ final class PluginStore: ObservableObject {
 
     // MARK: - 装、更新、卸载
 
-    func install(_ entry: StoreEntry) {
+    func install(_ entry: StoreEntry) { install(entry, completion: nil) }
+
+    /// completion：装好并重新加载了是 true（搜索面板据此重新问一次正开着的插件列表），失败是 false。
+    /// 正在装同一个、或者目录还没拉到时直接返回，不回调。
+    func install(_ entry: StoreEntry, completion: ((Bool) -> Void)?) {
         guard !busy.contains(entry.id), let source else { return }
         let name = PluginManifest.pick(entry.names, language: L10n.current.rawValue) ?? entry.id
         let updating = PluginRegistry.shared.plugin(entry.id) != nil
@@ -133,10 +154,12 @@ final class PluginStore: ObservableObject {
                 log("🧩 store: \(updating ? "updated" : "installed") \(entry.id) \(entry.version)")
                 Toast.show(updating ? L10n.t("已更新「\(name)」", "Updated “\(name)”") : L10n.t("已安装「\(name)」", "Installed “\(name)”"),
                            detail: updating ? entry.version : nil)
+                completion?(true)
             } catch {
                 log("🧩 store: install \(entry.id) failed: \(error.localizedDescription)")
                 Toast.show(L10n.t("没能安装「\(name)」", "Couldn't install “\(name)”"),
                            detail: error.localizedDescription, kind: .failure)
+                completion?(false)
             }
         }
     }

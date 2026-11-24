@@ -681,6 +681,16 @@ final class TabSearchModel: ObservableObject {
     @Published private(set) var pluginScopes: [PluginScope] = []
     var pluginScope: PluginScope? { pluginScopes.last }
 
+    /// 有新版本的插件（id → 商店里的版本）和正在更新的插件：插件列表底栏左边据此给「更新到 x」（用户 2026-11-24
+    /// 要的：进了插件就能看到、就地更新）。由 MRUController 从商店接进来 —— 面板代码不碰 `PluginStore`，官网样例
+    /// 程序不编它（同 `suggestions`），样例里这两个一直是空的。
+    @Published var pluginUpdates: [String: String] = [:]
+    @Published var updatingPlugins: Set<String> = []
+    /// 点了「更新到 x」。
+    var onPluginUpdate: ((String) -> Void)?
+    /// 进了某个插件的列表：借这个时机拉一次商店目录（10 分钟内拉过就不拉），好知道它有没有新版本。
+    var onPluginListOpen: ((String) -> Void)?
+
     /// 在某个二级里（操作列表、进程列表、插件列表）：输入框左边画「‹」，空着按 ⌫ 退回。
     var inSubList: Bool { actionTarget != nil || inProcesses || pluginListID != nil || inRecentFiles }
     /// 输入框右边那个胶囊：在哪一层写哪一层（JWT 解码），首页写插件名
@@ -894,6 +904,8 @@ final class TabSearchModel: ObservableObject {
     @Published var icons: [String: IconInfo] = [:]
     /// ⌘ 正被按着：行尾显示 ⌘1–⌘9 的角标。
     @Published var commandHeld = false
+    /// ⌥ 正被按着：App 行副标题末尾显示版本号。
+    @Published var optionHeld = false
     /// 跨浏览器且不止一条连接（多个浏览器，或同一个浏览器多个 Profile）：要标 Profile 名认归属。
     @Published var showBrowserBadges = false
     /// 归属标记只有一条规则（用户 2026-09-27：图标、名字时有时无看不懂）：浏览器图标
@@ -904,8 +916,6 @@ final class TabSearchModel: ObservableObject {
     var showBrowserIcons = false
     /// 网页类的行画不画浏览器角标。只有一个浏览器时，标签和 App 混排的两张表也画，一眼分出哪行是网页
     ///（Teams 网页和 Teams App 的图标一个样）：「最近使用」（2026-10-20）、「全部」有输入时（2026-10-23）。
-    /// ⌥ 正被按着：App 行副标题末尾显示版本号。
-    @Published var optionHeld = false
     /// 「全部」看有没有输入、不看有没有 App 命中，否则角标随输入时有时无。
     var drawsBrowserBadges: Bool {
         showBrowserIcons || showingRecent
@@ -1393,6 +1403,16 @@ final class TabSearchModel: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         pluginTimer = timer
+        onPluginListOpen?(id)
+    }
+
+    /// 插件更新装好了（注册表里已经是新版本的实例）：正开着它的列表就按当前这一层、当前输入重新问一次。
+    /// 留着现在的行，新的回来了原地换（同一个输入只换内容，游标不动），不先清空闪一下。
+    /// 旧版本还在路上的回包作废：晚到的话会把新版本的行盖回去，要等下一次 5 秒刷新才换回来。
+    func pluginDidUpdate(_ id: String) {
+        guard pluginListID == id else { return }
+        pluginGeneration += 1
+        requestPluginRows(immediately: true)
     }
 
     /// 退回原列表：输入和游标都恢复。
@@ -2783,6 +2803,7 @@ private struct TabSearchView: View {
             mixed: model.inMixedSection(index),
             leftAgo: relativeTime(msEpoch: model.recentLeftAt[row.id]),
             appRunning: { if case .app(let app) = row { return model.isRunning(app) } else { return false } }(),
+            showsVersion: model.optionHeld,
             armed: model.armedID == row.id,
             processExited: model.exitedProcesses.contains(row.id),
             processEnding: model.endingProcesses.contains(row.id),
@@ -2803,7 +2824,6 @@ private struct TabSearchView: View {
     private var list: some View {
         ScrollViewReader { proxy in
         ScrollView(.vertical, showsIndicators: false) {
-            showsVersion: model.optionHeld,
             let sections = model.sections
             // 「全部」里分组头吸顶（用户 2026-09-27 要的）。其他模式只有一段、没有头。
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -3053,6 +3073,9 @@ private struct TabSearchView: View {
                 .contentShape(Capsule())
                 .onTapGesture { _ = model.escape() }
                 .layoutPriority(-1)
+                if let version = model.pluginUpdates[id] {
+                    pluginUpdateButton(id: id, version: version)
+                }
             } else if model.inRecentFiles {
                 // 最近文件：左边写在哪一层（同进程列表），点它返回
                 HStack(spacing: kSearchIconGap) {
@@ -3107,6 +3130,32 @@ private struct TabSearchView: View {
         }
         .padding(.horizontal, kSearchListInset)
         .frame(height: kSearchFooterZone)
+    }
+
+    /// 插件有新版本：插件名胶囊旁边一个「更新到 x」，点了就地更新（同设置 → 插件里的那个按钮，同一个词条），
+    /// 装好了列表按新版本重新取一次（`pluginDidUpdate`）。更新中图标换成转圈、字压淡，再点不做事。
+    private func pluginUpdateButton(id: String, version: String) -> some View {
+        let updating = model.updatingPlugins.contains(id)
+        return HStack(spacing: 6) {
+            if updating {
+                ProgressView().controlSize(.mini)
+            } else {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.accentColor)
+            }
+            Text(L10n.t("更新到 \(version)", "Update to \(version)"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(updating ? 0.5 : 0.9))
+                .lineLimit(1)
+        }
+        .modifier(GlassCapsule())
+        .fixedSize()
+        .contentShape(Capsule())
+        .onTapGesture {
+            guard !updating else { return }
+            model.onPluginUpdate?(id)
+        }
     }
 
     private var footerSeparator: some View {
@@ -3415,6 +3464,8 @@ private struct SearchRowView: View {
     var leftAgo: String? = nil
     /// App 行：正在运行（模型缓存的结果，见 `TabSearchModel.runningApps`）。
     var appRunning = false
+    /// ⌥ 按着：App 行副标题末尾接版本号（`TabSearchModel.optionHeld`）。
+    var showsVersion = false
     /// 按了一次回车、等第二次确认（结束进程、退出 App）：字标红，行尾写「再按 ↩ 确认」。
     var armed = false
     /// 进程行：已经退出了（留在原位、压暗）/ 正在退出。
@@ -3454,6 +3505,7 @@ private struct SearchRowView: View {
     /// 副标题写它在哪、属于谁（统一写法，用户 2026-11-23 定的）。分在哪一类由分组头说；混排段（`mixed`）
     /// 没有这样的分组头，开头加分类名（「最近关闭 · github.com」）。「运行中」不在这里，由 `showsRunning`
     /// 接在末尾、带一个绿点。书签是「书签文件夹 · 完整地址」（用户要看到地址；放不下末尾省略），根下的只有地址。
+    /// 按住 ⌥ 时 App 在这些后面再接版本号（「/Applications · 1.19.1」「1.19.1 · 运行中 ●」）。
     private var subtitle: String {
         func kind(_ name: String, _ rest: String) -> String {
             guard mixed else { return rest }
@@ -3464,8 +3516,6 @@ private struct SearchRowView: View {
         // 和「应用 · 运行中」对称，浏览器名就说明了它是网页
         case .tab(let item):
             let host = Self.host(of: item.tab.url)
-    /// ⌥ 按着：App 行副标题末尾接版本号（`TabSearchModel.optionHeld`）。
-    var showsVersion = false
             guard mixed else { return host }
             return [browserBadge.map(BrowserSupport.displayName), profileBadge, host.isEmpty ? nil : host]
                 .compactMap { $0 }.joined(separator: " · ")
@@ -3477,6 +3527,9 @@ private struct SearchRowView: View {
         case .folder(let f):     return kind(L10n.t("文件夹", "Folder"), (f.path as NSString).abbreviatingWithTildeInPath)
         case .opener(_, let f):  return L10n.t("打开「\(f.name)」", "Open “\(f.name)”")
         case .app(let a):
+            // 按住 ⌥ 时版本号垫在最后（「运行中 ●」之前，绿点总在行尾；用户 2026-11-24 要的：平时不占地方）。
+            // 网页应用不写：它的 Info.plist 版本是浏览器生成的壳，不是网站的
+            let version = showsVersion && a.webApp == nil ? a.version : nil
             // 混排段：「应用 · 注释」「网页应用 · 注释」，开头的词说明是什么（写网址的是标签）
             if mixed { return [Self.appKind(a), a.comment, version].compactMap { $0 }.joined(separator: " · ") }
             // 网页应用写「Chrome 网页应用 · v2ex.com」：所在目录（~/Applications/Chrome Apps.localized）说明不了它是什么。
@@ -3505,7 +3558,6 @@ private struct SearchRowView: View {
                 return [L10n.t("应用", "App"), p.memberCount > 1 ? L10n.t("\(p.memberCount) 个进程", "\(p.memberCount) processes") : nil]
                     .compactMap { $0 }.joined(separator: " · ")
             }
-    /// 按住 ⌥ 时 App 在这些后面再接版本号（「/Applications · 1.19.1」「1.19.1 · 运行中 ●」）。
             return ["PID \(p.pid)", p.commandLine.isEmpty ? (p.path as NSString).abbreviatingWithTildeInPath : p.commandLine]
                 .joined(separator: " · ")
         case .pluginItem(let r): return r.subtitle ?? ""
@@ -3527,9 +3579,6 @@ private struct SearchRowView: View {
     /// 曾把已关闭 / 历史的行压成灰字以示「找回」；有了模式标签和分组头之后是双重标记，
     /// 只剩可读性变差，2026-09-26 和其他行统一。现在只有退出了的进程压暗（留在原位，下次重排才拿掉）。
     private var dimmed: Bool { processExited }
-            // 按住 ⌥ 时版本号垫在最后（「运行中 ●」之前，绿点总在行尾；用户 2026-11-24 要的：平时不占地方）。
-            // 网页应用不写：它的 Info.plist 版本是浏览器生成的壳，不是网站的
-            let version = showsVersion && a.webApp == nil ? a.version : nil
 
     private var isTab: Bool {
         if case .tab = row { return true }
@@ -4443,6 +4492,8 @@ final class TabSearchPanel {
         setListScrollOffset(restore?.scrollY ?? 0)
         // ⌘E 唤出时 ⌘ 多半还按着，角标要立刻出现，不等下一次 flagsChanged
         model.commandHeld = NSEvent.modifierFlags.contains(.command)
+        // ⌥ 反过来：⌥Space 唤出时 ⌥ 还按着，照读的话每次打开都先闪一下版本号。只认打开之后按下的
+        model.optionHeld = false
         present(inputSource: inputSource)
         if let restore {
             // 输入整段选中：接着找按方向键，重新搜直接打字就覆盖掉。显示的是停在的那一层的输入
@@ -4492,8 +4543,6 @@ final class TabSearchPanel {
                               cursorID: model.baseCursorID,
                               scrollY: listScrollView?.contentView.bounds.minY ?? 0,
                               subState: model.subState)
-        // ⌥ 反过来：⌥Space 唤出时 ⌥ 还按着，照读的话每次打开都先闪一下版本号。只认打开之后按下的
-        model.optionHeld = false
         closingAfterPick = false
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors = []
