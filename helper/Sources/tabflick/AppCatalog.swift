@@ -24,6 +24,17 @@ struct AppEntry: Identifiable, Equatable {
     /// 浏览器装的网页应用（Chrome「安装此网站为应用」生成的 V2EX.app 这种）：搜索面板里副标题写
     /// 「Chrome 网页应用 · v2ex.com」，和普通 App 分得开。
     var webApp: WebApp? = nil
+    /// 版本号（Info.plist 的 `CFBundleShortVersionString`）：搜索面板副标题末尾写（用户 2026-11-24 要的）。
+    /// 没写的、写得不像版本号的是 nil；只有扫描目录里的 App 有，装在别处的（`seen`、运行中现造的）没有。
+    var version: String? = nil
+    /// 读版本号那一刻 Info.plist 的身份：重扫时没变就沿用 `version`，不再解析一遍（见 `AppCatalog.version(of:previous:)`）。
+    var infoStamp: InfoStamp? = nil
+
+    struct InfoStamp: Equatable {
+        let inode: UInt64
+        let seconds: Int
+        let nanoseconds: Int
+    }
 
     struct WebApp: Equatable {
         /// 网站地址（Info.plist 的 `CrAppModeShortcutURL`）。
@@ -258,8 +269,9 @@ final class AppCatalog {
         if let scannedAt, Date().timeIntervalSince(scannedAt) < 60 { completion(); return }
         guard !scanning else { return }
         scanning = true
+        let previous = Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         DispatchQueue.global(qos: .userInitiated).async {
-            let found = Self.scan()
+            let found = Self.scan(previous: previous)
             Task { @MainActor in
                 self.entries = found
                 self.scanning = false
@@ -296,7 +308,7 @@ final class AppCatalog {
         onFoldersChanged?()
     }
 
-    private nonisolated static func scan() -> [AppEntry] {
+    private nonisolated static func scan(previous: [String: AppEntry]) -> [AppEntry] {
         var seen = Set<String>()
         var result: [AppEntry] = []
         let fm = FileManager.default
@@ -323,6 +335,7 @@ final class AppCatalog {
                     ?? url.deletingPathExtension().lastPathComponent
                 let meta = metadata(of: url)
                 let info = bundle?.infoDictionary ?? [:]
+                let versionInfo = Self.version(of: url, previous: previous[path])
                 result.append(AppEntry(name: name,
                                        // 应用宝装的安卓 App，Info.plist 里的名字是包名（com.tencent.macapk.com.ss.android.ugc.aweme），
                                        // 当别名进索引的话打「com」全命中（同 `otherOpeners` 不比 bundle id 那条）
@@ -333,10 +346,38 @@ final class AppCatalog {
                                        comment: meta.comment,
                                        isAgent: Self.flag(info["LSUIElement"]) || Self.flag(info["LSBackgroundOnly"]),
                                        useCount: meta.useCount,
-                                       webApp: webApp(info: info, bundleID: bundle?.bundleIdentifier)))
+                                       webApp: webApp(info: info, bundleID: bundle?.bundleIdentifier),
+                                       version: versionInfo.version,
+                                       infoStamp: versionInfo.stamp))
             }
         }
         return result.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// 版本号不能从 `Bundle(url:)` 取：它按路径缓存 Info.plist，App 原地更新后读到的还是旧版本号
+    /// （2026-11-24 实测，整个包换掉也一样）。现读一遍 187 个 App 要 35ms，所以按 Info.plist 的
+    /// inode + 修改时间沿用上次读到的：没变就只多一次 stat（187 个约 1ms），更新过的才重新解析。
+    /// Mac App 的 Info.plist 在 Contents 下；iOS App 的包是一层壳（Info.plist 在 Wrapper 里），拿包本身的。
+    private nonisolated static func version(of url: URL, previous: AppEntry?) -> (version: String?, stamp: AppEntry.InfoStamp?) {
+        let stamp = infoStamp(url.path + "/Contents/Info.plist") ?? infoStamp(url.path)
+        if let stamp, let previous, previous.infoStamp == stamp { return (previous.version, stamp) }
+        let info = CFBundleCopyInfoDictionaryForURL(url as CFURL) as? [String: Any]
+        return (displayVersion(info?["CFBundleShortVersionString"]), stamp)
+    }
+
+    private nonisolated static func infoStamp(_ path: String) -> AppEntry.InfoStamp? {
+        var st = stat()
+        guard stat(path, &st) == 0 else { return nil }
+        return AppEntry.InfoStamp(inode: UInt64(st.st_ino), seconds: Int(st.st_mtimespec.tv_sec),
+                                  nanoseconds: Int(st.st_mtimespec.tv_nsec))
+    }
+
+    /// 显示用的版本号：去掉首尾空白；空的、太长的（塞了构建信息）、没展开的 Xcode 变量（`$(MARKETING_VERSION)`）不要。
+    nonisolated static func displayVersion(_ raw: Any?) -> String? {
+        guard let text = (raw as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty, text.count <= 24, !text.contains("$("),
+              !text.contains(where: \.isNewline) else { return nil }
+        return text
     }
 
     /// 应用目录下一层可以往里找 App 的文件夹：真的文件夹（不是符号链接、不是包）、不是隐藏的。

@@ -904,6 +904,8 @@ final class TabSearchModel: ObservableObject {
     var showBrowserIcons = false
     /// 网页类的行画不画浏览器角标。只有一个浏览器时，标签和 App 混排的两张表也画，一眼分出哪行是网页
     ///（Teams 网页和 Teams App 的图标一个样）：「最近使用」（2026-10-20）、「全部」有输入时（2026-10-23）。
+    /// ⌥ 正被按着：App 行副标题末尾显示版本号。
+    @Published var optionHeld = false
     /// 「全部」看有没有输入、不看有没有 App 命中，否则角标随输入时有时无。
     var drawsBrowserBadges: Bool {
         showBrowserIcons || showingRecent
@@ -2801,6 +2803,7 @@ private struct TabSearchView: View {
     private var list: some View {
         ScrollViewReader { proxy in
         ScrollView(.vertical, showsIndicators: false) {
+            showsVersion: model.optionHeld,
             let sections = model.sections
             // 「全部」里分组头吸顶（用户 2026-09-27 要的）。其他模式只有一段、没有头。
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -3461,6 +3464,8 @@ private struct SearchRowView: View {
         // 和「应用 · 运行中」对称，浏览器名就说明了它是网页
         case .tab(let item):
             let host = Self.host(of: item.tab.url)
+    /// ⌥ 按着：App 行副标题末尾接版本号（`TabSearchModel.optionHeld`）。
+    var showsVersion = false
             guard mixed else { return host }
             return [browserBadge.map(BrowserSupport.displayName), profileBadge, host.isEmpty ? nil : host]
                 .compactMap { $0 }.joined(separator: " · ")
@@ -3473,7 +3478,7 @@ private struct SearchRowView: View {
         case .opener(_, let f):  return L10n.t("打开「\(f.name)」", "Open “\(f.name)”")
         case .app(let a):
             // 混排段：「应用 · 注释」「网页应用 · 注释」，开头的词说明是什么（写网址的是标签）
-            if mixed { return [Self.appKind(a), a.comment].compactMap { $0 }.joined(separator: " · ") }
+            if mixed { return [Self.appKind(a), a.comment, version].compactMap { $0 }.joined(separator: " · ") }
             // 网页应用写「Chrome 网页应用 · v2ex.com」：所在目录（~/Applications/Chrome Apps.localized）说明不了它是什么。
             // 只靠这行字和普通 App 分开，不画浏览器角标：网站 logo + 角标就是标签行的长相（用户 2026-11-23 看过实物否掉的）
             if let web = a.webApp {
@@ -3486,8 +3491,8 @@ private struct SearchRowView: View {
             }
             // 访达注释（搜注释命中时看得出是因为它）、运行中；两样都没有才写所在目录（运行中的 App 多半都在
             // /Applications，那行字等于没说，用户 2026-09-29 定的；但第二行也别空着）
-            if let comment = a.comment { return comment }
-            return appRunning ? "" : (a.path as NSString).deletingLastPathComponent
+            let place = a.comment ?? (appRunning ? nil : (a.path as NSString).deletingLastPathComponent)
+            return [place, version].compactMap { $0 }.joined(separator: " · ")
         // 副标题写作用对象或主人：窗口命令写「Muxy 的窗口」，App 的命令写 App 名，系统级的写 macOS（品牌名不翻译；
         // 别用 L10n.t("系统", "System")，英文「System」已经是外观设置里「跟随系统」的词条，按英文查表会串成「跟隨系統」）。
         // 插件列表的入口（股票…）给的是空串：标题就是插件名，分组头又写着「插件」
@@ -3500,6 +3505,7 @@ private struct SearchRowView: View {
                 return [L10n.t("应用", "App"), p.memberCount > 1 ? L10n.t("\(p.memberCount) 个进程", "\(p.memberCount) processes") : nil]
                     .compactMap { $0 }.joined(separator: " · ")
             }
+    /// 按住 ⌥ 时 App 在这些后面再接版本号（「/Applications · 1.19.1」「1.19.1 · 运行中 ●」）。
             return ["PID \(p.pid)", p.commandLine.isEmpty ? (p.path as NSString).abbreviatingWithTildeInPath : p.commandLine]
                 .joined(separator: " · ")
         case .pluginItem(let r): return r.subtitle ?? ""
@@ -3521,6 +3527,9 @@ private struct SearchRowView: View {
     /// 曾把已关闭 / 历史的行压成灰字以示「找回」；有了模式标签和分组头之后是双重标记，
     /// 只剩可读性变差，2026-09-26 和其他行统一。现在只有退出了的进程压暗（留在原位，下次重排才拿掉）。
     private var dimmed: Bool { processExited }
+            // 按住 ⌥ 时版本号垫在最后（「运行中 ●」之前，绿点总在行尾；用户 2026-11-24 要的：平时不占地方）。
+            // 网页应用不写：它的 Info.plist 版本是浏览器生成的壳，不是网站的
+            let version = showsVersion && a.webApp == nil ? a.version : nil
 
     private var isTab: Bool {
         if case .tab = row { return true }
@@ -4483,6 +4492,8 @@ final class TabSearchPanel {
                               cursorID: model.baseCursorID,
                               scrollY: listScrollView?.contentView.bounds.minY ?? 0,
                               subState: model.subState)
+        // ⌥ 反过来：⌥Space 唤出时 ⌥ 还按着，照读的话每次打开都先闪一下版本号。只认打开之后按下的
+        model.optionHeld = false
         closingAfterPick = false
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors = []
@@ -4587,9 +4598,13 @@ final class TabSearchPanel {
     }
 
     private func installMonitors(for panel: NSPanel) {
-        // ⌘ 按下 / 松开 → 行尾角标显隐
+        // ⌘ 按下 / 松开 → 行尾角标显隐；⌥ → App 行的版本号显隐
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.model.commandHeld = event.modifierFlags.contains(.command)
+            guard let model = self?.model else { return event }
+            model.commandHeld = event.modifierFlags.contains(.command)
+            // 没变不写：@Published 每写一次整张列表重画一遍，按 ⇧ 这类无关的键别白画
+            let option = event.modifierFlags.contains(.option)
+            if model.optionHeld != option { model.optionHeld = option }
             return event
         }!)
 
