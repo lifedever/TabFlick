@@ -84,6 +84,51 @@
    ]
   },
   {
+   "id": "gold",
+   "version": "1.0.2",
+   "name": {
+    "zh-Hans": "黄金",
+    "zh-Hant": "黃金",
+    "en": "Gold",
+    "ja": "金価格",
+    "ko": "금 시세",
+    "es": "Oro",
+    "fr": "Or",
+    "de": "Gold"
+   },
+   "summary": {
+    "zh-Hans": "伦敦金、上金所 Au99.99 和 Au(T+D)，工行、民生、浙商积存金的实时价格，可以放进菜单栏。",
+    "zh-Hant": "倫敦金、上金所 Au99.99 和 Au(T+D)，工行、民生、浙商積存金的即時價格，可以放進選單列。",
+    "en": "Live prices for London gold, SGE Au99.99 and Au(T+D), and the gold accumulation plans of ICBC, CMBC and CZB. Can live in the menu bar."
+   },
+   "symbol": "chart.line.uptrend.xyaxis.circle.fill",
+   "tint": "orange",
+   "icon": "icon.svg",
+   "hosts": [
+    "qt.gtimg.cn",
+    "m.cmbchina.com",
+    "mybank.icbc.com.cn",
+    "api.jdjygold.com"
+   ],
+   "files": [
+    {
+     "path": "icon.svg",
+     "size": 416,
+     "sha256": "2210bbce20766211a415709af3107f4869f8be612863916b521636e989b9acc2"
+    },
+    {
+     "path": "main.js",
+     "size": 19891,
+     "sha256": "4322c151807f14088bc1d43db58200c437ed5ba94b23a863afeaef9881cbfb2a"
+    },
+    {
+     "path": "manifest.json",
+     "size": 2001,
+     "sha256": "5cfa1eb8849a3c14a9fa847dbdee8e2797a8c7625ca0ebb23a2763c72908518c"
+    }
+   ]
+  },
+  {
    "id": "hackernews",
    "version": "1.0.2",
    "name": {

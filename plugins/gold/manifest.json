@@ -1,0 +1,72 @@
+{
+  "id": "gold",
+  "version": "1.0.2",
+  "name": {
+    "zh-Hans": "黄金",
+    "zh-Hant": "黃金",
+    "en": "Gold",
+    "ja": "金価格",
+    "ko": "금 시세",
+    "es": "Oro",
+    "fr": "Or",
+    "de": "Gold"
+  },
+  "summary": {
+    "zh-Hans": "伦敦金、上金所 Au99.99 和 Au(T+D)，工行、民生、浙商积存金的实时价格，可以放进菜单栏。",
+    "zh-Hant": "倫敦金、上金所 Au99.99 和 Au(T+D)，工行、民生、浙商積存金的即時價格，可以放進選單列。",
+    "en": "Live prices for London gold, SGE Au99.99 and Au(T+D), and the gold accumulation plans of ICBC, CMBC and CZB. Can live in the menu bar."
+  },
+  "symbol": "chart.line.uptrend.xyaxis.circle.fill",
+  "tint": "orange",
+  "icon": "icon.svg",
+  "hosts": [
+    "qt.gtimg.cn",
+    "m.cmbchina.com",
+    "mybank.icbc.com.cn",
+    "api.jdjygold.com"
+  ],
+  "settings": {
+    "upDownColors": true
+  },
+  "contributes": {
+    "menu": true,
+    "list": {
+      "title": {
+        "zh-Hans": "黄金",
+        "zh-Hant": "黃金",
+        "en": "Gold",
+        "ja": "金価格",
+        "ko": "금 시세",
+        "es": "Oro",
+        "fr": "Or",
+        "de": "Gold"
+      },
+      "keywords": [
+        "hj",
+        "huangjin",
+        "gold",
+        "金价",
+        "jinjia",
+        "积存金",
+        "jcj",
+        "jicunjin",
+        "伦敦金",
+        "ldj",
+        "xau",
+        "现货黄金",
+        "au9999",
+        "autd"
+      ],
+      "placeholder": {
+        "zh-Hans": "筛选：伦敦金、Au99.99、工行…",
+        "zh-Hant": "篩選：倫敦金、Au99.99、工行…",
+        "en": "Filter: London, Au99.99, ICBC…"
+      },
+      "empty": {
+        "zh-Hans": "只有伦敦金、Au99.99、Au(T+D) 和工行、民生、浙商积存金。",
+        "zh-Hant": "只有倫敦金、Au99.99、Au(T+D) 和工行、民生、浙商積存金。",
+        "en": "Only London gold, Au99.99, Au(T+D), and ICBC, CMBC and CZB gold accumulation."
+      }
+    }
+  }
+}

@@ -10,7 +10,7 @@ TabFlick 的插件是一段 JavaScript，跑在 TabFlick 内嵌的 JavaScriptCor
 | 菜单栏 | 状态栏菜单里一个二级菜单，用户在设置里打开 | 自选股、常用币种 |
 | 设置页 | 下拉框、文本框、链接、「测试」按钮 | 天气的 API Key |
 
-这个目录里的 7 个官方插件就是最好的参考：`worldclock`（不联网、最简单）、`currency`（联网 + 菜单栏）、`weather`（要用户填 Key + 测试按钮）、`stocks`（最完整）。
+这个目录里的 8 个官方插件就是最好的参考：`worldclock`（不联网、最简单）、`currency`（联网 + 菜单栏）、`weather`（要用户填 Key + 测试按钮）、`stocks`（最完整）。
 
 ## 目录结构
 
