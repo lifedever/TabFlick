@@ -130,6 +130,10 @@ enum BuiltinPluginIcons {
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="10.5" y="14.5" width="43" height="35" rx="6.5" fill="none" stroke="#5e5ce6" stroke-width="3.6"/>
 <rect x="15.5" y="19.5" width="15" height="25" rx="2.8" fill="#5e5ce6"/><rect x="33.5" y="19.5" width="15" height="25" rx="2.8" fill="#5e5ce6" fill-opacity=".45"/></svg>
 """#)
+    /// 电源键：系统控制（锁屏、睡眠、关机…）
+    static let systemControl = image(svg: #"""
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g stroke="#30b0c7" stroke-width="5" stroke-linecap="round" fill="none"><path d="M32 11v20"/><path d="M21.67 19.26A18 18 0 1 0 42.33 19.26"/></g></svg>
+"""#)
     /// 一页文档压一个钟（同计算器：线条画主体、实心圆里画白色的细节）
     static let recentFiles = image(svg: #"""
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g stroke="#007aff" stroke-width="3.8" stroke-linejoin="round" stroke-linecap="round" fill="none"><path d="M17 9.5h15.5l11.5 11.5v26a4.5 4.5 0 0 1-4.5 4.5H17a4.5 4.5 0 0 1-4.5-4.5V14a4.5 4.5 0 0 1 4.5-4.5z"/><path d="M32.5 9.5v7a4.5 4.5 0 0 0 4.5 4.5h7"/></g>

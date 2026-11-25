@@ -12,13 +12,14 @@ import SwiftUI
 ///
 /// 加一个 App = 在 `all` 里加几条。没有脚本接口（`sdef <App路径>` 查不到命令）的 App 做不了。
 ///
-/// 系统命令（`bundleID` 为 nil：锁屏，用户 2026-09-28 点名要的；窗口命令，见 `WindowCommands`）不挂在任何
+/// 系统命令（`bundleID` 为 nil：锁屏、睡眠、关机这些，见 `SystemControl`；窗口命令，见 `WindowCommands`）不挂在任何
 /// App 下面：一级命中时列在「插件」段（经插件进面板），画 SF Symbol、副标题写「macOS」（窗口命令写「App 名 的窗口」），
 /// 二级里没有。
 struct AppCommand: Identifiable {
     enum Action {
-        /// AppleScript 源码，一行一个元素（逐行交给 osascript 的 -e）；脚本的返回值 → 回响
-        case appleScript([String], report: @MainActor (_ output: String) -> (text: String, kind: Toast.Kind))
+        /// AppleScript 源码，一行一个元素（逐行交给 osascript 的 -e）；脚本的返回值 → 回响（nil = 不弹：
+        /// 切深色模式、重启这类结果自己看得见）
+        case appleScript([String], report: @MainActor (_ output: String) -> (text: String, kind: Toast.Kind)?)
         /// 在本进程里直接做（系统命令）
         case native(@MainActor () -> Void)
         /// 调整前台 App 的窗口（`WindowCommands`）
@@ -49,6 +50,11 @@ struct AppCommand: Identifiable {
     var tint: Color? = nil
     /// 代表整个插件的命令（「结束进程…」、插件列表的入口）画插件的图标，和设置里的一样。nil = 方块里画 `symbol`
     var icon: NSImage? = nil
+    /// 会丢东西、不好撤回的（重启、关机、退出所有 App、清空废纸篓）：面板里回车两次才执行，第一下那一行标红写
+    /// 「再按 ↩ 确认」（同「结束进程…」里结束一个进程）
+    var confirms = false
+    /// 脚本控制的是谁（「系统事件」「访达」「loginwindow」）：没给「自动化」授权时 toast 指路用。nil = App 名
+    var automationTarget: String? = nil
     let action: Action
 }
 
@@ -80,15 +86,7 @@ enum AppCommands {
                                              ? (L10n.t("现在没有进行中的会话", "No session is running"), .info)
                                              : (L10n.t("已结束会话", "Session ended"), .success)
                                      })),
-            // 系统命令
-            AppCommand(
-                id: "system.lock", bundleID: nil,
-                title: L10n.t("锁定屏幕", "Lock Screen"),
-                // 标题「锁定屏幕」里没有连着的「锁屏」两个字，拼音也是 suodingpingmu，都得单独列
-                keywords: ["Lock Screen", "锁定屏幕", "锁屏", "lock", "suoping"],
-                symbol: "lock.fill",
-                action: .native { lockScreen() }),
-            // 「结束进程…」归它自己的插件（ProcessesPlugin），能单独关
+            // 锁屏 2026-11-25 挪到「系统控制」插件（SystemControl.swift），「结束进程…」归它自己的插件（ProcessesPlugin）
         ]
     }
 
@@ -118,7 +116,7 @@ enum AppCommands {
     @MainActor static func run(_ command: AppCommand, appName: String?) {
         let title = command.title
         let script: [String]
-        let report: @MainActor (String) -> (text: String, kind: Toast.Kind)
+        let report: @MainActor (String) -> (text: String, kind: Toast.Kind)?
         switch command.action {
         case .native(let perform):
             perform()
@@ -132,7 +130,9 @@ enum AppCommands {
             script = source
             report = reporter
         }
-        let appName = appName ?? title
+        // 系统命令的回响不写副标题（写「macOS」没有信息量），App 命令写 App 名
+        let detail = command.bundleID == nil ? nil : (appName ?? title)
+        let controlled = command.automationTarget ?? appName ?? title
         DispatchQueue.global(qos: .userInitiated).async {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -160,13 +160,14 @@ enum AppCommands {
             log("⚡️ \(title) → exit \(status)\(out.isEmpty ? "" : ", \(out)")\(err.isEmpty ? "" : ", \(err)")")
             Task { @MainActor in
                 if status == 0 {
-                    let result = report(out)
-                    Toast.show(result.text, detail: appName, kind: result.kind)
+                    if let result = report(out) {
+                        Toast.show(result.text, detail: detail, kind: result.kind)
+                    }
                 } else if err.contains("-1743") {
                     // errAEEventNotPermitted：用户在授权框里点了「不允许」，或者之前拒过
                     Toast.show(L10n.t("没能执行「\(title)」", "Couldn't run “\(title)”"),
-                               detail: L10n.t("系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「\(appName)」。",
-                                              "Allow TabFlick to control \(appName) in System Settings → Privacy & Security → Automation."),
+                               detail: L10n.t("系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「\(controlled)」。",
+                                              "Allow TabFlick to control \(controlled) in System Settings → Privacy & Security → Automation."),
                                kind: .failure)
                 } else {
                     Toast.show(L10n.t("没能执行「\(title)」", "Couldn't run “\(title)”"),

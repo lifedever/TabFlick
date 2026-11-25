@@ -3,64 +3,57 @@
   "key": "Start New Session",
   "zh": "开始新会话",
   "refs": [
-   "AppCommands.swift:61"
+   "AppCommands.swift:67"
   ]
  },
  {
   "key": "Session started",
   "zh": "已开始新会话",
   "refs": [
-   "AppCommands.swift:65"
+   "AppCommands.swift:71"
   ]
  },
  {
   "key": "End Current Session",
   "zh": "结束当前会话",
   "refs": [
-   "AppCommands.swift:68"
+   "AppCommands.swift:74"
   ]
  },
  {
   "key": "No session is running",
   "zh": "现在没有进行中的会话",
   "refs": [
-   "AppCommands.swift:80"
+   "AppCommands.swift:86"
   ]
  },
  {
   "key": "Session ended",
   "zh": "已结束会话",
   "refs": [
-   "AppCommands.swift:81"
-  ]
- },
- {
-  "key": "Lock Screen",
-  "zh": "锁定屏幕",
-  "refs": [
-   "AppCommands.swift:86"
+   "AppCommands.swift:87"
   ]
  },
  {
   "key": "Couldn't run “{0}”",
   "zh": "没能执行「{0}」",
   "refs": [
-   "AppCommands.swift:167",
-   "AppCommands.swift:172"
+   "AppCommands.swift:168",
+   "AppCommands.swift:173"
   ]
  },
  {
   "key": "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.",
   "zh": "系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「{0}」。",
   "refs": [
-   "AppCommands.swift:168"
+   "AppCommands.swift:169"
   ]
  },
  {
   "key": "Open With…",
   "zh": "打开方式…",
   "refs": [
-   "AppCommands.swift:188",
+   "AppCommands.swift:189",
    "SettingsWindow.swift:919",
    "TabSearchPanel.swift:454"
   ]
@@ -69,28 +62,29 @@
   "key": "Finder",
   "zh": "访达",
   "refs": [
-   "AppCommands.swift:191"
+   "AppCommands.swift:192",
+   "SystemControl.swift:118"
   ]
  },
  {
   "key": "Kill Process…",
   "zh": "结束进程…",
   "refs": [
-   "AppCommands.swift:202"
+   "AppCommands.swift:203"
   ]
  },
  {
   "key": "Recent Files",
   "zh": "最近文件",
   "refs": [
-   "AppCommands.swift:222"
+   "AppCommands.swift:223"
   ]
  },
  {
   "key": "Recent Files…",
   "zh": "最近文件…",
   "refs": [
-   "AppCommands.swift:223"
+   "AppCommands.swift:224"
   ]
  },
  {
@@ -144,7 +138,7 @@
   "refs": [
    "AppSettings.swift:54",
    "TabSearchPanel.swift:41",
-   "TabSearchPanel.swift:3525"
+   "TabSearchPanel.swift:3529"
   ]
  },
  {
@@ -161,7 +155,7 @@
   "refs": [
    "AppSettings.swift:56",
    "TabSearchPanel.swift:39",
-   "TabSearchPanel.swift:3522"
+   "TabSearchPanel.swift:3526"
   ]
  },
  {
@@ -325,92 +319,92 @@
   "key": "Calculator",
   "zh": "计算器",
   "refs": [
-   "BuiltinPlugins.swift:19"
+   "BuiltinPlugins.swift:21"
   ]
  },
  {
   "key": "Type a math expression in the search panel. The result shows on top; ↵ copies it.",
   "zh": "在搜索面板里打一道算式，最上面一行出结果，回车拷贝。",
   "refs": [
-   "BuiltinPlugins.swift:21"
+   "BuiltinPlugins.swift:23"
   ]
  },
  {
   "key": "App Actions",
   "zh": "App 快捷操作",
   "refs": [
-   "BuiltinPlugins.swift:40"
+   "BuiltinPlugins.swift:42"
   ]
  },
  {
-  "key": "Start or end an Amphetamine session, and lock the screen.",
-  "zh": "Amphetamine 开始、结束会话，锁定屏幕。",
+  "key": "Start or end an Amphetamine session.",
+  "zh": "Amphetamine 开始、结束会话。",
   "refs": [
-   "BuiltinPlugins.swift:42"
+   "BuiltinPlugins.swift:44"
   ]
  },
  {
   "key": "Window Management",
   "zh": "窗口管理",
   "refs": [
-   "BuiltinPlugins.swift:72"
+   "BuiltinPlugins.swift:74"
   ]
  },
  {
   "key": "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.",
   "zh": "居中、最大化、左右半屏、移到下一个显示器等，动的是打开搜索面板前在用的那个窗口。",
   "refs": [
-   "BuiltinPlugins.swift:74"
+   "BuiltinPlugins.swift:76"
   ]
  },
  {
   "key": "Kill Process",
   "zh": "结束进程",
   "refs": [
-   "BuiltinPlugins.swift:94"
+   "BuiltinPlugins.swift:96"
   ]
  },
  {
   "key": "Find a process by name or port and kill it after confirming.",
   "zh": "按名字或端口找进程，确认后结束。",
   "refs": [
-   "BuiltinPlugins.swift:96"
+   "BuiltinPlugins.swift:98"
   ]
  },
  {
   "key": "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.",
   "zh": "列出 30 天内打开过的文件，和访达的「最近使用」一样。终端、编辑器里直接打开的不算。",
   "refs": [
-   "BuiltinPlugins.swift:126"
+   "BuiltinPlugins.swift:128"
   ]
  },
  {
   "key": "Top CPU",
   "zh": "CPU 占用最高",
   "refs": [
-   "BuiltinPlugins.swift:193"
+   "BuiltinPlugins.swift:195"
   ]
  },
  {
   "key": "Top Memory",
   "zh": "内存占用最高",
   "refs": [
-   "BuiltinPlugins.swift:194"
+   "BuiltinPlugins.swift:196"
   ]
  },
  {
   "key": "No processes to kill",
   "zh": "没有可以结束的进程",
   "refs": [
-   "BuiltinPlugins.swift:208",
-   "TabSearchPanel.swift:2991"
+   "BuiltinPlugins.swift:210",
+   "TabSearchPanel.swift:2995"
   ]
  },
  {
   "key": "Open in Quick Search",
   "zh": "在快捷搜索里打开",
   "refs": [
-   "BuiltinPlugins.swift:210",
+   "BuiltinPlugins.swift:212",
    "Plugins.swift:448"
   ]
  },
@@ -418,29 +412,29 @@
   "key": "Quit “{0}”?",
   "zh": "退出「{0}」？",
   "refs": [
-   "BuiltinPlugins.swift:224"
+   "BuiltinPlugins.swift:226"
   ]
  },
  {
   "key": "Kill “{0}”?",
   "zh": "结束「{0}」？",
   "refs": [
-   "BuiltinPlugins.swift:225"
+   "BuiltinPlugins.swift:227"
   ]
  },
  {
   "key": "Port {0}",
   "zh": "端口 {0}",
   "refs": [
-   "BuiltinPlugins.swift:229",
-   "TabSearchPanel.swift:3986"
+   "BuiltinPlugins.swift:231",
+   "TabSearchPanel.swift:3990"
   ]
  },
  {
   "key": "Quit",
   "zh": "退出",
   "refs": [
-   "BuiltinPlugins.swift:233",
+   "BuiltinPlugins.swift:235",
    "TabSearchPanel.swift:248",
    "TabSearchPanel.swift:442",
    "main.swift:17"
@@ -450,7 +444,7 @@
   "key": "Kill",
   "zh": "结束",
   "refs": [
-   "BuiltinPlugins.swift:233",
+   "BuiltinPlugins.swift:235",
    "TabSearchPanel.swift:248"
   ]
  },
@@ -458,7 +452,7 @@
   "key": "Force Quit",
   "zh": "强制退出",
   "refs": [
-   "BuiltinPlugins.swift:234",
+   "BuiltinPlugins.swift:236",
    "TabSearchPanel.swift:445"
   ]
  },
@@ -466,7 +460,7 @@
   "key": "Force Kill",
   "zh": "强制结束",
   "refs": [
-   "BuiltinPlugins.swift:234",
+   "BuiltinPlugins.swift:236",
    "TabSearchPanel.swift:444"
   ]
  },
@@ -474,8 +468,9 @@
   "key": "Cancel",
   "zh": "取消",
   "refs": [
-   "BuiltinPlugins.swift:236",
+   "BuiltinPlugins.swift:238",
    "SettingsWindow.swift:1219",
+   "SystemControl.swift:332",
    "UpdateDialog.swift:197"
   ]
  },
@@ -483,52 +478,52 @@
   "key": "“{0}” has quit",
   "zh": "已退出「{0}」",
   "refs": [
-   "BuiltinPlugins.swift:256"
+   "BuiltinPlugins.swift:258"
   ]
  },
  {
   "key": "It may be waiting for you to save a document.",
   "zh": "可能在等你保存文档。",
   "refs": [
-   "BuiltinPlugins.swift:263"
+   "BuiltinPlugins.swift:265"
   ]
  },
  {
   "key": "Try again with Force Kill.",
   "zh": "再结束一次时选「强制结束」。",
   "refs": [
-   "BuiltinPlugins.swift:265"
+   "BuiltinPlugins.swift:267"
   ]
  },
  {
   "key": "“{0}” is still running",
   "zh": "「{0}」还没退出",
   "refs": [
-   "BuiltinPlugins.swift:267",
-   "TabSearchPanel.swift:4183"
+   "BuiltinPlugins.swift:269",
+   "TabSearchPanel.swift:4187"
   ]
  },
  {
   "key": "“{0}” had already quit",
   "zh": "「{0}」已经退出了",
   "refs": [
-   "BuiltinPlugins.swift:271"
+   "BuiltinPlugins.swift:273"
   ]
  },
  {
   "key": "No permission to kill “{0}”",
   "zh": "没有权限结束「{0}」",
   "refs": [
-   "BuiltinPlugins.swift:273",
-   "TabSearchPanel.swift:4189"
+   "BuiltinPlugins.swift:275",
+   "TabSearchPanel.swift:4193"
   ]
  },
  {
   "key": "Couldn't kill “{0}”",
   "zh": "没能结束「{0}」",
   "refs": [
-   "BuiltinPlugins.swift:275",
-   "TabSearchPanel.swift:4191"
+   "BuiltinPlugins.swift:277",
+   "TabSearchPanel.swift:4195"
   ]
  },
  {
@@ -891,7 +886,7 @@
   "zh": "下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
   "refs": [
    "MRUController.swift:1907",
-   "TabSearchPanel.swift:3039"
+   "TabSearchPanel.swift:3043"
   ]
  },
  {
@@ -1086,8 +1081,8 @@
   "zh": "正在读取…",
   "refs": [
    "Plugins.swift:400",
-   "TabSearchPanel.swift:2994",
-   "TabSearchPanel.swift:3000"
+   "TabSearchPanel.swift:2998",
+   "TabSearchPanel.swift:3004"
   ]
  },
  {
@@ -1213,7 +1208,7 @@
   "refs": [
    "SettingsShell.swift:242",
    "SettingsShell.swift:284",
-   "TabSearchPanel.swift:3121"
+   "TabSearchPanel.swift:3125"
   ]
  },
  {
@@ -1806,7 +1801,7 @@
   "refs": [
    "SettingsWindow.swift:923",
    "TabSearchPanel.swift:32",
-   "TabSearchPanel.swift:3124"
+   "TabSearchPanel.swift:3128"
   ]
  },
  {
@@ -1881,7 +1876,7 @@
   "zh": "更新到 {0}",
   "refs": [
    "SettingsWindow.swift:1119",
-   "TabSearchPanel.swift:3147"
+   "TabSearchPanel.swift:3151"
   ]
  },
  {
@@ -2347,7 +2342,7 @@
   "zh": "更多",
   "refs": [
    "StatusItemController.swift:649",
-   "TabSearchPanel.swift:3197"
+   "TabSearchPanel.swift:3201"
   ]
  },
  {
@@ -2377,6 +2372,298 @@
   "zh": "收藏",
   "refs": [
    "StatusItemController.swift:734"
+  ]
+ },
+ {
+  "key": "Lock Screen",
+  "zh": "锁定屏幕",
+  "refs": [
+   "SystemControl.swift:38"
+  ]
+ },
+ {
+  "key": "Hide All Windows",
+  "zh": "隐藏所有窗口",
+  "refs": [
+   "SystemControl.swift:39"
+  ]
+ },
+ {
+  "key": "Hide Other Apps",
+  "zh": "隐藏其他 App",
+  "refs": [
+   "SystemControl.swift:40"
+  ]
+ },
+ {
+  "key": "Quit All Apps",
+  "zh": "退出所有 App",
+  "refs": [
+   "SystemControl.swift:41"
+  ]
+ },
+ {
+  "key": "Turn Off Display",
+  "zh": "关闭显示器",
+  "refs": [
+   "SystemControl.swift:42"
+  ]
+ },
+ {
+  "key": "Sleep",
+  "zh": "睡眠",
+  "refs": [
+   "SystemControl.swift:43"
+  ]
+ },
+ {
+  "key": "Start Screen Saver",
+  "zh": "开始屏幕保护程序",
+  "refs": [
+   "SystemControl.swift:44"
+  ]
+ },
+ {
+  "key": "Restart",
+  "zh": "重新启动",
+  "refs": [
+   "SystemControl.swift:45",
+   "SystemControl.swift:313"
+  ]
+ },
+ {
+  "key": "Shut Down",
+  "zh": "关机",
+  "refs": [
+   "SystemControl.swift:46",
+   "SystemControl.swift:317"
+  ]
+ },
+ {
+  "key": "Log Out",
+  "zh": "退出登录",
+  "refs": [
+   "SystemControl.swift:47",
+   "SystemControl.swift:321"
+  ]
+ },
+ {
+  "key": "Toggle Dark Mode",
+  "zh": "切换深色模式",
+  "refs": [
+   "SystemControl.swift:48"
+  ]
+ },
+ {
+  "key": "Toggle Mute",
+  "zh": "切换静音",
+  "refs": [
+   "SystemControl.swift:49"
+  ]
+ },
+ {
+  "key": "Eject All Disks",
+  "zh": "推出所有磁盘",
+  "refs": [
+   "SystemControl.swift:50"
+  ]
+ },
+ {
+  "key": "Empty Trash",
+  "zh": "清空废纸篓",
+  "refs": [
+   "SystemControl.swift:51"
+  ]
+ },
+ {
+  "key": "Except {0}",
+  "zh": "除了 {0}",
+  "refs": [
+   "SystemControl.swift:113"
+  ]
+ },
+ {
+  "key": "System Events",
+  "zh": "系统事件",
+  "refs": [
+   "SystemControl.swift:117"
+  ]
+ },
+ {
+  "key": "Muted",
+  "zh": "已静音",
+  "refs": [
+   "SystemControl.swift:153"
+  ]
+ },
+ {
+  "key": "Unmuted",
+  "zh": "已取消静音",
+  "refs": [
+   "SystemControl.swift:154"
+  ]
+ },
+ {
+  "key": "The Trash is empty",
+  "zh": "废纸篓是空的",
+  "refs": [
+   "SystemControl.swift:165"
+  ]
+ },
+ {
+  "key": "Emptied the Trash",
+  "zh": "已清空废纸篓",
+  "refs": [
+   "SystemControl.swift:166"
+  ]
+ },
+ {
+  "key": "No apps to quit",
+  "zh": "没有要退出的 App",
+  "refs": [
+   "SystemControl.swift:199"
+  ]
+ },
+ {
+  "key": "All apps have quit",
+  "zh": "已退出所有 App",
+  "refs": [
+   "SystemControl.swift:208"
+  ]
+ },
+ {
+  "key": "Some apps are still running",
+  "zh": "还有 App 没退出",
+  "refs": [
+   "SystemControl.swift:212"
+  ]
+ },
+ {
+  "key": "{0}. They may be waiting for you to save documents.",
+  "zh": "{0}。可能在等你保存文档。",
+  "refs": [
+   "SystemControl.swift:213"
+  ]
+ },
+ {
+  "key": "Couldn't start the screen saver",
+  "zh": "没能开始屏幕保护程序",
+  "refs": [
+   "SystemControl.swift:244"
+  ]
+ },
+ {
+  "key": "No disks to eject",
+  "zh": "没有可以推出的磁盘",
+  "refs": [
+   "SystemControl.swift:269"
+  ]
+ },
+ {
+  "key": "Ejected all disks",
+  "zh": "已推出所有磁盘",
+  "refs": [
+   "SystemControl.swift:271"
+  ]
+ },
+ {
+  "key": "Couldn't eject {0}",
+  "zh": "没能推出「{0}」",
+  "refs": [
+   "SystemControl.swift:274"
+  ]
+ },
+ {
+  "key": "An app may be using it.",
+  "zh": "可能有 App 正在用它。",
+  "refs": [
+   "SystemControl.swift:276"
+  ]
+ },
+ {
+  "key": "Quit all apps?",
+  "zh": "退出所有 App？",
+  "refs": [
+   "SystemControl.swift:306"
+  ]
+ },
+ {
+  "key": "Apps with unsaved documents ask first. Finder and menu bar tools keep running.",
+  "zh": "没保存的文档会先问你。访达和菜单栏工具不退。",
+  "refs": [
+   "SystemControl.swift:307"
+  ]
+ },
+ {
+  "key": "Quit All",
+  "zh": "全部退出",
+  "refs": [
+   "SystemControl.swift:309"
+  ]
+ },
+ {
+  "key": "Restart now?",
+  "zh": "现在重新启动？",
+  "refs": [
+   "SystemControl.swift:311"
+  ]
+ },
+ {
+  "key": "Apps with unsaved documents ask first.",
+  "zh": "没保存的文档会先问你。",
+  "refs": [
+   "SystemControl.swift:312",
+   "SystemControl.swift:316",
+   "SystemControl.swift:320"
+  ]
+ },
+ {
+  "key": "Shut down now?",
+  "zh": "现在关机？",
+  "refs": [
+   "SystemControl.swift:315"
+  ]
+ },
+ {
+  "key": "Log out now?",
+  "zh": "现在退出登录？",
+  "refs": [
+   "SystemControl.swift:319"
+  ]
+ },
+ {
+  "key": "Empty the Trash?",
+  "zh": "清空废纸篓？",
+  "refs": [
+   "SystemControl.swift:323"
+  ]
+ },
+ {
+  "key": "Items in the Trash are deleted permanently. This can't be undone.",
+  "zh": "废纸篓里的东西会永久删除，不能撤销。",
+  "refs": [
+   "SystemControl.swift:324"
+  ]
+ },
+ {
+  "key": "Empty",
+  "zh": "清空",
+  "refs": [
+   "SystemControl.swift:326"
+  ]
+ },
+ {
+  "key": "System Control",
+  "zh": "系统控制",
+  "refs": [
+   "SystemControl.swift:348"
+  ]
+ },
+ {
+  "key": "Lock, sleep, restart, shut down, hide all windows, toggle dark mode, eject disks, empty the Trash and more. Quitting all apps, restarting and the like need ↩ twice.",
+  "zh": "锁屏、睡眠、重启、关机、隐藏所有窗口、切换深色模式、推出磁盘、清空废纸篓等。退出所有 App、重启、关机这类要按两次回车。",
+  "refs": [
+   "SystemControl.swift:350"
   ]
  },
  {
@@ -2545,7 +2832,7 @@
   "zh": "关闭标签",
   "refs": [
    "TabSearchPanel.swift:435",
-   "TabSearchPanel.swift:3738"
+   "TabSearchPanel.swift:3742"
   ]
  },
  {
@@ -2622,275 +2909,275 @@
   "key": "Tab changes sort: {0}",
   "zh": "Tab 切换排序：{0}",
   "refs": [
-   "TabSearchPanel.swift:2949"
+   "TabSearchPanel.swift:2953"
   ]
  },
  {
   "key": "Tab cycles: {0}",
   "zh": "Tab 切换：{0}",
   "refs": [
-   "TabSearchPanel.swift:2951"
+   "TabSearchPanel.swift:2955"
   ]
  },
  {
   "key": "Open “{0}” with…",
   "zh": "「{0}」的打开方式",
   "refs": [
-   "TabSearchPanel.swift:2960"
+   "TabSearchPanel.swift:2964"
   ]
  },
  {
   "key": "Actions for “{0}”",
   "zh": "「{0}」的操作",
   "refs": [
-   "TabSearchPanel.swift:2961"
+   "TabSearchPanel.swift:2965"
   ]
  },
  {
   "key": "Filter by name, port or PID",
   "zh": "按名称、端口或 PID 过滤",
   "refs": [
-   "TabSearchPanel.swift:2963"
+   "TabSearchPanel.swift:2967"
   ]
  },
  {
   "key": "Filter by file name or location",
   "zh": "按文件名或位置过滤",
   "refs": [
-   "TabSearchPanel.swift:2964"
+   "TabSearchPanel.swift:2968"
   ]
  },
  {
   "key": "Search {0}",
   "zh": "搜索{0}",
   "refs": [
-   "TabSearchPanel.swift:2966",
-   "TabSearchPanel.swift:2967"
+   "TabSearchPanel.swift:2970",
+   "TabSearchPanel.swift:2971"
   ]
  },
  {
   "key": "Search everything",
   "zh": "搜索全部",
   "refs": [
-   "TabSearchPanel.swift:2970"
+   "TabSearchPanel.swift:2974"
   ]
  },
  {
   "key": "Search browser tabs",
   "zh": "搜索浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:2971"
+   "TabSearchPanel.swift:2975"
   ]
  },
  {
   "key": "Search the web",
   "zh": "搜索互联网内容",
   "refs": [
-   "TabSearchPanel.swift:2972"
+   "TabSearchPanel.swift:2976"
   ]
  },
  {
   "key": "Search history",
   "zh": "搜索历史记录",
   "refs": [
-   "TabSearchPanel.swift:2973"
+   "TabSearchPanel.swift:2977"
   ]
  },
  {
   "key": "Search browser bookmarks",
   "zh": "搜索浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:2974"
+   "TabSearchPanel.swift:2978"
   ]
  },
  {
   "key": "Search recently closed tabs",
   "zh": "搜索最近关闭的标签",
   "refs": [
-   "TabSearchPanel.swift:2975"
+   "TabSearchPanel.swift:2979"
   ]
  },
  {
   "key": "Search favorite folders",
   "zh": "搜索收藏的文件夹",
   "refs": [
-   "TabSearchPanel.swift:2976"
+   "TabSearchPanel.swift:2980"
   ]
  },
  {
   "key": "Search apps",
   "zh": "搜索应用",
   "refs": [
-   "TabSearchPanel.swift:2977"
+   "TabSearchPanel.swift:2981"
   ]
  },
  {
   "key": "No app can open it",
   "zh": "没有能打开它的应用",
   "refs": [
-   "TabSearchPanel.swift:2985"
+   "TabSearchPanel.swift:2989"
   ]
  },
  {
   "key": "No matching apps",
   "zh": "没有匹配的应用",
   "refs": [
-   "TabSearchPanel.swift:2986",
-   "TabSearchPanel.swift:3013"
+   "TabSearchPanel.swift:2990",
+   "TabSearchPanel.swift:3017"
   ]
  },
  {
   "key": "No matching actions",
   "zh": "没有匹配的操作",
   "refs": [
-   "TabSearchPanel.swift:2988"
+   "TabSearchPanel.swift:2992"
   ]
  },
  {
   "key": "Loading processes",
   "zh": "正在读取进程",
   "refs": [
-   "TabSearchPanel.swift:2990"
+   "TabSearchPanel.swift:2994"
   ]
  },
  {
   "key": "No matching processes",
   "zh": "没有匹配的进程",
   "refs": [
-   "TabSearchPanel.swift:2991"
+   "TabSearchPanel.swift:2995"
   ]
  },
  {
   "key": "Couldn't read from Spotlight",
   "zh": "读不到 Spotlight 的记录",
   "refs": [
-   "TabSearchPanel.swift:2995"
+   "TabSearchPanel.swift:2999"
   ]
  },
  {
   "key": "No files opened in the last 30 days",
   "zh": "30 天内没有打开过的文件",
   "refs": [
-   "TabSearchPanel.swift:2996"
+   "TabSearchPanel.swift:3000"
   ]
  },
  {
   "key": "No matching files",
   "zh": "没有匹配的文件",
   "refs": [
-   "TabSearchPanel.swift:2997"
+   "TabSearchPanel.swift:3001"
   ]
  },
  {
   "key": "Couldn't load. Try again in a moment.",
   "zh": "取不到数据，过一会儿再试。",
   "refs": [
-   "TabSearchPanel.swift:3001"
+   "TabSearchPanel.swift:3005"
   ]
  },
  {
   "key": "Nothing here yet",
   "zh": "还没有内容",
   "refs": [
-   "TabSearchPanel.swift:3003"
+   "TabSearchPanel.swift:3007"
   ]
  },
  {
   "key": "No results",
   "zh": "没有匹配的结果",
   "refs": [
-   "TabSearchPanel.swift:3004"
+   "TabSearchPanel.swift:3008"
   ]
  },
  {
   "key": "No browser tabs yet",
   "zh": "还没有浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:3007"
+   "TabSearchPanel.swift:3011"
   ]
  },
  {
   "key": "No matching browser tabs",
   "zh": "没有匹配的浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:3007"
+   "TabSearchPanel.swift:3011"
   ]
  },
  {
   "key": "Type something to search for",
   "zh": "输入要搜的内容",
   "refs": [
-   "TabSearchPanel.swift:3008"
+   "TabSearchPanel.swift:3012"
   ]
  },
  {
   "key": "No history yet",
   "zh": "还没有历史记录",
   "refs": [
-   "TabSearchPanel.swift:3009"
+   "TabSearchPanel.swift:3013"
   ]
  },
  {
   "key": "No matching history",
   "zh": "没有匹配的历史记录",
   "refs": [
-   "TabSearchPanel.swift:3009"
+   "TabSearchPanel.swift:3013"
   ]
  },
  {
   "key": "No browser bookmarks yet",
   "zh": "还没有浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:3010"
+   "TabSearchPanel.swift:3014"
   ]
  },
  {
   "key": "No matching browser bookmarks",
   "zh": "没有匹配的浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:3010"
+   "TabSearchPanel.swift:3014"
   ]
  },
  {
   "key": "Nothing closed yet",
   "zh": "还没有关闭过标签",
   "refs": [
-   "TabSearchPanel.swift:3011"
+   "TabSearchPanel.swift:3015"
   ]
  },
  {
   "key": "No matching closed tabs",
   "zh": "没有匹配的已关闭标签",
   "refs": [
-   "TabSearchPanel.swift:3011"
+   "TabSearchPanel.swift:3015"
   ]
  },
  {
   "key": "No favorite folders yet. Add one from the menu bar.",
   "zh": "还没有收藏文件夹。状态栏菜单里可以添加。",
   "refs": [
-   "TabSearchPanel.swift:3012"
+   "TabSearchPanel.swift:3016"
   ]
  },
  {
   "key": "No matching folders",
   "zh": "没有匹配的文件夹",
   "refs": [
-   "TabSearchPanel.swift:3012"
+   "TabSearchPanel.swift:3016"
   ]
  },
  {
   "key": "Loading apps",
   "zh": "正在读取应用列表",
   "refs": [
-   "TabSearchPanel.swift:3013"
+   "TabSearchPanel.swift:3017"
   ]
  },
  {
   "key": "Extension update required",
   "zh": "扩展需要更新",
   "refs": [
-   "TabSearchPanel.swift:3031",
+   "TabSearchPanel.swift:3035",
    "main.swift:442"
   ]
  },
@@ -2898,143 +3185,143 @@
   "key": "Confirm",
   "zh": "确认",
   "refs": [
-   "TabSearchPanel.swift:3114"
+   "TabSearchPanel.swift:3118"
   ]
  },
  {
   "key": "{0} more",
   "zh": "还有 {0} 条",
   "refs": [
-   "TabSearchPanel.swift:3198"
+   "TabSearchPanel.swift:3202"
   ]
  },
  {
   "key": "Browser bookmark",
   "zh": "浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:3524"
+   "TabSearchPanel.swift:3528"
   ]
  },
  {
   "key": "Folder",
   "zh": "文件夹",
   "refs": [
-   "TabSearchPanel.swift:3527"
+   "TabSearchPanel.swift:3531"
   ]
  },
  {
   "key": "Open “{0}”",
   "zh": "打开「{0}」",
   "refs": [
-   "TabSearchPanel.swift:3528"
+   "TabSearchPanel.swift:3532"
   ]
  },
  {
   "key": "{0} Web App",
   "zh": "{0} 网页应用",
   "refs": [
-   "TabSearchPanel.swift:3540"
+   "TabSearchPanel.swift:3544"
   ]
  },
  {
   "key": "Web App",
   "zh": "网页应用",
   "refs": [
-   "TabSearchPanel.swift:3541",
-   "TabSearchPanel.swift:3590"
+   "TabSearchPanel.swift:3545",
+   "TabSearchPanel.swift:3594"
   ]
  },
  {
   "key": "App",
   "zh": "应用",
   "refs": [
-   "TabSearchPanel.swift:3558",
-   "TabSearchPanel.swift:3590"
+   "TabSearchPanel.swift:3562",
+   "TabSearchPanel.swift:3594"
   ]
  },
  {
   "key": "{0} processes",
   "zh": "{0} 个进程",
   "refs": [
-   "TabSearchPanel.swift:3558"
+   "TabSearchPanel.swift:3562"
   ]
  },
  {
   "key": "Running",
   "zh": "运行中",
   "refs": [
-   "TabSearchPanel.swift:3681"
+   "TabSearchPanel.swift:3685"
   ]
  },
  {
   "key": "Press ↩ again to confirm",
   "zh": "再按 ↩ 确认",
   "refs": [
-   "TabSearchPanel.swift:3722"
+   "TabSearchPanel.swift:3726"
   ]
  },
  {
   "key": "Duplicate",
   "zh": "重复",
   "refs": [
-   "TabSearchPanel.swift:3752"
+   "TabSearchPanel.swift:3756"
   ]
  },
  {
   "key": "{0} more tab(s) with this page are open; ⌘↩ closes them",
   "zh": "还开着 {0} 个同样的页面，⌘↩ 可以一起关掉",
   "refs": [
-   "TabSearchPanel.swift:3758"
+   "TabSearchPanel.swift:3762"
   ]
  },
  {
   "key": "Current",
   "zh": "当前",
   "refs": [
-   "TabSearchPanel.swift:3762",
-   "TabSearchPanel.swift:3802"
+   "TabSearchPanel.swift:3766",
+   "TabSearchPanel.swift:3806"
   ]
  },
  {
   "key": "Exited",
   "zh": "已退出",
   "refs": [
-   "TabSearchPanel.swift:3812"
+   "TabSearchPanel.swift:3816"
   ]
  },
  {
   "key": "Quitting",
   "zh": "正在退出",
   "refs": [
-   "TabSearchPanel.swift:3816"
+   "TabSearchPanel.swift:3820"
   ]
  },
  {
   "key": "Killing",
   "zh": "正在结束",
   "refs": [
-   "TabSearchPanel.swift:3816"
+   "TabSearchPanel.swift:3820"
   ]
  },
  {
   "key": "Ports {0}",
   "zh": "端口 {0}",
   "refs": [
-   "TabSearchPanel.swift:3986"
+   "TabSearchPanel.swift:3990"
   ]
  },
  {
   "key": "Use Force Kill in the ⌘↩ actions.",
   "zh": "⌘↩ 里可以强制结束。",
   "refs": [
-   "TabSearchPanel.swift:4184"
+   "TabSearchPanel.swift:4188"
   ]
  },
  {
   "key": "iCloud Drive",
   "zh": "iCloud 云盘",
   "refs": [
-   "TabSearchPanel.swift:4394"
+   "TabSearchPanel.swift:4402"
   ]
  },
  {

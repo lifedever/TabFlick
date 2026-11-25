@@ -1627,6 +1627,10 @@ final class TabSearchModel: ObservableObject {
         refilter(keepCursorOn: selectedRow?.id)
     }
 
+    /// 关面板时放下「上膛」：重开时（90 秒内回到原处，输入和选中项都在）按一下回车就重启 / 关机太危险。
+    /// 进程列表那一层关面板时本来就清（`closeProcesses`），主列表里的系统命令靠这里。
+    func disarm() { armedID = nil }
+
     func markProcessEnding(_ id: String) { endingProcesses.insert(id) }
     func unmarkProcessEnding(_ id: String) { endingProcesses.remove(id) }
     func markProcessExited(_ id: String) {
@@ -1644,9 +1648,9 @@ final class TabSearchModel: ObservableObject {
         }
     }
 
-    /// 结束进程一律按两次（用户 2026-10-26：先定「只对非 App 进程确认」，用过之后改成 App 退出也确认）。
-    /// 返回 true = 可以动手了；false = 这一下只是「上膛」。
-    func confirmProcessRequest(_ row: SearchRow) -> Bool {
+    /// 回车两次才动手的那一下：结束进程（用户 2026-10-26：先定「只对非 App 进程确认」，用过之后改成 App 退出也确认）、
+    /// 系统控制里重启 / 关机这类（`AppCommand.confirms`）。返回 true = 可以动手了；false = 这一下只是「上膛」。
+    func confirmTwice(_ row: SearchRow) -> Bool {
         if armedID == row.id {
             armedID = nil
             return true
@@ -4256,7 +4260,7 @@ final class TabSearchPanel {
             // 进程列表里的行和它操作里的「退出 / 结束」「强制…」：第一下只「上膛」，再按一次才动手；
             // 在操作列表里的先退回进程列表。App 退出后关面板走 toast，单独的进程结果在那一行上看
             if let request = self.model.processRequest(row) {
-                guard self.model.confirmProcessRequest(row) else { return }
+                guard self.model.confirmTwice(row) else { return }
                 if self.model.actionTarget != nil { self.model.leaveActions() }
                 self.endProcess(request.item, force: request.force)
                 return
@@ -4295,6 +4299,10 @@ final class TabSearchPanel {
                 self.close()
                 handler?(.copyResult, row)
                 return
+            }
+            // 重启、关机、退出所有 App、清空废纸篓：第一下只「上膛」（那一行标红写「再按 ↩ 确认」），再按一次才做
+            if case .appCommand(let command, _) = row, command.confirms {
+                guard self.model.confirmTwice(row) else { return }
             }
             // 记住「这个输入选了它」，下次同样的输入它往前排；首页「推荐」另记一份（没输入时点的也算）
             if let identity = row.memoryIdentity {
@@ -4537,6 +4545,7 @@ final class TabSearchPanel {
             model.closeProcesses()
             model.closePluginList()
             model.closeRecentFiles()
+            model.disarm()
         }
         lastSession = Session(closedAt: Date(), completed: closingAfterPick, global: isGlobal,
                               query: model.baseQuery, mode: model.mode,

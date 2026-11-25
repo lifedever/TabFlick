@@ -1,13 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// 内置插件：原来写死在搜索面板里的四样，改成插件后能在设置里单独关（2026-11-06），后来加了最近文件（2026-11-13）。
-/// 各自的实现在各自的文件里（Calculator / AppCommands / WindowCommands / ProcessList / RecentFiles），
+/// 内置插件：原来写死在搜索面板里的四样，改成插件后能在设置里单独关（2026-11-06），后来加了最近文件（2026-11-13）、
+/// 系统控制（2026-11-25，锁屏从「App 快捷操作」挪了过去）。
+/// 各自的实现在各自的文件里（Calculator / AppCommands / SystemControl / WindowCommands / ProcessList / RecentFiles），
 /// 这里只是把它们接到插件协议上。
 enum BuiltinPlugins {
-    /// 顺序 = 设置侧边栏里的顺序，也是命令在面板里同分时的先后（锁屏、结束进程、窗口命令，同插件化之前）。
+    /// 顺序 = 设置侧边栏里的顺序，也是命令在面板里同分时的先后（锁屏这些系统命令、结束进程、窗口命令，同插件化之前）。
     @MainActor static func all() -> [Plugin] {
-        [CalculatorPlugin(), AppCommandsPlugin(), ProcessesPlugin(), WindowCommandsPlugin(), RecentFilesPlugin()]
+        [CalculatorPlugin(), AppCommandsPlugin(), SystemControlPlugin(), ProcessesPlugin(), WindowCommandsPlugin(),
+         RecentFilesPlugin()]
     }
 }
 
@@ -39,7 +41,7 @@ final class AppCommandsPlugin: Plugin {
     let id = "appCommands"
     var title: String { L10n.t("App 快捷操作", "App Actions") }
     var summary: String {
-        L10n.t("Amphetamine 开始、结束会话，锁定屏幕。", "Start or end an Amphetamine session, and lock the screen.")
+        L10n.t("Amphetamine 开始、结束会话。", "Start or end an Amphetamine session.")
     }
     let symbol = "command"
     var tint: Color { .orange }
