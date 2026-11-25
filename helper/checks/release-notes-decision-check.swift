@@ -2,7 +2,7 @@
 //
 // 跑法（在 helper/ 下）：
 //   swiftc -parse-as-library Sources/tabflick/ReleaseNotes.swift \
-//          Sources/tabflick/ReleaseNotesParser.swift \
+//          Sources/tabflick/ReleaseNotesParser.swift Sources/tabflick/GitHubReleases.swift Sources/tabflick/UpdateFeed.swift \
 //          Sources/tabflick/L10n.swift Sources/tabflick/L10nTables.swift Sources/tabflick/Log.swift \
 //          checks/release-notes-decision-check.swift -o /tmp/notesdecide && /tmp/notesdecide
 //

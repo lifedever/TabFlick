@@ -18,8 +18,7 @@ import SwiftUI
 @MainActor
 final class UpdateChecker: ObservableObject {
 
-    private static let repo = "lifedever/TabFlick"
-    static var releasesPage: URL { URL(string: "https://github.com/\(repo)/releases/latest")! }
+    static var releasesPage: URL { URL(string: "https://github.com/\(GitHubReleases.repo)/releases/latest")! }
 
     private static let lastCheckKey = "lastUpdateCheck"
     /// 发过通知的版本：同一版只发一次，没理会就等下一版。
@@ -178,38 +177,13 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: - 网络
 
-    private enum FetchResult {
-        case success(UpdateOffer?)
-        case failure(String)
-    }
-
-    /// 取发布列表（不用 /releases/latest）：落下好几版时，更新窗口要把这几版的说明都列出来。
-    private func fetchOffer() async -> FetchResult {
-        let url = URL(string: "https://api.github.com/repos/\(Self.repo)/releases?per_page=20")!
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 15
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-            // 仓库还没公开 / 改名时是 404，不当错误
-            if code == 404 { return .success(nil) }
-            guard code == 200 else {
-                return .failure(L10n.t("GitHub 返回 \(code)", "GitHub returned \(code)"))
-            }
-            guard let releases = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-                return .failure(L10n.t("无法解析发布信息", "Could not parse the release info"))
-            }
-            #if arch(arm64)
-            let arch = "arm64"
-            #else
-            let arch = "x86_64"
-            #endif
-            return .success(UpdateFeed.offer(from: releases, current: currentVersion, arch: arch))
-        } catch {
-            return .failure(error.localizedDescription)
-        }
+    private func fetchOffer() async -> GitHubReleases.OfferResult {
+        #if arch(arm64)
+        let arch = "arm64"
+        #else
+        let arch = "x86_64"
+        #endif
+        return await GitHubReleases.fetchOffer(current: currentVersion, arch: arch)
     }
 
     // MARK: - 下载
@@ -467,14 +441,24 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
             return
         }
 
-        // 校验字节数：CDN 截断、连接中断的包不能进安装环节
-        if expectedSize > 0,
-           let attrs = try? FileManager.default.attributesOfItem(atPath: dest.path),
-           let fileSize = attrs[.size] as? Int64,
-           fileSize != expectedSize {
+        // 404 之类也会走到这里，下下来的是一页错误。网页侧拼出来的地址，这一版漏传了这个架构的包时就是这样
+        if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             try? FileManager.default.removeItem(at: dest)
             finished = true
-            onFinish(.failure("Incomplete download (\(fileSize)/\(expectedSize) bytes)"))
+            onFinish(.failure("HTTP \(http.statusCode)"))
+            return
+        }
+
+        // 校验字节数：CDN 截断、连接中断的包不能进安装环节。
+        // 网页侧（API 被限流）拿不到发布信息里的大小，按响应头的长度核对
+        let expected = expectedSize > 0 ? expectedSize : (downloadTask.response?.expectedContentLength ?? -1)
+        if expected > 0,
+           let attrs = try? FileManager.default.attributesOfItem(atPath: dest.path),
+           let fileSize = attrs[.size] as? Int64,
+           fileSize != expected {
+            try? FileManager.default.removeItem(at: dest)
+            finished = true
+            onFinish(.failure("Incomplete download (\(fileSize)/\(expected) bytes)"))
             return
         }
 

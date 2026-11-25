@@ -44,6 +44,79 @@ let body0262 = """
 - **Plugins have their own icons** — Each plugin has one icon
 """
 
+// 真实样本：v0.27.4 的发布说明原文，和 releases.atom 里 GitHub 渲染出来的 HTML（2026-11-25 取的）
+let notes0274Markdown = #"""
+## 更新内容
+
+- **有新版本时发系统通知，不再弹窗** — 自动检查查到新版本，发一条系统通知，写着这一版改了哪几项，点开进设置 → 关于。每一版只通知一次，「跳过此版本」去掉了。第一次会问是否允许 TabFlick 发通知
+- **更新窗口写着改了什么** — 在「关于」里点「更新到 x…」，窗口里列出当前版本之后每一版的更新内容，点「立即更新」下载安装，装完自动重启。菜单栏的「检查更新…」查到新版本也直接打开这个窗口
+- **从更新窗口装完不再弹「更新内容」** — 重启后屏幕底部提示一句「已更新到 x」
+
+> 这一版还是用原来的方式更新上来的，从下一版开始改成通知。扩展没有改动，不用重新加载。
+
+## What's New
+
+- **Updates arrive as a notification, not a pop-up** — When the automatic check finds a new version, a notification lists what changed; clicking it opens Settings → About. Each version is announced once, so "Skip This Version" is gone. macOS asks once whether TabFlick may send notifications
+- **The update window shows what changed** — Click "Update to x…" in About to see the notes of every version after the one installed. "Update Now" downloads and installs it, then TabFlick restarts. "Check for Updates…" in the menu bar opens the same window when there's a new version
+- **No What's New window after updating from there** — After the restart, a short "Updated to x" message appears at the bottom of the screen instead
+
+> This version still installs the old way; notifications start with the next update. The extension is unchanged; no need to reload it.
+
+系统要求 macOS 14+、Chromium 系浏览器 116+。Requires macOS 14+ and a Chromium-based browser 116+.
+
+### Download
+| File | For |
+|------|-----|
+| TabFlick-0.27.4-arm64.dmg | Apple Silicon (M1/M2/M3/M4) |
+| TabFlick-0.27.4-x86_64.dmg | Intel |
+| TabFlick-Extension.zip | 浏览器扩展 / Browser extension（0.25.2） |
+"""#
+
+let notes0274AtomHTML = #"""
+<h2>更新内容</h2>
+<ul>
+<li><strong>有新版本时发系统通知，不再弹窗</strong> — 自动检查查到新版本，发一条系统通知，写着这一版改了哪几项，点开进设置 → 关于。每一版只通知一次，「跳过此版本」去掉了。第一次会问是否允许 TabFlick 发通知</li>
+<li><strong>更新窗口写着改了什么</strong> — 在「关于」里点「更新到 x…」，窗口里列出当前版本之后每一版的更新内容，点「立即更新」下载安装，装完自动重启。菜单栏的「检查更新…」查到新版本也直接打开这个窗口</li>
+<li><strong>从更新窗口装完不再弹「更新内容」</strong> — 重启后屏幕底部提示一句「已更新到 x」</li>
+</ul>
+<blockquote>
+<p>这一版还是用原来的方式更新上来的，从下一版开始改成通知。扩展没有改动，不用重新加载。</p>
+</blockquote>
+<h2>What's New</h2>
+<ul>
+<li><strong>Updates arrive as a notification, not a pop-up</strong> — When the automatic check finds a new version, a notification lists what changed; clicking it opens Settings → About. Each version is announced once, so "Skip This Version" is gone. macOS asks once whether TabFlick may send notifications</li>
+<li><strong>The update window shows what changed</strong> — Click "Update to x…" in About to see the notes of every version after the one installed. "Update Now" downloads and installs it, then TabFlick restarts. "Check for Updates…" in the menu bar opens the same window when there's a new version</li>
+<li><strong>No What's New window after updating from there</strong> — After the restart, a short "Updated to x" message appears at the bottom of the screen instead</li>
+</ul>
+<blockquote>
+<p>This version still installs the old way; notifications start with the next update. The extension is unchanged; no need to reload it.</p>
+</blockquote>
+<p>系统要求 macOS 14+、Chromium 系浏览器 116+。Requires macOS 14+ and a Chromium-based browser 116+.</p>
+<h3>Download</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TabFlick-0.27.4-arm64.dmg</td>
+<td>Apple Silicon (M1/M2/M3/M4)</td>
+</tr>
+<tr>
+<td>TabFlick-0.27.4-x86_64.dmg</td>
+<td>Intel</td>
+</tr>
+<tr>
+<td>TabFlick-Extension.zip</td>
+<td>浏览器扩展 / Browser extension（0.25.2）</td>
+</tr>
+</tbody>
+</table>
+"""#
+
 func release(_ tag: String, body: String = "", draft: Bool = false, prerelease: Bool = false,
              assets: [String] = ["arm64", "x86_64"]) -> [String: Any] {
     let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
@@ -148,6 +221,99 @@ enum UpdateFeedCheck {
         let para = UpdateFeed.summary(of: "## 更新内容\n\n修了一个崩溃。\n\n第二段\n", heading: "更新内容")
         check("没有列表项时取第一段", para == "修了一个崩溃。", "实际 \(para.debugDescription)")
         check("空说明给空串", UpdateFeed.summary(of: "", heading: "更新内容").isEmpty)
+
+        print("网页侧（API 被限流时）：GitHub 渲染的 HTML 转回 markdown")
+        for heading in ["更新内容", "What's New"] {
+            let fromHTML = ReleaseNotesParser.blocks(from: ReleaseNotesParser.section(
+                from: UpdateFeed.markdown(fromReleaseHTML: notes0274AtomHTML), heading: heading))
+            let fromMarkdown = ReleaseNotesParser.blocks(from: ReleaseNotesParser.section(
+                from: notes0274Markdown, heading: heading))
+            check("「\(heading)」切出来的块和原文一模一样（\(fromMarkdown.count) 块）",
+                  fromHTML == fromMarkdown && !fromMarkdown.isEmpty,
+                  "\n    HTML: \(fromHTML)\n    原文: \(fromMarkdown)")
+        }
+        check("通知摘要两条路一样",
+              UpdateFeed.summary(of: UpdateFeed.markdown(fromReleaseHTML: notes0274AtomHTML), heading: "更新内容")
+                  == UpdateFeed.summary(of: notes0274Markdown, heading: "更新内容"))
+        let converted = UpdateFeed.markdown(fromReleaseHTML: notes0274AtomHTML)
+        check("下载表格丢掉", !converted.contains("arm64.dmg") && !converted.contains("<"), converted)
+        let link = UpdateFeed.markdown(fromReleaseHTML:
+            #"<ul><li><strong>插件开发文档</strong> — 想写插件，看 <a href="https://github.com/lifedever/TabFlick/blob/main/plugins/README.md">plugins/README.md</a>：manifest、API</li></ul>"#)
+        check("链接转回 [文字](地址)",
+              link == "- **插件开发文档** — 想写插件，看 [plugins/README.md](https://github.com/lifedever/TabFlick/blob/main/plugins/README.md)：manifest、API",
+              link.debugDescription)
+        let code = UpdateFeed.markdown(fromReleaseHTML:
+            "<ul>\n<li><strong>打开方式</strong> — 没有 App 认领的文件（比如 <code>.mdd</code>）列出能打开纯文本的 App</li>\n</ul>")
+        check("行内代码转回反引号", code == "- **打开方式** — 没有 App 认领的文件（比如 `.mdd`）列出能打开纯文本的 App",
+              code.debugDescription)
+        let entities = UpdateFeed.markdown(fromReleaseHTML: "<p>&quot;Later&quot; &amp; it&#39;s &#x2014; a &amp;lt;b&amp;gt;</p>")
+        check("实体解开，&amp; 最后解（&amp;lt; 是字面的 &lt;）", entities == "\"Later\" & it's — a &lt;b&gt;",
+              entities.debugDescription)
+        let multi = UpdateFeed.markdown(fromReleaseHTML: "<blockquote>\n<p>第一段</p>\n<p>第二段</p>\n</blockquote>\n<li>跨\n行</li>")
+        check("引用里的多段各自成行、列表项里的换行并成空格", multi == "> 第一段\n> 第二段\n\n- 跨 行", multi.debugDescription)
+
+        print("网页侧：atom、跳转地址、拼出更新")
+        let atom = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <title>随便起的名字</title>
+            <link rel="alternate" type="text/html" href="https://github.com/lifedever/TabFlick/releases/tag/v0.27.4"/>
+            <link rel="related" href="https://github.com/lifedever/TabFlick/releases/tag/v0.1.0"/>
+            <content type="html">&lt;h2&gt;更新内容&lt;/h2&gt;
+        &lt;ul&gt;
+        &lt;li&gt;&lt;strong&gt;甲&lt;/strong&gt; — 说明&lt;/li&gt;
+        &lt;/ul&gt;</content>
+          </entry>
+          <entry>
+            <title>v0.27.3</title>
+            <link rel="alternate" type="text/html" href="https://github.com/lifedever/TabFlick/releases/tag/v0.27.3"/>
+            <content type="html"><![CDATA[<h2>更新内容</h2><ul><li><strong>乙</strong></li></ul>]]></content>
+          </entry>
+          <entry>
+            <title>不是 release 的条目</title>
+            <link rel="alternate" type="text/html" href="https://github.com/lifedever/TabFlick/commits"/>
+            <content type="html">x</content>
+          </entry>
+        </feed>
+        """
+        let atomNotes = UpdateFeed.atomNotes(from: Data(atom.utf8))
+        check("版本取链接里的 tag 不取标题，认不出的条目跳过",
+              atomNotes.map(\.version) == ["0.27.4", "0.27.3"], "实际 \(atomNotes.map(\.version))")
+        check("XML 转义和 CDATA 都解开成 markdown",
+              atomNotes.first?.body == "## 更新内容\n\n- **甲** — 说明" && atomNotes.last?.body == "## 更新内容\n\n- **乙**",
+              "实际 \(atomNotes.map(\.body))")
+        check("坏 XML 给空", UpdateFeed.atomNotes(from: Data("<feed><entry>".utf8)).isEmpty)
+
+        let base = "https://github.com/lifedever/TabFlick/releases/"
+        check("跳转地址取 tag", UpdateFeed.tag(fromReleaseURL: URL(string: base + "tag/v0.27.4")!) == "v0.27.4")
+        check("跳到发布列表 / 登录页不算",
+              UpdateFeed.tag(fromReleaseURL: URL(string: base)!) == nil
+                  && UpdateFeed.tag(fromReleaseURL: URL(string: "https://github.com/login?return_to=x")!) == nil)
+        check("路径里有 tag 但不在 releases 下不算",
+              UpdateFeed.tag(fromReleaseURL: URL(string: "https://github.com/topics/tag/v1.0")!) == nil)
+        check("tag 里有怪字符不收（要拼进下载地址）",
+              UpdateFeed.tag(fromReleaseURL: URL(string: base + "tag/v1%22%3Bx")!) == nil)
+
+        let webNotes = [ReleaseNote(version: "0.27.2", body: "B"), ReleaseNote(version: "0.27.4", body: "D"),
+                        ReleaseNote(version: "0.28.0", body: "预发布"), ReleaseNote(version: "0.27.3", body: "C"),
+                        ReleaseNote(version: "0.27.1", body: "A")]
+        let web = UpdateFeed.offer(latestTag: "v0.27.4", notes: webNotes, current: "0.27.1", arch: "arm64",
+                                   repo: "lifedever/TabFlick")
+        check("按契约拼安装包地址、大小未知",
+              web?.assetURL?.absoluteString == "https://github.com/lifedever/TabFlick/releases/download/v0.27.4/TabFlick-0.27.4-arm64.dmg"
+                  && web?.assetSize == 0, "实际 \(web?.assetURL?.absoluteString ?? "nil")")
+        check("说明只要当前之后、最新那版及以前的，新的在前",
+              web?.notes.map(\.version) == ["0.27.4", "0.27.3", "0.27.2"], "实际 \(web?.notes.map(\.version) ?? [])")
+        check("已是最新返回 nil", UpdateFeed.offer(latestTag: "v0.27.4", notes: webNotes, current: "0.27.4",
+                                              arch: "arm64", repo: "lifedever/TabFlick") == nil)
+        check("怪 tag 返回 nil（版本号照样比得出来更新）",
+              UpdateFeed.offer(latestTag: "v9.0.0\"$(x)", notes: [], current: "0.1.0",
+                               arch: "arm64", repo: "lifedever/TabFlick") == nil)
+        let manyWeb = (1...15).map { ReleaseNote(version: "1.0.\($0)", body: "") }
+        check("网页侧也最多 \(UpdateFeed.maxNotes) 版",
+              UpdateFeed.offer(latestTag: "v1.0.15", notes: manyWeb, current: "0.9.0", arch: "arm64",
+                               repo: "x/y")?.notes.count == UpdateFeed.maxNotes)
 
         print(failures == 0 ? "\n全部通过（\(cases) 条）" : "\n\(failures) 项失败（共 \(cases) 条）")
         if failures > 0 { fatalError("更新检查校验未通过") }

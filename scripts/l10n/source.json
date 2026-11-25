@@ -701,6 +701,22 @@
   ]
  },
  {
+  "key": "GitHub returned {0}",
+  "zh": "GitHub 返回 {0}",
+  "refs": [
+   "GitHubReleases.swift:38",
+   "GitHubReleases.swift:70"
+  ]
+ },
+ {
+  "key": "Could not parse the release info",
+  "zh": "无法解析发布信息",
+  "refs": [
+   "GitHubReleases.swift:41",
+   "GitHubReleases.swift:72"
+  ]
+ },
+ {
   "key": "Follow System",
   "zh": "跟随系统",
   "refs": [
@@ -1092,14 +1108,14 @@
   "key": "What's New in TabFlick",
   "zh": "TabFlick 更新内容",
   "refs": [
-   "ReleaseNotes.swift:201"
+   "ReleaseNotes.swift:193"
   ]
  },
  {
   "key": "Updated to {0}",
   "zh": "已更新到 {0}",
   "refs": [
-   "ReleaseNotes.swift:241",
+   "ReleaseNotes.swift:233",
    "main.swift:114"
   ]
  },
@@ -1107,14 +1123,14 @@
   "key": "What changed",
   "zh": "这一版改了什么",
   "refs": [
-   "ReleaseNotes.swift:243"
+   "ReleaseNotes.swift:235"
   ]
  },
  {
   "key": "Couldn't load the notes for this version — they're on GitHub.",
   "zh": "更新说明取不到，可以去 GitHub 看。",
   "refs": [
-   "ReleaseNotes.swift:258",
+   "ReleaseNotes.swift:250",
    "UpdateDialog.swift:158"
   ]
  },
@@ -1122,7 +1138,7 @@
   "key": "View on GitHub",
   "zh": "在 GitHub 上查看",
   "refs": [
-   "ReleaseNotes.swift:274",
+   "ReleaseNotes.swift:266",
    "UpdateDialog.swift:202"
   ]
  },
@@ -1130,10 +1146,10 @@
   "key": "OK",
   "zh": "好",
   "refs": [
-   "ReleaseNotes.swift:277",
+   "ReleaseNotes.swift:269",
    "SettingsWindow.swift:148",
-   "UpdateChecker.swift:402",
-   "UpdateChecker.swift:411",
+   "UpdateChecker.swift:376",
+   "UpdateChecker.swift:385",
    "main.swift:305",
    "main.swift:524",
    "main.swift:549"
@@ -3025,77 +3041,63 @@
   "key": "You have {0}",
   "zh": "当前版本 {0}",
   "refs": [
-   "UpdateChecker.swift:160"
-  ]
- },
- {
-  "key": "GitHub returned {0}",
-  "zh": "GitHub 返回 {0}",
-  "refs": [
-   "UpdateChecker.swift:199"
-  ]
- },
- {
-  "key": "Could not parse the release info",
-  "zh": "无法解析发布信息",
-  "refs": [
-   "UpdateChecker.swift:202"
+   "UpdateChecker.swift:159"
   ]
  },
  {
   "key": "The update image could not be opened",
   "zh": "更新包无法打开",
   "refs": [
-   "UpdateChecker.swift:295"
+   "UpdateChecker.swift:269"
   ]
  },
  {
   "key": "The update image is missing the app",
   "zh": "更新包内容不完整",
   "refs": [
-   "UpdateChecker.swift:301"
+   "UpdateChecker.swift:275"
   ]
  },
  {
   "key": "You're up to date",
   "zh": "已是最新版本",
   "refs": [
-   "UpdateChecker.swift:400"
+   "UpdateChecker.swift:374"
   ]
  },
  {
   "key": "TabFlick {0} is the latest version.",
   "zh": "当前版本 {0}。",
   "refs": [
-   "UpdateChecker.swift:401"
+   "UpdateChecker.swift:375"
   ]
  },
  {
   "key": "Could not check for updates",
   "zh": "检查更新失败",
   "refs": [
-   "UpdateChecker.swift:409"
+   "UpdateChecker.swift:383"
   ]
  },
  {
   "key": "Automatic update failed",
   "zh": "自动更新失败",
   "refs": [
-   "UpdateChecker.swift:418"
+   "UpdateChecker.swift:392"
   ]
  },
  {
   "key": "\n\nYou can download it manually from the releases page.",
   "zh": "\n\n可以去发布页手动下载。",
   "refs": [
-   "UpdateChecker.swift:419"
+   "UpdateChecker.swift:393"
   ]
  },
  {
   "key": "Open Download Page",
   "zh": "前往下载",
   "refs": [
-   "UpdateChecker.swift:423",
+   "UpdateChecker.swift:397",
    "UpdateDialog.swift:213"
   ]
  },
@@ -3103,7 +3105,7 @@
   "key": "Later",
   "zh": "稍后",
   "refs": [
-   "UpdateChecker.swift:424",
+   "UpdateChecker.swift:398",
    "UpdateDialog.swift:205",
    "main.swift:291",
    "main.swift:449"

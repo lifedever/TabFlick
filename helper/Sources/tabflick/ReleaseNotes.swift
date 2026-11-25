@@ -80,17 +80,9 @@ enum ReleaseNotes {
 
     // MARK: - 取说明
 
-    /// 按 tag 精确取这一版的说明。用 /latest 会在「装的不是最新版」时张冠李戴。
+    /// 按 tag 精确取这一版的说明。API 被限流时从 releases.atom 里找（`GitHubReleases.notes`）。
     static func fetch(version: String, timeout: TimeInterval) async -> String? {
-        let url = URL(string: "https://api.github.com/repos/\(repo)/releases/tags/v\(version)")!
-        var request = URLRequest(url: url)
-        request.timeoutInterval = timeout
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let body = json["body"] as? String, !body.isEmpty else { return nil }
-        return body
+        await GitHubReleases.notes(version: version, timeout: timeout)
     }
 
     // 解析在 ReleaseNotesParser.swift（纯 Foundation，可脱离 app 单独编译验证）

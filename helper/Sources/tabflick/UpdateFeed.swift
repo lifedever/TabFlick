@@ -85,6 +85,129 @@ enum UpdateFeed {
                            notes: Array(ordered))
     }
 
+    // MARK: - 网页侧（API 被限流时）
+
+    /// 网页侧拿到的信息 → 要不要更新。`latestTag` 来自 `/releases/latest` 的跳转（不含草稿、预发布），
+    /// 说明来自 `releases.atom`（最近 10 版）。拿不到安装包大小，`assetSize` 是 0（下载时按响应头核对）；
+    /// 安装包地址按资产命名契约拼（`TabFlick-<版本>-<架构>.dmg`，见 CLAUDE.md「自动更新的两条契约」）。
+    static func offer(latestTag: String, notes: [ReleaseNote], current: String, arch: String,
+                      repo: String) -> UpdateOffer? {
+        guard isSafeTag(latestTag) else { return nil }
+        let version = version(fromTag: latestTag)
+        guard isNewer(version, than: current) else { return nil }
+        let asset = URL(string: "https://github.com/\(repo)/releases/download/\(latestTag)/TabFlick-\(version)-\(arch).dmg")
+        var seen = Set<String>()
+        let picked = notes
+            .filter { isNewer($0.version, than: current) && !isNewer($0.version, than: version) }
+            .sorted { isNewer($0.version, than: $1.version) }
+            .filter { seen.insert($0.version).inserted }
+            .prefix(maxNotes)
+        return UpdateOffer(version: version, assetURL: asset, assetSize: 0, notes: Array(picked))
+    }
+
+    /// `https://github.com/<repo>/releases/tag/v0.27.4` → `v0.27.4`。跳到别处（登录页、发布列表）的返回 nil。
+    static func tag(fromReleaseURL url: URL) -> String? {
+        let parts = url.pathComponents
+        guard let i = parts.lastIndex(of: "tag"), i > 0, parts[i - 1] == "releases", i + 1 < parts.count,
+              isSafeTag(parts[i + 1]) else { return nil }
+        return parts[i + 1]
+    }
+
+    /// tag 要拼进下载地址、显示在界面上：只收字母数字和 `.-_`。
+    private static func isSafeTag(_ tag: String) -> Bool {
+        !tag.isEmpty && tag.count <= 40 && tag.unicodeScalars.allSatisfy {
+            ($0.isASCII && CharacterSet.alphanumerics.contains($0)) || "._-".unicodeScalars.contains($0)
+        }
+    }
+
+    /// `releases.atom` → 各版说明（HTML 转回 markdown，好和 API 那条路共用 `ReleaseNotesParser`）。
+    /// 版本取 `<link href=".../releases/tag/v0.27.4">`，不取标题（标题是 release 名，可以随便起）。
+    static func atomNotes(from data: Data) -> [ReleaseNote] {
+        let reader = AtomReader()
+        let parser = XMLParser(data: data)
+        parser.delegate = reader
+        guard parser.parse() else { return [] }
+        return reader.entries.compactMap { entry in
+            guard let link = entry.link, let url = URL(string: link),
+                  let tag = tag(fromReleaseURL: url) else { return nil }
+            return ReleaseNote(version: version(fromTag: tag), body: markdown(fromReleaseHTML: entry.content))
+        }
+    }
+
+    /// GitHub 把发布说明渲染成的 HTML → 发布说明用到的那几种 markdown（小标题、列表、引用、段落，
+    /// 行内的加粗、代码、链接）。表格整个丢掉（下载表格，`ReleaseNotesParser` 本来也不要）。
+    static func markdown(fromReleaseHTML html: String) -> String {
+        var s = html.replacingOccurrences(of: "\r", with: "")
+        s = replacing(s, #"<table\b.*?</table>"#) { _ in "\n" }
+        s = replacing(s, #"<blockquote\b[^>]*>(.*?)</blockquote>"#) { g in
+            var paragraphs: [String] = []
+            _ = replacing(g[1], #"<p\b[^>]*>(.*?)</p>"#) { p in paragraphs.append(inline(p[1])); return "" }
+            if paragraphs.isEmpty { paragraphs = [inline(g[1])] }
+            return "\n" + paragraphs.filter { !$0.isEmpty }.map { "> " + $0 }.joined(separator: "\n") + "\n"
+        }
+        s = replacing(s, #"<h([1-6])\b[^>]*>(.*?)</h\1>"#) { g in
+            "\n" + String(repeating: "#", count: Int(g[1]) ?? 2) + " " + inline(g[2]) + "\n"
+        }
+        s = replacing(s, #"<li\b[^>]*>(.*?)</li>"#) { g in "\n- " + inline(g[1]) + "\n" }
+        s = replacing(s, #"<p\b[^>]*>(.*?)</p>"#) { g in "\n" + inline(g[1]) + "\n" }
+        s = replacing(s, #"<[^>]+>"#) { _ in "" }   // 剩下的 ul / 空白之间的标签
+        return s.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .split(whereSeparator: \.isEmpty)
+            .map { $0.joined(separator: "\n") }
+            .joined(separator: "\n\n")
+    }
+
+    /// 一个块里面的行内标签 → markdown，换行并成空格。
+    private static func inline(_ html: String) -> String {
+        var s = html
+        s = replacing(s, #"<a\b[^>]*href="([^"]*)"[^>]*>(.*?)</a>"#) { g in "[\(stripTags(g[2]))](\(g[1]))" }
+        s = replacing(s, #"</?(strong|b)\b[^>]*>"#) { _ in "**" }
+        s = replacing(s, #"</?code\b[^>]*>"#) { _ in "`" }
+        s = replacing(s, #"<br\s*/?>"#) { _ in " " }
+        s = stripTags(s)
+        s = decodeEntities(s)
+        return s.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func stripTags(_ s: String) -> String {
+        replacing(s, #"<[^>]+>"#) { _ in "" }
+    }
+
+    private static func decodeEntities(_ s: String) -> String {
+        var out = s
+        for (entity, char) in [("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"),
+                               ("&gt;", ">"), ("&nbsp;", " ")] {
+            out = out.replacingOccurrences(of: entity, with: char)
+        }
+        out = replacing(out, #"&#(x?)([0-9a-fA-F]+);"#) { g in
+            let value = g[1].isEmpty ? UInt32(g[2]) : UInt32(g[2], radix: 16)
+            return value.flatMap(Unicode.Scalar.init).map { String(Character($0)) } ?? g[0]
+        }
+        return out.replacingOccurrences(of: "&amp;", with: "&")   // 最后换，免得「&amp;lt;」变成「<」
+    }
+
+    /// 正则替换，回调拿到整段和各个分组（没匹配上的分组是空串）。跨行匹配。
+    private static func replacing(_ s: String, _ pattern: String, _ transform: ([String]) -> String) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern, options: [.dotMatchesLineSeparators, .caseInsensitive]) else { return s }
+        let ns = s as NSString
+        var result = ""
+        var last = 0
+        for match in regex.matches(in: s, range: NSRange(location: 0, length: ns.length)) {
+            result += ns.substring(with: NSRange(location: last, length: match.range.location - last))
+            let groups = (0..<match.numberOfRanges).map { i -> String in
+                let r = match.range(at: i)
+                return r.location == NSNotFound ? "" : ns.substring(with: r)
+            }
+            result += transform(groups)
+            last = match.range.location + match.range.length
+        }
+        result += ns.substring(from: last)
+        return result
+    }
+
     /// 系统通知的正文：说明里每条列表项取开头加粗的小标题
     /// （「- **新插件：黄金** — 伦敦金…」→「新插件：黄金」），没有加粗的取整条纯文本。
     /// 一行一条，最多 `limit` 条。通知横幅只显示两三行，整条说明塞进去只看得到半句。
@@ -112,6 +235,42 @@ enum UpdateFeed {
         guard let end = rest.range(of: "**") else { return nil }
         let lead = plain(String(rest[..<end.lowerBound]))
         return lead.isEmpty ? nil : lead
+    }
+
+    /// 读 atom：每个 `<entry>` 的 `<link href>` 和 `<content>`（XMLParser 已经把 XML 转义解开，拿到的是 HTML）。
+    private final class AtomReader: NSObject, XMLParserDelegate {
+        struct Entry { var link: String?; var content = "" }
+        var entries: [Entry] = []
+        private var current: Entry?
+        private var inContent = false
+
+        func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
+                    qualifiedName: String?, attributes: [String: String] = [:]) {
+            switch name {
+            case "entry": current = Entry()
+            case "link" where current != nil && current?.link == nil: current?.link = attributes["href"]
+            case "content" where current != nil: inContent = true
+            default: break
+            }
+        }
+
+        func parser(_ parser: XMLParser, foundCharacters string: String) {
+            if inContent { current?.content += string }
+        }
+
+        func parser(_ parser: XMLParser, foundCDATA block: Data) {
+            if inContent, let text = String(data: block, encoding: .utf8) { current?.content += text }
+        }
+
+        func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+            switch name {
+            case "content": inContent = false
+            case "entry":
+                if let entry = current { entries.append(entry) }
+                current = nil
+            default: break
+            }
+        }
     }
 
     /// 去掉 markdown 记号（加粗、行内代码、链接只留文字），通知里只能放纯文本。
