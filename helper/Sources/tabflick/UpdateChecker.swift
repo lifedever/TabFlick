@@ -299,11 +299,6 @@ final class UpdateChecker: ObservableObject {
         rm -f "$0"
         """
 
-        // 更新窗口里已经看过这一版的说明，重启后别再弹一遍「更新内容」（ReleaseNotes 认这个标记）。
-        // 脚本起来之前写好并落盘：紧接着就 terminate 了
-        let defaults = UserDefaults.standard
-        defaults.set(version, forKey: ReleaseNotes.seenBeforeInstallKey)
-        defaults.synchronize()
         do {
             let scriptPath = NSTemporaryDirectory() + "tabflick_update.sh"
             try script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
@@ -314,7 +309,6 @@ final class UpdateChecker: ObservableObject {
             log("Updater launched — replacing app contents with \(version) and relaunching")
             NSApp.terminate(nil)
         } catch {
-            defaults.removeObject(forKey: ReleaseNotes.seenBeforeInstallKey)
             Self.detachDMG(mountPoint)
             isInstalling = false
             dialog.close()

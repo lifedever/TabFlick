@@ -106,11 +106,10 @@ MainActor.assumeIsolated {
         updates.frequency = { MainActor.assumeIsolated { settings.updateCheckFrequency } }
         updates.startPeriodicChecks()
 
-        // 刚升级完就弹一次「这版更新了什么」。放启动流程里而不是挂在某个
-        // 视图的生命周期上 —— 后台自启时 SwiftUI 一个窗口都不会创建，
-        // 挂视图上的初始化永远不执行（PasteMemo #66）。
-        // 从更新窗口装上来的说明已经看过，只给个 toast。
-        ReleaseNotes.presentIfUpgraded(currentVersion: updates.currentVersion) { version in
+        // 刚升级完给个「已更新到 x」。说明不再自动弹（更新窗口里装之前就看过了），
+        // 想看去「关于」→「本版更新内容」。放启动流程里而不是挂在某个视图的生命周期上 ——
+        // 后台自启时 SwiftUI 一个窗口都不会创建，挂视图上的初始化永远不执行（PasteMemo #66）。
+        ReleaseNotes.announceIfUpgraded(currentVersion: updates.currentVersion) { version in
             MainActor.assumeIsolated { Toast.show(L10n.t("已更新到 \(version)", "Updated to \(version)")) }
         }
 

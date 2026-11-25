@@ -1108,29 +1108,29 @@
   "key": "What's New in TabFlick",
   "zh": "TabFlick 更新内容",
   "refs": [
-   "ReleaseNotes.swift:193"
+   "ReleaseNotes.swift:97"
   ]
  },
  {
   "key": "Updated to {0}",
   "zh": "已更新到 {0}",
   "refs": [
-   "ReleaseNotes.swift:233",
-   "main.swift:114"
+   "ReleaseNotes.swift:137",
+   "main.swift:113"
   ]
  },
  {
   "key": "What changed",
   "zh": "这一版改了什么",
   "refs": [
-   "ReleaseNotes.swift:235"
+   "ReleaseNotes.swift:139"
   ]
  },
  {
   "key": "Couldn't load the notes for this version — they're on GitHub.",
   "zh": "更新说明取不到，可以去 GitHub 看。",
   "refs": [
-   "ReleaseNotes.swift:250",
+   "ReleaseNotes.swift:154",
    "UpdateDialog.swift:158"
   ]
  },
@@ -1138,7 +1138,7 @@
   "key": "View on GitHub",
   "zh": "在 GitHub 上查看",
   "refs": [
-   "ReleaseNotes.swift:266",
+   "ReleaseNotes.swift:170",
    "UpdateDialog.swift:202"
   ]
  },
@@ -1146,13 +1146,13 @@
   "key": "OK",
   "zh": "好",
   "refs": [
-   "ReleaseNotes.swift:269",
+   "ReleaseNotes.swift:173",
    "SettingsWindow.swift:148",
-   "UpdateChecker.swift:376",
-   "UpdateChecker.swift:385",
-   "main.swift:305",
-   "main.swift:524",
-   "main.swift:549"
+   "UpdateChecker.swift:370",
+   "UpdateChecker.swift:379",
+   "main.swift:304",
+   "main.swift:523",
+   "main.swift:548"
   ]
  },
  {
@@ -2891,7 +2891,7 @@
   "zh": "扩展需要更新",
   "refs": [
    "TabSearchPanel.swift:3031",
-   "main.swift:443"
+   "main.swift:442"
   ]
  },
  {
@@ -3062,42 +3062,42 @@
   "key": "You're up to date",
   "zh": "已是最新版本",
   "refs": [
-   "UpdateChecker.swift:374"
+   "UpdateChecker.swift:368"
   ]
  },
  {
   "key": "TabFlick {0} is the latest version.",
   "zh": "当前版本 {0}。",
   "refs": [
-   "UpdateChecker.swift:375"
+   "UpdateChecker.swift:369"
   ]
  },
  {
   "key": "Could not check for updates",
   "zh": "检查更新失败",
   "refs": [
-   "UpdateChecker.swift:383"
+   "UpdateChecker.swift:377"
   ]
  },
  {
   "key": "Automatic update failed",
   "zh": "自动更新失败",
   "refs": [
-   "UpdateChecker.swift:392"
+   "UpdateChecker.swift:386"
   ]
  },
  {
   "key": "\n\nYou can download it manually from the releases page.",
   "zh": "\n\n可以去发布页手动下载。",
   "refs": [
-   "UpdateChecker.swift:393"
+   "UpdateChecker.swift:387"
   ]
  },
  {
   "key": "Open Download Page",
   "zh": "前往下载",
   "refs": [
-   "UpdateChecker.swift:397",
+   "UpdateChecker.swift:391",
    "UpdateDialog.swift:213"
   ]
  },
@@ -3105,10 +3105,10 @@
   "key": "Later",
   "zh": "稍后",
   "refs": [
-   "UpdateChecker.swift:398",
+   "UpdateChecker.swift:392",
    "UpdateDialog.swift:205",
-   "main.swift:291",
-   "main.swift:449"
+   "main.swift:290",
+   "main.swift:448"
   ]
  },
  {
@@ -3249,141 +3249,141 @@
   "key": "Extension update needed: {0}",
   "zh": "扩展需要更新：{0}",
   "refs": [
-   "main.swift:152"
+   "main.swift:151"
   ]
  },
  {
   "key": "Removed “{0}” from favorites",
   "zh": "已取消收藏「{0}」",
   "refs": [
-   "main.swift:215",
-   "main.swift:236"
+   "main.swift:214",
+   "main.swift:235"
   ]
  },
  {
   "key": "Added “{0}” to favorites",
   "zh": "已收藏「{0}」",
   "refs": [
-   "main.swift:260"
+   "main.swift:259"
   ]
  },
  {
   "key": "“{0}” is already a favorite — moved to front",
   "zh": "「{0}」已在收藏里，移到最前",
   "refs": [
-   "main.swift:265"
+   "main.swift:264"
   ]
  },
  {
   "key": "Automation permission needed",
   "zh": "需要「自动化」权限",
   "refs": [
-   "main.swift:285"
+   "main.swift:284"
   ]
  },
  {
   "key": "To favorite the current Finder folder, TabFlick asks Finder which folder its front window shows.\n\nAllow TabFlick to control Finder under System Settings → Privacy & Security → Automation.",
   "zh": "收藏当前 Finder 目录需要询问 Finder 前面的窗口在看哪个文件夹。\n\n请在 系统设置 → 隐私与安全性 → 自动化 中允许 TabFlick 控制「访达」。",
   "refs": [
-   "main.swift:287"
+   "main.swift:286"
   ]
  },
  {
   "key": "Open System Settings",
   "zh": "打开系统设置",
   "refs": [
-   "main.swift:290"
+   "main.swift:289"
   ]
  },
  {
   "key": "No Finder window to add",
   "zh": "没有可收藏的 Finder 窗口",
   "refs": [
-   "main.swift:300"
+   "main.swift:299"
   ]
  },
  {
   "key": "Open the folder in Finder first, then use this item.",
   "zh": "先在 Finder 里打开想收藏的文件夹，再点这一项。",
   "refs": [
-   "main.swift:302"
+   "main.swift:301"
   ]
  },
  {
   "key": "{0} no longer excluded",
   "zh": "已取消排除 {0}",
   "refs": [
-   "main.swift:327"
+   "main.swift:326"
   ]
  },
  {
   "key": "{0} excluded",
   "zh": "已排除 {0}",
   "refs": [
-   "main.swift:330"
+   "main.swift:329"
   ]
  },
  {
   "key": "Extension v{0} is installed, but this app version needs extension v{1} or newer (the protocol changed; older extensions lose features).\n\nDownload the new extension package, replace your folder, then reload it in chrome://extensions.",
   "zh": "当前扩展 v{0}，本版应用需要 v{1} 或更新的扩展（协议有变化，旧扩展部分功能会失效）。\n\n请下载新的扩展包替换原文件夹后，在 chrome://extensions 重新加载。",
   "refs": [
-   "main.swift:444"
+   "main.swift:443"
   ]
  },
  {
   "key": "Open Upgrade Guide",
   "zh": "查看升级说明",
   "refs": [
-   "main.swift:448"
+   "main.swift:447"
   ]
  },
  {
   "key": "TabFlick could not start",
   "zh": "TabFlick 无法启动",
   "refs": [
-   "main.swift:480"
+   "main.swift:479"
   ]
  },
  {
   "key": "Port {0} is already in use. Another copy of TabFlick may already be running — check the menu bar.",
   "zh": "端口 {0} 已被占用。可能已经有一个 TabFlick 在运行了 —— 看看菜单栏。",
   "refs": [
-   "main.swift:481"
+   "main.swift:480"
   ]
  },
  {
   "key": "TabFlick stopped intercepting the shortcut",
   "zh": "TabFlick 已停止拦截快捷键",
   "refs": [
-   "main.swift:506"
+   "main.swift:505"
   ]
  },
  {
   "key": "The keyboard hook was repeatedly disabled by the system, so TabFlick turned it off rather than risk interfering with your typing. ⌃⇥ now falls back to Chrome's built-in switching.\n\nRestarting TabFlick restores it. If this keeps happening, please report it on GitHub.",
   "zh": "键盘钩子被系统反复禁用，为避免影响你正常打字，TabFlick 已主动停用它。\n⌃⇥ 现在回落到 Chrome 自带的切换方式。\n\n重启 TabFlick 可以恢复。反复出现的话去 GitHub 反馈。",
   "refs": [
-   "main.swift:508"
+   "main.swift:507"
   ]
  },
  {
   "key": "Accessibility permission was removed",
   "zh": "辅助功能权限已被移除",
   "refs": [
-   "main.swift:535"
+   "main.swift:534"
   ]
  },
  {
   "key": "TabFlick disabled its keyboard hook immediately, so your typing is unaffected. ⌃⇥ falls back to Chrome's built-in switching.\n\nAfter granting the permission again, quit and reopen TabFlick — macOS only reads this permission when a process starts.",
   "zh": "TabFlick 已经停用键盘钩子，不影响你正常打字。⌃⇥ 回落到 Chrome 自带的切换方式。\n\n重新授予权限后，需要退出并重新打开 TabFlick 才会生效 —— macOS 只在进程启动时读取这项权限。",
   "refs": [
-   "main.swift:537"
+   "main.swift:536"
   ]
  },
  {
   "key": "TabFlick could not install its keyboard hook",
   "zh": "TabFlick 无法安装键盘钩子",
   "refs": [
-   "main.swift:559"
+   "main.swift:558"
   ]
  }
 ]
