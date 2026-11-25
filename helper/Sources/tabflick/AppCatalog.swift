@@ -255,12 +255,18 @@ final class AppCatalog {
     }
 
     /// 扫这几个目录和它们下面一层的文件夹（见 `scan`）。
+    ///
+    /// `/System/Library/CoreServices/Applications`：macOS 15 起「钥匙串访问」从「实用工具」挪到了这里
+    /// （2026-11-25 用户报的「搜不到钥匙串访问」），同目录还有归档实用工具、目录实用工具、无线诊断、
+    /// 关于本机这些 Spotlight 也列的系统 App。只加这一层，别加它的上一级 CoreServices：那里是
+    /// Dock、loginwindow 这类系统组件。
     private nonisolated static let directories: [URL] = {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
             URL(fileURLWithPath: "/Applications", isDirectory: true),
             home.appendingPathComponent("Applications", isDirectory: true),
             URL(fileURLWithPath: "/System/Applications", isDirectory: true),
+            URL(fileURLWithPath: "/System/Library/CoreServices/Applications", isDirectory: true),
         ]
     }()
 
