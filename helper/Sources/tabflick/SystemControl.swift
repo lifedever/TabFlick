@@ -185,12 +185,14 @@ enum SystemControl {
         log("🖥 hide other apps (keep \(keep.map(String.init) ?? "none")) → requested \(targets.count)")
     }
 
-    /// 隐藏所有窗口，只剩桌面。**分三步，顺序不能乱**（2026-11-25 用户报的「藏了又打开、访达是怎么回事」）：
-    /// 藏掉前台 App 时系统会自己激活下一个 App，所有 App 都藏了就激活访达，而激活一个藏着的 App 会把它
-    /// 连窗口一起显示回来。第一版一次把访达也藏了，结果系统在一串 App 之间来回激活，最后访达带着窗口回来。
-    /// ① 先藏既不在前台、也不是访达的；② 等它们藏好再藏前台那个，系统直接把前台交给访达；
-    /// ③ 访达到了前台再藏它：访达在前台时藏起来 = 只剩桌面（同在访达里按 ⌘H），系统不会再激活别的。
-    /// 每步最多等一会儿（有的 App 藏不掉，比如全屏的），到时间照样往下走。
+    /// 隐藏所有窗口，只剩桌面（2026-11-25 用户报的两轮「藏了又打开」，日志定的）。
+    ///
+    /// 系统不让前台停在一个藏着的 App 上：藏掉前台 App，它就自己激活另一个；所有 App 都藏了就激活访达；
+    /// 访达在前台时再藏访达，它就激活最近用过的那个 App —— 而**激活一个藏着的 App 会把它连窗口一起显示回来**。
+    /// 第一版一次全藏（含访达），访达带着窗口回来；第二版最后藏访达，Muxy（刚才在用的）被激活回来。
+    /// 所以访达不藏，留在前台当「桌面」，它自己的窗口缩进程序坞：
+    /// ① 先藏既不在前台、也不是访达的；② 它们藏好了再藏前台那个，系统把前台交给访达；
+    /// ③ 访达到了前台，把它的窗口最小化（辅助功能，本来就有这个权限）。每步最多等一会儿（全屏的 App 藏不掉），到时间照样往下走。
     @MainActor static func hideAllApps() {
         let apps = regularApps()
         let finder = apps.first { $0.bundleIdentifier == finderID }
@@ -205,11 +207,46 @@ enum SystemControl {
             if let front, front.processIdentifier != finder?.processIdentifier { front.hide() }
             waitUntil(timeout: 1.5, { NSWorkspace.shared.frontmostApplication?.bundleIdentifier == finderID }) {
                 let finderFront = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == finderID
-                finder?.hide()
-                log("🖥 hide all → \(others.count + (front == nil ? 0 : 1)) app(s), finder front \(finderFront) "
-                    + "after \(Int(Date().timeIntervalSince(started) * 1000))ms")
-                watchAfterHideAll()
+                let hiddenCount = others.count + (front == nil || front?.processIdentifier == finder?.processIdentifier ? 0 : 1)
+                let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+                guard let finder else {
+                    log("🖥 hide all → \(hiddenCount) app(s), no Finder, after \(elapsed)ms")
+                    watchAfterHideAll()
+                    return
+                }
+                minimizeWindows(of: finder.processIdentifier) { minimized in
+                    log("🖥 hide all → \(hiddenCount) app(s), finder front \(finderFront), "
+                        + "minimized \(minimized) Finder window(s), after \(elapsed)ms")
+                    watchAfterHideAll()
+                }
             }
+        }
+    }
+
+    /// 把一个 App 的普通窗口都最小化（辅助功能，后台队列；每个调用 1 秒超时，访达卡住不拖主线程）。
+    @MainActor private static func minimizeWindows(of pid: pid_t, done: @escaping @MainActor (Int) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let app = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(app, 1)
+            var value: CFTypeRef?
+            var minimized = 0
+            if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+               let windows = value as? [AXUIElement] {
+                for window in windows {
+                    AXUIElementSetMessagingTimeout(window, 1)
+                    var subrole: CFTypeRef?
+                    var isMinimized: CFTypeRef?
+                    AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &subrole)
+                    AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &isMinimized)
+                    // 只动普通窗口：桌面、面板、对话框不碰
+                    guard (subrole as? String) == (kAXStandardWindowSubrole as String),
+                          (isMinimized as? Bool) != true else { continue }
+                    if AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue) == .success {
+                        minimized += 1
+                    }
+                }
+            }
+            DispatchQueue.main.async { MainActor.assumeIsolated { done(minimized) } }
         }
     }
 
