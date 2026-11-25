@@ -3,7 +3,7 @@
 // 跑法（在 helper/ 下）：
 //   swiftc -parse-as-library Sources/tabflick/ReleaseNotes.swift \
 //          Sources/tabflick/ReleaseNotesParser.swift \
-//          Sources/tabflick/L10n.swift Sources/tabflick/Log.swift \
+//          Sources/tabflick/L10n.swift Sources/tabflick/L10nTables.swift Sources/tabflick/Log.swift \
 //          checks/release-notes-decision-check.swift -o /tmp/notesdecide && /tmp/notesdecide
 //
 // 为什么要有这个：这几条分支错了**都不报错**，只会「该弹的不弹」或者「弹了一个
@@ -23,10 +23,12 @@ func checkDecisions() {
 
     func expect(_ name: String,
                 lastRun: String?, pending: String?, everChecked: Bool, current: String,
+                seen: String? = nil,
                 wantPending: String?, wantFetch: Bool, wantUpgraded: Bool) {
         cases += 1
         let got = ReleaseNotes.decide(lastRun: lastRun, pending: pending,
-                                      everChecked: everChecked, current: current)
+                                      everChecked: everChecked, current: current,
+                                      seenBeforeInstall: seen)
         var problems: [String] = []
         if got.lastRun != current {
             problems.append("lastRun 应写成 \(current)，实际 \(got.lastRun)")
@@ -83,6 +85,20 @@ func checkDecisions() {
     print("全新安装但 pending 有残留（同机器装过、清过 lastRun）：没升级就不弹")
     expect("只剩 pending 且对不上", lastRun: nil, pending: "0.12.0", everChecked: false,
            current: "0.13.0", wantPending: nil, wantFetch: false, wantUpgraded: false)
+
+    print("从更新窗口点「立即更新」装上来的：说明在那里看过了，不取不弹，但仍算刚升级（给 toast）")
+    expect("看过 0.13.0 的说明再装", lastRun: "0.12.1", pending: nil, everChecked: true,
+           current: "0.13.0", seen: "0.13.0", wantPending: nil, wantFetch: false, wantUpgraded: true)
+    expect("看过的说明盖掉了欠着的旧 pending", lastRun: "0.12.1", pending: "0.12.1", everChecked: true,
+           current: "0.13.0", seen: "0.13.0", wantPending: nil, wantFetch: false, wantUpgraded: true)
+
+    print("看过的是别的版本（之后手动拖 DMG 装了另一版）：照常弹")
+    expect("看过 0.13.0、装上的是 0.14.0", lastRun: "0.12.1", pending: nil, everChecked: true,
+           current: "0.14.0", seen: "0.13.0", wantPending: "0.14.0", wantFetch: true, wantUpgraded: true)
+
+    print("替换失败、旧版本又起来了：没升级，标记不该让它弹任何东西")
+    expect("看过 0.13.0、还是 0.12.1", lastRun: "0.12.1", pending: nil, everChecked: true,
+           current: "0.12.1", seen: "0.13.0", wantPending: nil, wantFetch: false, wantUpgraded: false)
 
     print("决策必须是纯的：同样的入参跑两次结果一致（不能偷偷依赖外部状态）")
     cases += 1

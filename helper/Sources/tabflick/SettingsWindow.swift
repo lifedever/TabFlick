@@ -1653,18 +1653,7 @@ private struct AboutPane: View {
             .multilineTextAlignment(.center)
 
             HStack(spacing: 10) {
-                Button {
-                    updates.check(userInitiated: true)
-                } label: {
-                    if updates.status == .checking {
-                        Text(L10n.t("检查中…", "Checking…"))
-                    } else if updates.isDownloading {
-                        Text(L10n.t("下载中…", "Downloading…"))
-                    } else {
-                        Text(L10n.t("检查更新", "Check for Updates"))
-                    }
-                }
-                .disabled(updates.status == .checking || updates.isDownloading)
+                updateButton
 
                 Button {
                     NSWorkspace.shared.open(URL(string: "https://www.lifedever.com/sponsor/")!)
@@ -1691,6 +1680,32 @@ private struct AboutPane: View {
         .padding(22)
         .padding(.top, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 查到新版本（后台检查发了通知、点通知进来的就是这里）时变成「更新到 x…」，点了弹更新窗口。
+    @ViewBuilder
+    private var updateButton: some View {
+        if updates.isInstalling {
+            Button(L10n.t("安装中…", "Installing…")) {}.disabled(true)
+        } else if updates.isDownloading {
+            Button(L10n.t("下载中…", "Downloading…")) { updates.presentUpdate() }
+        } else if case .available(let version) = updates.status {
+            Button(L10n.t("更新到 \(version)…", "Update to \(version)…")) {
+                updates.presentUpdate()
+            }
+            .buttonStyle(.borderedProminent)
+        } else {
+            Button {
+                updates.check(.manual)
+            } label: {
+                if updates.status == .checking {
+                    Text(L10n.t("检查中…", "Checking…"))
+                } else {
+                    Text(L10n.t("检查更新", "Check for Updates"))
+                }
+            }
+            .disabled(updates.status == .checking)
+        }
     }
 }
 

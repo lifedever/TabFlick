@@ -197,10 +197,7 @@
   "The update image is missing the app": "Im Update-Image fehlt die App",
   "Software Update": "Softwareupdate",
   "Version {0} is available": "Version {0} ist verfügbar",
-  "You have {0}. Download and install — it restarts on its own.": "Installiert: {0}. Nach der Installation startet TabFlick automatisch neu.",
-  "Download & Install": "Laden & installieren",
   "Later": "Später",
-  "Skip This Version": "Diese Version überspringen",
   "You have {0}. This release has no package for this Mac — grab one from the releases page.": "Installiert: {0}. Dieses Release enthält kein Paket für diesen Mac – manuell von der Release-Seite laden.",
   "Open Download Page": "Downloadseite öffnen",
   "You're up to date": "Auf dem neuesten Stand",
@@ -208,7 +205,6 @@
   "Could not check for updates": "Suche nach Updates fehlgeschlagen",
   "Automatic update failed": "Automatisches Update fehlgeschlagen",
   "\n\nYou can download it manually from the releases page.": "\n\nDas Update lässt sich manuell von der Release-Seite laden.",
-  "Downloading TabFlick {0}…": "TabFlick {0} wird geladen …",
   "Cancel": "Abbrechen",
   "Quit": "Beenden",
   "Extension update needed: {0}": "Erweiterung veraltet: {0}",
@@ -465,5 +461,10 @@
   "No matching files": "Keine passenden Dateien",
   "iCloud Drive": "iCloud Drive",
   "{0} Web App": "Web-App von {0}",
-  "Web App": "Web-App"
+  "Web App": "Web-App",
+  "Installing…": "Wird installiert …",
+  "Update Now": "Jetzt aktualisieren",
+  "Update to {0}…": "Auf {0} aktualisieren …",
+  "You have {0}": "Installiert: {0}",
+  "You have {0}. It restarts on its own once installed.": "Installiert: {0}. Startet nach der Installation automatisch neu."
 }

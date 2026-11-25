@@ -144,7 +144,7 @@
   "refs": [
    "AppSettings.swift:54",
    "TabSearchPanel.swift:41",
-   "TabSearchPanel.swift:3523"
+   "TabSearchPanel.swift:3525"
   ]
  },
  {
@@ -161,7 +161,7 @@
   "refs": [
    "AppSettings.swift:56",
    "TabSearchPanel.swift:39",
-   "TabSearchPanel.swift:3520"
+   "TabSearchPanel.swift:3522"
   ]
  },
  {
@@ -403,7 +403,7 @@
   "zh": "没有可以结束的进程",
   "refs": [
    "BuiltinPlugins.swift:208",
-   "TabSearchPanel.swift:2989"
+   "TabSearchPanel.swift:2991"
   ]
  },
  {
@@ -433,7 +433,7 @@
   "zh": "端口 {0}",
   "refs": [
    "BuiltinPlugins.swift:229",
-   "TabSearchPanel.swift:3984"
+   "TabSearchPanel.swift:3986"
   ]
  },
  {
@@ -476,7 +476,7 @@
   "refs": [
    "BuiltinPlugins.swift:236",
    "SettingsWindow.swift:1219",
-   "UpdateChecker.swift:425"
+   "UpdateDialog.swift:197"
   ]
  },
  {
@@ -505,7 +505,7 @@
   "zh": "「{0}」还没退出",
   "refs": [
    "BuiltinPlugins.swift:267",
-   "TabSearchPanel.swift:4181"
+   "TabSearchPanel.swift:4183"
   ]
  },
  {
@@ -520,7 +520,7 @@
   "zh": "没有权限结束「{0}」",
   "refs": [
    "BuiltinPlugins.swift:273",
-   "TabSearchPanel.swift:4187"
+   "TabSearchPanel.swift:4189"
   ]
  },
  {
@@ -528,7 +528,7 @@
   "zh": "没能结束「{0}」",
   "refs": [
    "BuiltinPlugins.swift:275",
-   "TabSearchPanel.swift:4189"
+   "TabSearchPanel.swift:4191"
   ]
  },
  {
@@ -875,7 +875,7 @@
   "zh": "下载最新的扩展包替换原文件夹，再到 chrome://extensions 重新加载。",
   "refs": [
    "MRUController.swift:1907",
-   "TabSearchPanel.swift:3037"
+   "TabSearchPanel.swift:3039"
   ]
  },
  {
@@ -1006,63 +1006,63 @@
   "key": "Couldn't load the plugin list",
   "zh": "取不到插件列表",
   "refs": [
-   "PluginStore.swift:63"
+   "PluginStore.swift:66"
   ]
  },
  {
   "key": "The plugin list is malformed",
   "zh": "插件列表格式不对",
   "refs": [
-   "PluginStore.swift:68"
+   "PluginStore.swift:71"
   ]
  },
  {
   "key": "Updated “{0}”",
   "zh": "已更新「{0}」",
   "refs": [
-   "PluginStore.swift:152"
+   "PluginStore.swift:155"
   ]
  },
  {
   "key": "Installed “{0}”",
   "zh": "已安装「{0}」",
   "refs": [
-   "PluginStore.swift:152"
+   "PluginStore.swift:155"
   ]
  },
  {
   "key": "Couldn't install “{0}”",
   "zh": "没能安装「{0}」",
   "refs": [
-   "PluginStore.swift:157"
+   "PluginStore.swift:160"
   ]
  },
  {
   "key": "Removed “{0}”",
   "zh": "已卸载「{0}」",
   "refs": [
-   "PluginStore.swift:178"
+   "PluginStore.swift:181"
   ]
  },
  {
   "key": "Couldn't remove “{0}”",
   "zh": "没能卸载「{0}」",
   "refs": [
-   "PluginStore.swift:180"
+   "PluginStore.swift:183"
   ]
  },
  {
   "key": "File check failed: {0}",
   "zh": "文件校验没通过：{0}",
   "refs": [
-   "PluginStore.swift:190"
+   "PluginStore.swift:193"
   ]
  },
  {
   "key": "The plugin's manifest doesn't match",
   "zh": "插件信息不对",
   "refs": [
-   "PluginStore.swift:191"
+   "PluginStore.swift:194"
   ]
  },
  {
@@ -1070,8 +1070,8 @@
   "zh": "正在读取…",
   "refs": [
    "Plugins.swift:400",
-   "TabSearchPanel.swift:2992",
-   "TabSearchPanel.swift:2998"
+   "TabSearchPanel.swift:2994",
+   "TabSearchPanel.swift:3000"
   ]
  },
  {
@@ -1092,48 +1092,51 @@
   "key": "What's New in TabFlick",
   "zh": "TabFlick 更新内容",
   "refs": [
-   "ReleaseNotes.swift:179"
+   "ReleaseNotes.swift:201"
   ]
  },
  {
   "key": "Updated to {0}",
   "zh": "已更新到 {0}",
   "refs": [
-   "ReleaseNotes.swift:219"
+   "ReleaseNotes.swift:241",
+   "main.swift:114"
   ]
  },
  {
   "key": "What changed",
   "zh": "这一版改了什么",
   "refs": [
-   "ReleaseNotes.swift:221"
+   "ReleaseNotes.swift:243"
   ]
  },
  {
   "key": "Couldn't load the notes for this version — they're on GitHub.",
   "zh": "更新说明取不到，可以去 GitHub 看。",
   "refs": [
-   "ReleaseNotes.swift:236"
+   "ReleaseNotes.swift:258",
+   "UpdateDialog.swift:158"
   ]
  },
  {
   "key": "View on GitHub",
   "zh": "在 GitHub 上查看",
   "refs": [
-   "ReleaseNotes.swift:254"
+   "ReleaseNotes.swift:274",
+   "UpdateDialog.swift:202"
   ]
  },
  {
   "key": "OK",
   "zh": "好",
   "refs": [
-   "ReleaseNotes.swift:257",
+   "ReleaseNotes.swift:277",
    "SettingsWindow.swift:148",
-   "UpdateChecker.swift:376",
-   "UpdateChecker.swift:386",
-   "main.swift:295",
-   "main.swift:514",
-   "main.swift:539"
+   "UpdateChecker.swift:402",
+   "UpdateChecker.swift:411",
+   "main.swift:305",
+   "main.swift:524",
+   "main.swift:549"
   ]
  },
  {
@@ -1194,7 +1197,7 @@
   "refs": [
    "SettingsShell.swift:242",
    "SettingsShell.swift:284",
-   "TabSearchPanel.swift:3119"
+   "TabSearchPanel.swift:3121"
   ]
  },
  {
@@ -1787,7 +1790,7 @@
   "refs": [
    "SettingsWindow.swift:923",
    "TabSearchPanel.swift:32",
-   "TabSearchPanel.swift:3122"
+   "TabSearchPanel.swift:3124"
   ]
  },
  {
@@ -1862,7 +1865,7 @@
   "zh": "更新到 {0}",
   "refs": [
    "SettingsWindow.swift:1119",
-   "TabSearchPanel.swift:3145"
+   "TabSearchPanel.swift:3147"
   ]
  },
  {
@@ -2118,45 +2121,60 @@
   ]
  },
  {
-  "key": "Checking…",
-  "zh": "检查中…",
-  "refs": [
-   "SettingsWindow.swift:1660"
-  ]
- },
- {
-  "key": "Downloading…",
-  "zh": "下载中…",
-  "refs": [
-   "SettingsWindow.swift:1662"
-  ]
- },
- {
-  "key": "Check for Updates",
-  "zh": "检查更新",
-  "refs": [
-   "SettingsWindow.swift:1664"
-  ]
- },
- {
   "key": "Sponsor",
   "zh": "赞助开发",
   "refs": [
-   "SettingsWindow.swift:1672"
+   "SettingsWindow.swift:1661"
   ]
  },
  {
   "key": "Website",
   "zh": "官网",
   "refs": [
-   "SettingsWindow.swift:1677"
+   "SettingsWindow.swift:1666"
   ]
  },
  {
   "key": "Report an Issue",
   "zh": "反馈问题",
   "refs": [
-   "SettingsWindow.swift:1681"
+   "SettingsWindow.swift:1670"
+  ]
+ },
+ {
+  "key": "Installing…",
+  "zh": "安装中…",
+  "refs": [
+   "SettingsWindow.swift:1689",
+   "UpdateDialog.swift:185"
+  ]
+ },
+ {
+  "key": "Downloading…",
+  "zh": "下载中…",
+  "refs": [
+   "SettingsWindow.swift:1691"
+  ]
+ },
+ {
+  "key": "Update to {0}…",
+  "zh": "更新到 {0}…",
+  "refs": [
+   "SettingsWindow.swift:1693"
+  ]
+ },
+ {
+  "key": "Checking…",
+  "zh": "检查中…",
+  "refs": [
+   "SettingsWindow.swift:1702"
+  ]
+ },
+ {
+  "key": "Check for Updates",
+  "zh": "检查更新",
+  "refs": [
+   "SettingsWindow.swift:1704"
   ]
  },
  {
@@ -2313,7 +2331,7 @@
   "zh": "更多",
   "refs": [
    "StatusItemController.swift:649",
-   "TabSearchPanel.swift:3195"
+   "TabSearchPanel.swift:3197"
   ]
  },
  {
@@ -2511,7 +2529,7 @@
   "zh": "关闭标签",
   "refs": [
    "TabSearchPanel.swift:435",
-   "TabSearchPanel.swift:3736"
+   "TabSearchPanel.swift:3738"
   ]
  },
  {
@@ -2588,550 +2606,543 @@
   "key": "Tab changes sort: {0}",
   "zh": "Tab 切换排序：{0}",
   "refs": [
-   "TabSearchPanel.swift:2947"
+   "TabSearchPanel.swift:2949"
   ]
  },
  {
   "key": "Tab cycles: {0}",
   "zh": "Tab 切换：{0}",
   "refs": [
-   "TabSearchPanel.swift:2949"
+   "TabSearchPanel.swift:2951"
   ]
  },
  {
   "key": "Open “{0}” with…",
   "zh": "「{0}」的打开方式",
   "refs": [
-   "TabSearchPanel.swift:2958"
+   "TabSearchPanel.swift:2960"
   ]
  },
  {
   "key": "Actions for “{0}”",
   "zh": "「{0}」的操作",
   "refs": [
-   "TabSearchPanel.swift:2959"
+   "TabSearchPanel.swift:2961"
   ]
  },
  {
   "key": "Filter by name, port or PID",
   "zh": "按名称、端口或 PID 过滤",
   "refs": [
-   "TabSearchPanel.swift:2961"
+   "TabSearchPanel.swift:2963"
   ]
  },
  {
   "key": "Filter by file name or location",
   "zh": "按文件名或位置过滤",
   "refs": [
-   "TabSearchPanel.swift:2962"
+   "TabSearchPanel.swift:2964"
   ]
  },
  {
   "key": "Search {0}",
   "zh": "搜索{0}",
   "refs": [
-   "TabSearchPanel.swift:2964",
-   "TabSearchPanel.swift:2965"
+   "TabSearchPanel.swift:2966",
+   "TabSearchPanel.swift:2967"
   ]
  },
  {
   "key": "Search everything",
   "zh": "搜索全部",
   "refs": [
-   "TabSearchPanel.swift:2968"
+   "TabSearchPanel.swift:2970"
   ]
  },
  {
   "key": "Search browser tabs",
   "zh": "搜索浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:2969"
+   "TabSearchPanel.swift:2971"
   ]
  },
  {
   "key": "Search the web",
   "zh": "搜索互联网内容",
   "refs": [
-   "TabSearchPanel.swift:2970"
+   "TabSearchPanel.swift:2972"
   ]
  },
  {
   "key": "Search history",
   "zh": "搜索历史记录",
   "refs": [
-   "TabSearchPanel.swift:2971"
+   "TabSearchPanel.swift:2973"
   ]
  },
  {
   "key": "Search browser bookmarks",
   "zh": "搜索浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:2972"
+   "TabSearchPanel.swift:2974"
   ]
  },
  {
   "key": "Search recently closed tabs",
   "zh": "搜索最近关闭的标签",
   "refs": [
-   "TabSearchPanel.swift:2973"
+   "TabSearchPanel.swift:2975"
   ]
  },
  {
   "key": "Search favorite folders",
   "zh": "搜索收藏的文件夹",
   "refs": [
-   "TabSearchPanel.swift:2974"
+   "TabSearchPanel.swift:2976"
   ]
  },
  {
   "key": "Search apps",
   "zh": "搜索应用",
   "refs": [
-   "TabSearchPanel.swift:2975"
+   "TabSearchPanel.swift:2977"
   ]
  },
  {
   "key": "No app can open it",
   "zh": "没有能打开它的应用",
   "refs": [
-   "TabSearchPanel.swift:2983"
+   "TabSearchPanel.swift:2985"
   ]
  },
  {
   "key": "No matching apps",
   "zh": "没有匹配的应用",
   "refs": [
-   "TabSearchPanel.swift:2984",
-   "TabSearchPanel.swift:3011"
+   "TabSearchPanel.swift:2986",
+   "TabSearchPanel.swift:3013"
   ]
  },
  {
   "key": "No matching actions",
   "zh": "没有匹配的操作",
   "refs": [
-   "TabSearchPanel.swift:2986"
+   "TabSearchPanel.swift:2988"
   ]
  },
  {
   "key": "Loading processes",
   "zh": "正在读取进程",
   "refs": [
-   "TabSearchPanel.swift:2988"
+   "TabSearchPanel.swift:2990"
   ]
  },
  {
   "key": "No matching processes",
   "zh": "没有匹配的进程",
   "refs": [
-   "TabSearchPanel.swift:2989"
+   "TabSearchPanel.swift:2991"
   ]
  },
  {
   "key": "Couldn't read from Spotlight",
   "zh": "读不到 Spotlight 的记录",
   "refs": [
-   "TabSearchPanel.swift:2993"
+   "TabSearchPanel.swift:2995"
   ]
  },
  {
   "key": "No files opened in the last 30 days",
   "zh": "30 天内没有打开过的文件",
   "refs": [
-   "TabSearchPanel.swift:2994"
+   "TabSearchPanel.swift:2996"
   ]
  },
  {
   "key": "No matching files",
   "zh": "没有匹配的文件",
   "refs": [
-   "TabSearchPanel.swift:2995"
+   "TabSearchPanel.swift:2997"
   ]
  },
  {
   "key": "Couldn't load. Try again in a moment.",
   "zh": "取不到数据，过一会儿再试。",
   "refs": [
-   "TabSearchPanel.swift:2999"
+   "TabSearchPanel.swift:3001"
   ]
  },
  {
   "key": "Nothing here yet",
   "zh": "还没有内容",
   "refs": [
-   "TabSearchPanel.swift:3001"
+   "TabSearchPanel.swift:3003"
   ]
  },
  {
   "key": "No results",
   "zh": "没有匹配的结果",
   "refs": [
-   "TabSearchPanel.swift:3002"
+   "TabSearchPanel.swift:3004"
   ]
  },
  {
   "key": "No browser tabs yet",
   "zh": "还没有浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:3005"
+   "TabSearchPanel.swift:3007"
   ]
  },
  {
   "key": "No matching browser tabs",
   "zh": "没有匹配的浏览器标签",
   "refs": [
-   "TabSearchPanel.swift:3005"
+   "TabSearchPanel.swift:3007"
   ]
  },
  {
   "key": "Type something to search for",
   "zh": "输入要搜的内容",
   "refs": [
-   "TabSearchPanel.swift:3006"
+   "TabSearchPanel.swift:3008"
   ]
  },
  {
   "key": "No history yet",
   "zh": "还没有历史记录",
   "refs": [
-   "TabSearchPanel.swift:3007"
+   "TabSearchPanel.swift:3009"
   ]
  },
  {
   "key": "No matching history",
   "zh": "没有匹配的历史记录",
   "refs": [
-   "TabSearchPanel.swift:3007"
+   "TabSearchPanel.swift:3009"
   ]
  },
  {
   "key": "No browser bookmarks yet",
   "zh": "还没有浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:3008"
+   "TabSearchPanel.swift:3010"
   ]
  },
  {
   "key": "No matching browser bookmarks",
   "zh": "没有匹配的浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:3008"
+   "TabSearchPanel.swift:3010"
   ]
  },
  {
   "key": "Nothing closed yet",
   "zh": "还没有关闭过标签",
   "refs": [
-   "TabSearchPanel.swift:3009"
+   "TabSearchPanel.swift:3011"
   ]
  },
  {
   "key": "No matching closed tabs",
   "zh": "没有匹配的已关闭标签",
   "refs": [
-   "TabSearchPanel.swift:3009"
+   "TabSearchPanel.swift:3011"
   ]
  },
  {
   "key": "No favorite folders yet. Add one from the menu bar.",
   "zh": "还没有收藏文件夹。状态栏菜单里可以添加。",
   "refs": [
-   "TabSearchPanel.swift:3010"
+   "TabSearchPanel.swift:3012"
   ]
  },
  {
   "key": "No matching folders",
   "zh": "没有匹配的文件夹",
   "refs": [
-   "TabSearchPanel.swift:3010"
+   "TabSearchPanel.swift:3012"
   ]
  },
  {
   "key": "Loading apps",
   "zh": "正在读取应用列表",
   "refs": [
-   "TabSearchPanel.swift:3011"
+   "TabSearchPanel.swift:3013"
   ]
  },
  {
   "key": "Extension update required",
   "zh": "扩展需要更新",
   "refs": [
-   "TabSearchPanel.swift:3029",
-   "main.swift:433"
+   "TabSearchPanel.swift:3031",
+   "main.swift:443"
   ]
  },
  {
   "key": "Confirm",
   "zh": "确认",
   "refs": [
-   "TabSearchPanel.swift:3112"
+   "TabSearchPanel.swift:3114"
   ]
  },
  {
   "key": "{0} more",
   "zh": "还有 {0} 条",
   "refs": [
-   "TabSearchPanel.swift:3196"
+   "TabSearchPanel.swift:3198"
   ]
  },
  {
   "key": "Browser bookmark",
   "zh": "浏览器书签",
   "refs": [
-   "TabSearchPanel.swift:3522"
+   "TabSearchPanel.swift:3524"
   ]
  },
  {
   "key": "Folder",
   "zh": "文件夹",
   "refs": [
-   "TabSearchPanel.swift:3525"
+   "TabSearchPanel.swift:3527"
   ]
  },
  {
   "key": "Open “{0}”",
   "zh": "打开「{0}」",
   "refs": [
-   "TabSearchPanel.swift:3526"
+   "TabSearchPanel.swift:3528"
   ]
  },
  {
   "key": "{0} Web App",
   "zh": "{0} 网页应用",
   "refs": [
-   "TabSearchPanel.swift:3538"
+   "TabSearchPanel.swift:3540"
   ]
  },
  {
   "key": "Web App",
   "zh": "网页应用",
   "refs": [
-   "TabSearchPanel.swift:3539",
-   "TabSearchPanel.swift:3588"
+   "TabSearchPanel.swift:3541",
+   "TabSearchPanel.swift:3590"
   ]
  },
  {
   "key": "App",
   "zh": "应用",
   "refs": [
-   "TabSearchPanel.swift:3556",
-   "TabSearchPanel.swift:3588"
+   "TabSearchPanel.swift:3558",
+   "TabSearchPanel.swift:3590"
   ]
  },
  {
   "key": "{0} processes",
   "zh": "{0} 个进程",
   "refs": [
-   "TabSearchPanel.swift:3556"
+   "TabSearchPanel.swift:3558"
   ]
  },
  {
   "key": "Running",
   "zh": "运行中",
   "refs": [
-   "TabSearchPanel.swift:3679"
+   "TabSearchPanel.swift:3681"
   ]
  },
  {
   "key": "Press ↩ again to confirm",
   "zh": "再按 ↩ 确认",
   "refs": [
-   "TabSearchPanel.swift:3720"
+   "TabSearchPanel.swift:3722"
   ]
  },
  {
   "key": "Duplicate",
   "zh": "重复",
   "refs": [
-   "TabSearchPanel.swift:3750"
+   "TabSearchPanel.swift:3752"
   ]
  },
  {
   "key": "{0} more tab(s) with this page are open; ⌘↩ closes them",
   "zh": "还开着 {0} 个同样的页面，⌘↩ 可以一起关掉",
   "refs": [
-   "TabSearchPanel.swift:3756"
+   "TabSearchPanel.swift:3758"
   ]
  },
  {
   "key": "Current",
   "zh": "当前",
   "refs": [
-   "TabSearchPanel.swift:3760",
-   "TabSearchPanel.swift:3800"
+   "TabSearchPanel.swift:3762",
+   "TabSearchPanel.swift:3802"
   ]
  },
  {
   "key": "Exited",
   "zh": "已退出",
   "refs": [
-   "TabSearchPanel.swift:3810"
+   "TabSearchPanel.swift:3812"
   ]
  },
  {
   "key": "Quitting",
   "zh": "正在退出",
   "refs": [
-   "TabSearchPanel.swift:3814"
+   "TabSearchPanel.swift:3816"
   ]
  },
  {
   "key": "Killing",
   "zh": "正在结束",
   "refs": [
-   "TabSearchPanel.swift:3814"
+   "TabSearchPanel.swift:3816"
   ]
  },
  {
   "key": "Ports {0}",
   "zh": "端口 {0}",
   "refs": [
-   "TabSearchPanel.swift:3984"
+   "TabSearchPanel.swift:3986"
   ]
  },
  {
   "key": "Use Force Kill in the ⌘↩ actions.",
   "zh": "⌘↩ 里可以强制结束。",
   "refs": [
-   "TabSearchPanel.swift:4182"
+   "TabSearchPanel.swift:4184"
   ]
  },
  {
   "key": "iCloud Drive",
   "zh": "iCloud 云盘",
   "refs": [
-   "TabSearchPanel.swift:4392"
+   "TabSearchPanel.swift:4394"
+  ]
+ },
+ {
+  "key": "You have {0}",
+  "zh": "当前版本 {0}",
+  "refs": [
+   "UpdateChecker.swift:160"
   ]
  },
  {
   "key": "GitHub returned {0}",
   "zh": "GitHub 返回 {0}",
   "refs": [
-   "UpdateChecker.swift:132"
+   "UpdateChecker.swift:199"
   ]
  },
  {
   "key": "Could not parse the release info",
   "zh": "无法解析发布信息",
   "refs": [
-   "UpdateChecker.swift:136"
+   "UpdateChecker.swift:202"
   ]
  },
  {
   "key": "The update image could not be opened",
   "zh": "更新包无法打开",
   "refs": [
-   "UpdateChecker.swift:233"
+   "UpdateChecker.swift:295"
   ]
  },
  {
   "key": "The update image is missing the app",
   "zh": "更新包内容不完整",
   "refs": [
-   "UpdateChecker.swift:239"
-  ]
- },
- {
-  "key": "Software Update",
-  "zh": "软件更新",
-  "refs": [
-   "UpdateChecker.swift:313"
-  ]
- },
- {
-  "key": "Version {0} is available",
-  "zh": "有新版本 {0}",
-  "refs": [
-   "UpdateChecker.swift:339"
-  ]
- },
- {
-  "key": "You have {0}. Download and install — it restarts on its own.",
-  "zh": "当前版本 {0}。点「下载并安装」，装完自动重启。",
-  "refs": [
-   "UpdateChecker.swift:342"
-  ]
- },
- {
-  "key": "Download & Install",
-  "zh": "下载并安装",
-  "refs": [
-   "UpdateChecker.swift:346"
-  ]
- },
- {
-  "key": "Later",
-  "zh": "稍后",
-  "refs": [
-   "UpdateChecker.swift:347",
-   "UpdateChecker.swift:364",
-   "UpdateChecker.swift:400",
-   "main.swift:281",
-   "main.swift:439"
-  ]
- },
- {
-  "key": "Skip This Version",
-  "zh": "跳过此版本",
-  "refs": [
-   "UpdateChecker.swift:348"
-  ]
- },
- {
-  "key": "You have {0}. This release has no package for this Mac — grab one from the releases page.",
-  "zh": "当前版本 {0}。这一版没有适合这台 Mac 的安装包，去发布页手动下载。",
-  "refs": [
-   "UpdateChecker.swift:359"
-  ]
- },
- {
-  "key": "Open Download Page",
-  "zh": "前往下载",
-  "refs": [
-   "UpdateChecker.swift:363",
-   "UpdateChecker.swift:399"
+   "UpdateChecker.swift:301"
   ]
  },
  {
   "key": "You're up to date",
   "zh": "已是最新版本",
   "refs": [
-   "UpdateChecker.swift:374"
+   "UpdateChecker.swift:400"
   ]
  },
  {
   "key": "TabFlick {0} is the latest version.",
   "zh": "当前版本 {0}。",
   "refs": [
-   "UpdateChecker.swift:375"
+   "UpdateChecker.swift:401"
   ]
  },
  {
   "key": "Could not check for updates",
   "zh": "检查更新失败",
   "refs": [
-   "UpdateChecker.swift:384"
+   "UpdateChecker.swift:409"
   ]
  },
  {
   "key": "Automatic update failed",
   "zh": "自动更新失败",
   "refs": [
-   "UpdateChecker.swift:394"
+   "UpdateChecker.swift:418"
   ]
  },
  {
   "key": "\n\nYou can download it manually from the releases page.",
   "zh": "\n\n可以去发布页手动下载。",
   "refs": [
-   "UpdateChecker.swift:395"
+   "UpdateChecker.swift:419"
   ]
  },
  {
-  "key": "Downloading TabFlick {0}…",
-  "zh": "正在下载 TabFlick {0}…",
+  "key": "Open Download Page",
+  "zh": "前往下载",
   "refs": [
-   "UpdateChecker.swift:414"
+   "UpdateChecker.swift:423",
+   "UpdateDialog.swift:213"
+  ]
+ },
+ {
+  "key": "Later",
+  "zh": "稍后",
+  "refs": [
+   "UpdateChecker.swift:424",
+   "UpdateDialog.swift:205",
+   "main.swift:291",
+   "main.swift:449"
+  ]
+ },
+ {
+  "key": "Software Update",
+  "zh": "软件更新",
+  "refs": [
+   "UpdateDialog.swift:44"
+  ]
+ },
+ {
+  "key": "Version {0} is available",
+  "zh": "有新版本 {0}",
+  "refs": [
+   "UpdateDialog.swift:129",
+   "UpdateNotifier.swift:42"
+  ]
+ },
+ {
+  "key": "You have {0}. It restarts on its own once installed.",
+  "zh": "当前版本 {0}，装完自动重启",
+  "refs": [
+   "UpdateDialog.swift:133"
+  ]
+ },
+ {
+  "key": "You have {0}. This release has no package for this Mac — grab one from the releases page.",
+  "zh": "当前版本 {0}。这一版没有适合这台 Mac 的安装包，去发布页手动下载。",
+  "refs": [
+   "UpdateDialog.swift:137"
+  ]
+ },
+ {
+  "key": "Update Now",
+  "zh": "立即更新",
+  "refs": [
+   "UpdateDialog.swift:208"
   ]
  },
  {
@@ -3236,141 +3247,141 @@
   "key": "Extension update needed: {0}",
   "zh": "扩展需要更新：{0}",
   "refs": [
-   "main.swift:142"
+   "main.swift:152"
   ]
  },
  {
   "key": "Removed “{0}” from favorites",
   "zh": "已取消收藏「{0}」",
   "refs": [
-   "main.swift:205",
-   "main.swift:226"
+   "main.swift:215",
+   "main.swift:236"
   ]
  },
  {
   "key": "Added “{0}” to favorites",
   "zh": "已收藏「{0}」",
   "refs": [
-   "main.swift:250"
+   "main.swift:260"
   ]
  },
  {
   "key": "“{0}” is already a favorite — moved to front",
   "zh": "「{0}」已在收藏里，移到最前",
   "refs": [
-   "main.swift:255"
+   "main.swift:265"
   ]
  },
  {
   "key": "Automation permission needed",
   "zh": "需要「自动化」权限",
   "refs": [
-   "main.swift:275"
+   "main.swift:285"
   ]
  },
  {
   "key": "To favorite the current Finder folder, TabFlick asks Finder which folder its front window shows.\n\nAllow TabFlick to control Finder under System Settings → Privacy & Security → Automation.",
   "zh": "收藏当前 Finder 目录需要询问 Finder 前面的窗口在看哪个文件夹。\n\n请在 系统设置 → 隐私与安全性 → 自动化 中允许 TabFlick 控制「访达」。",
   "refs": [
-   "main.swift:277"
+   "main.swift:287"
   ]
  },
  {
   "key": "Open System Settings",
   "zh": "打开系统设置",
   "refs": [
-   "main.swift:280"
+   "main.swift:290"
   ]
  },
  {
   "key": "No Finder window to add",
   "zh": "没有可收藏的 Finder 窗口",
   "refs": [
-   "main.swift:290"
+   "main.swift:300"
   ]
  },
  {
   "key": "Open the folder in Finder first, then use this item.",
   "zh": "先在 Finder 里打开想收藏的文件夹，再点这一项。",
   "refs": [
-   "main.swift:292"
+   "main.swift:302"
   ]
  },
  {
   "key": "{0} no longer excluded",
   "zh": "已取消排除 {0}",
   "refs": [
-   "main.swift:317"
+   "main.swift:327"
   ]
  },
  {
   "key": "{0} excluded",
   "zh": "已排除 {0}",
   "refs": [
-   "main.swift:320"
+   "main.swift:330"
   ]
  },
  {
   "key": "Extension v{0} is installed, but this app version needs extension v{1} or newer (the protocol changed; older extensions lose features).\n\nDownload the new extension package, replace your folder, then reload it in chrome://extensions.",
   "zh": "当前扩展 v{0}，本版应用需要 v{1} 或更新的扩展（协议有变化，旧扩展部分功能会失效）。\n\n请下载新的扩展包替换原文件夹后，在 chrome://extensions 重新加载。",
   "refs": [
-   "main.swift:434"
+   "main.swift:444"
   ]
  },
  {
   "key": "Open Upgrade Guide",
   "zh": "查看升级说明",
   "refs": [
-   "main.swift:438"
+   "main.swift:448"
   ]
  },
  {
   "key": "TabFlick could not start",
   "zh": "TabFlick 无法启动",
   "refs": [
-   "main.swift:470"
+   "main.swift:480"
   ]
  },
  {
   "key": "Port {0} is already in use. Another copy of TabFlick may already be running — check the menu bar.",
   "zh": "端口 {0} 已被占用。可能已经有一个 TabFlick 在运行了 —— 看看菜单栏。",
   "refs": [
-   "main.swift:471"
+   "main.swift:481"
   ]
  },
  {
   "key": "TabFlick stopped intercepting the shortcut",
   "zh": "TabFlick 已停止拦截快捷键",
   "refs": [
-   "main.swift:496"
+   "main.swift:506"
   ]
  },
  {
   "key": "The keyboard hook was repeatedly disabled by the system, so TabFlick turned it off rather than risk interfering with your typing. ⌃⇥ now falls back to Chrome's built-in switching.\n\nRestarting TabFlick restores it. If this keeps happening, please report it on GitHub.",
   "zh": "键盘钩子被系统反复禁用，为避免影响你正常打字，TabFlick 已主动停用它。\n⌃⇥ 现在回落到 Chrome 自带的切换方式。\n\n重启 TabFlick 可以恢复。反复出现的话去 GitHub 反馈。",
   "refs": [
-   "main.swift:498"
+   "main.swift:508"
   ]
  },
  {
   "key": "Accessibility permission was removed",
   "zh": "辅助功能权限已被移除",
   "refs": [
-   "main.swift:525"
+   "main.swift:535"
   ]
  },
  {
   "key": "TabFlick disabled its keyboard hook immediately, so your typing is unaffected. ⌃⇥ falls back to Chrome's built-in switching.\n\nAfter granting the permission again, quit and reopen TabFlick — macOS only reads this permission when a process starts.",
   "zh": "TabFlick 已经停用键盘钩子，不影响你正常打字。⌃⇥ 回落到 Chrome 自带的切换方式。\n\n重新授予权限后，需要退出并重新打开 TabFlick 才会生效 —— macOS 只在进程启动时读取这项权限。",
   "refs": [
-   "main.swift:527"
+   "main.swift:537"
   ]
  },
  {
   "key": "TabFlick could not install its keyboard hook",
   "zh": "TabFlick 无法安装键盘钩子",
   "refs": [
-   "main.swift:549"
+   "main.swift:559"
   ]
  }
 ]

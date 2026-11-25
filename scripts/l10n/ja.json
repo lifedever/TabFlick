@@ -197,10 +197,7 @@
   "The update image is missing the app": "アップデートのディスクイメージにAppが含まれていません",
   "Software Update": "ソフトウェアアップデート",
   "Version {0} is available": "新しいバージョン{0}を利用できます",
-  "You have {0}. Download and install — it restarts on its own.": "現在のバージョンは{0}です。ダウンロードしてインストールすると、自動的に再起動します。",
-  "Download & Install": "ダウンロードしてインストール",
   "Later": "あとで",
-  "Skip This Version": "このバージョンをスキップ",
   "You have {0}. This release has no package for this Mac — grab one from the releases page.": "現在のバージョンは{0}です。このリリースにはこのMac用のパッケージがありません。リリースページからダウンロードしてください。",
   "Open Download Page": "ダウンロードページを開く",
   "You're up to date": "最新の状態です",
@@ -208,7 +205,6 @@
   "Could not check for updates": "アップデートを確認できませんでした",
   "Automatic update failed": "自動アップデートに失敗しました",
   "\n\nYou can download it manually from the releases page.": "\n\nリリースページから手動でダウンロードできます。",
-  "Downloading TabFlick {0}…": "TabFlick {0}をダウンロード中…",
   "Cancel": "キャンセル",
   "Quit": "終了",
   "Extension update needed: {0}": "拡張機能のアップデートが必要：{0}",
@@ -465,5 +461,10 @@
   "No matching files": "一致するファイルはありません",
   "iCloud Drive": "iCloud Drive",
   "{0} Web App": "{0} Webアプリ",
-  "Web App": "Webアプリ"
+  "Web App": "Webアプリ",
+  "Installing…": "インストール中…",
+  "Update Now": "今すぐアップデート",
+  "Update to {0}…": "{0} にアップデート…",
+  "You have {0}": "現在のバージョンは{0}です",
+  "You have {0}. It restarts on its own once installed.": "現在のバージョンは{0}です。インストール後に自動で再起動します。"
 }

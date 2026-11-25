@@ -95,14 +95,24 @@ MainActor.assumeIsolated {
             MainActor.assumeIsolated { settingsWindow.show() }
         })
 
-        // 自动检查更新：频率现读设置，到点才真的查
+        // 自动检查更新：频率现读设置，到点才真的查。查到新版本只发系统通知，
+        // 点通知打开「关于」页，在那里点「更新到 x…」才弹更新窗口。
+        // delegate 要在 NSApplication.run() 之前设：没在运行时点通知，系统拉起我们后点击才送得到
+        UpdateNotifier.shared.install()
+        UpdateNotifier.shared.onOpen = {
+            settingsWindow.show(page: .about)
+            updates.refreshForNotification()
+        }
         updates.frequency = { MainActor.assumeIsolated { settings.updateCheckFrequency } }
         updates.startPeriodicChecks()
 
         // 刚升级完就弹一次「这版更新了什么」。放启动流程里而不是挂在某个
         // 视图的生命周期上 —— 后台自启时 SwiftUI 一个窗口都不会创建，
         // 挂视图上的初始化永远不执行（PasteMemo #66）。
-        ReleaseNotes.presentIfUpgraded(currentVersion: updates.currentVersion)
+        // 从更新窗口装上来的说明已经看过，只给个 toast。
+        ReleaseNotes.presentIfUpgraded(currentVersion: updates.currentVersion) { version in
+            MainActor.assumeIsolated { Toast.show(L10n.t("已更新到 \(version)", "Updated to \(version)")) }
+        }
 
         // 设置的事实源在 app：改动后立刻推给所有客户端（收藏按浏览器分发），
         // 扩展只执行不持久化。SW 重启后自己会来 requestSettings。
@@ -157,7 +167,7 @@ MainActor.assumeIsolated {
             }
         }
         statusItem.onCheckForUpdates = {
-            MainActor.assumeIsolated { updates.check(userInitiated: true) }
+            MainActor.assumeIsolated { updates.check(.manual) }
         }
 
         // 浏览器行：每个已连接浏览器一行，各带自己的标签子菜单，

@@ -197,10 +197,7 @@
   "The update image is missing the app": "업데이트 디스크 이미지에 앱이 없음",
   "Software Update": "소프트웨어 업데이트",
   "Version {0} is available": "새 버전 {0} 사용 가능",
-  "You have {0}. Download and install — it restarts on its own.": "현재 버전은 {0}입니다. 다운로드하여 설치하면 자동으로 재시작됩니다.",
-  "Download & Install": "다운로드 및 설치",
   "Later": "나중에",
-  "Skip This Version": "이 버전 건너뛰기",
   "You have {0}. This release has no package for this Mac — grab one from the releases page.": "현재 버전은 {0}입니다. 이번 릴리스에는 이 Mac용 설치 패키지가 없습니다. 릴리스 페이지에서 직접 다운로드하세요.",
   "Open Download Page": "다운로드 페이지 열기",
   "You're up to date": "최신 버전입니다",
@@ -208,7 +205,6 @@
   "Could not check for updates": "업데이트를 확인할 수 없음",
   "Automatic update failed": "자동 업데이트 실패",
   "\n\nYou can download it manually from the releases page.": "\n\n릴리스 페이지에서 직접 다운로드할 수 있습니다.",
-  "Downloading TabFlick {0}…": "TabFlick {0} 다운로드 중…",
   "Cancel": "취소",
   "Quit": "종료",
   "Extension update needed: {0}": "확장 프로그램 업데이트 필요: {0}",
@@ -465,5 +461,10 @@
   "No matching files": "일치하는 파일 없음",
   "iCloud Drive": "iCloud Drive",
   "{0} Web App": "{0} 웹 앱",
-  "Web App": "웹 앱"
+  "Web App": "웹 앱",
+  "Installing…": "설치 중…",
+  "Update Now": "지금 업데이트",
+  "Update to {0}…": "{0}(으)로 업데이트…",
+  "You have {0}": "현재 버전은 {0}입니다",
+  "You have {0}. It restarts on its own once installed.": "현재 버전은 {0}입니다. 설치가 끝나면 자동으로 재시작됩니다."
 }

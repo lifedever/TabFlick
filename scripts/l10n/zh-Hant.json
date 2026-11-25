@@ -197,10 +197,7 @@
   "The update image is missing the app": "更新檔內容不完整",
   "Software Update": "軟體更新",
   "Version {0} is available": "有新版本 {0}",
-  "You have {0}. Download and install — it restarts on its own.": "目前版本 {0}。點「下載並安裝」，裝好後會自動重新啟動。",
-  "Download & Install": "下載並安裝",
   "Later": "稍後",
-  "Skip This Version": "略過此版本",
   "You have {0}. This release has no package for this Mac — grab one from the releases page.": "目前版本 {0}。這一版沒有適合這台 Mac 的安裝檔，到發布頁面手動下載。",
   "Open Download Page": "打開下載頁面",
   "You're up to date": "已是最新版本",
@@ -208,7 +205,6 @@
   "Could not check for updates": "檢查更新失敗",
   "Automatic update failed": "自動更新失敗",
   "\n\nYou can download it manually from the releases page.": "\n\n可以到發布頁面手動下載。",
-  "Downloading TabFlick {0}…": "正在下載 TabFlick {0}…",
   "Cancel": "取消",
   "Quit": "結束",
   "Extension update needed: {0}": "擴充功能需要更新：{0}",
@@ -465,5 +461,10 @@
   "No matching files": "沒有符合的檔案",
   "iCloud Drive": "iCloud 雲碟",
   "{0} Web App": "{0} 網頁 App",
-  "Web App": "網頁 App"
+  "Web App": "網頁 App",
+  "Installing…": "安裝中…",
+  "Update Now": "立即更新",
+  "Update to {0}…": "更新到 {0}…",
+  "You have {0}": "目前版本 {0}",
+  "You have {0}. It restarts on its own once installed.": "目前版本 {0}，裝好後自動重新啟動"
 }

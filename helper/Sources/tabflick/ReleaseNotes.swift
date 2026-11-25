@@ -14,6 +14,9 @@ enum ReleaseNotes {
     private static let everCheckedKey = "lastUpdateCheck"
     /// 「这一版的说明还欠着没弹」。见 presentIfUpgraded 那段关于两个标记的说明。
     private static let pendingKey = "pendingNotesVersion"
+    /// 在更新窗口里看过说明、从那里点「立即更新」装的版本（UpdateChecker 退出前写）。
+    /// 重启后是这一版就不再弹一遍同样的说明，只给个 toast。
+    nonisolated static let seenBeforeInstallKey = "notesSeenBeforeInstall"
 
     /// 首次尝试的延迟。这个函数在 `NSApplication.run()` **之前**被调用，必须
     /// 用 GCD 排 —— 此刻开 `Task` 要等主 actor 的执行器就绪，时机不由我们说了算
@@ -48,14 +51,23 @@ enum ReleaseNotes {
     /// 启动时的全部决策。**纯函数、不碰 UserDefaults**，好让校验脚本能把
     /// 「全新安装 / 老版本升上来 / 同版本重启 / 上次没取到 / pending 过时 / 降级」
     /// 这几条路穷举一遍 —— 这里每条分支错了都不报错，只是弹错窗或者永远不弹。
+    ///
+    /// `seenBeforeInstall`：更新窗口里看过说明再装的版本。升到的正是它就不取不弹
+    /// （`justUpgraded` 仍是 true，调用方给个「已更新到 x」）；对不上（手动拖 DMG 装了
+    /// 别的版本）照常弹。
     nonisolated static func decide(lastRun: String?, pending: String?,
-                                   everChecked: Bool, current: String) -> StartupDecision {
+                                   everChecked: Bool, current: String,
+                                   seenBeforeInstall: String? = nil) -> StartupDecision {
         // 没有 lastRun 记录有两种可能：全新安装，或者从**还没有这个功能的版本**
         // 升上来。后者才该弹。用「查过更新」当旁证：老用户必然查过（更新就是这么
         // 来的），全新安装的用户在第一次启动的这一刻还没查过。
         let upgraded = lastRun.map { $0 != current } ?? everChecked
 
         if upgraded {
+            if seenBeforeInstall == current {
+                return .init(lastRun: current, pending: nil,
+                             shouldFetch: false, justUpgraded: true)
+            }
             return .init(lastRun: current, pending: current,
                          shouldFetch: true, justUpgraded: true)
         }
@@ -100,12 +112,15 @@ enum ReleaseNotes {
     ///
     /// 「不弹过时说明」的保护还在：pending 只在版本号仍然对得上时才继续尝试；
     /// 中间又升过一版的话，新版本启动时会把 pending 覆盖成自己。
-    static func presentIfUpgraded(currentVersion: String) {
+    ///
+    /// 从更新窗口装上来的（说明在那里看过了）不再弹，改调 `onSeenUpgrade` 给个轻提示。
+    static func presentIfUpgraded(currentVersion: String, onSeenUpgrade: @escaping (String) -> Void) {
         let defaults = UserDefaults.standard
         let decision = decide(lastRun: defaults.string(forKey: lastRunKey),
                               pending: defaults.string(forKey: pendingKey),
                               everChecked: defaults.object(forKey: everCheckedKey) != nil,
-                              current: currentVersion)
+                              current: currentVersion,
+                              seenBeforeInstall: defaults.string(forKey: seenBeforeInstallKey))
         // 标记要**同步**落定：这一步在启动流程里必须当场写完，不能等异步回来
         defaults.set(decision.lastRun, forKey: lastRunKey)
         if let pending = decision.pending {
@@ -113,7 +128,14 @@ enum ReleaseNotes {
         } else {
             defaults.removeObject(forKey: pendingKey)
         }
+        // 用一次就丢：替换失败、旧版本又起来了也不能留着影响下一次升级
+        defaults.removeObject(forKey: seenBeforeInstallKey)
 
+        if decision.justUpgraded && !decision.shouldFetch {
+            log("🎉 升级到 \(currentVersion)，说明在更新窗口里看过了，不再弹")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { onSeenUpgrade(currentVersion) }
+            return
+        }
         guard decision.shouldFetch else { return }
         log(decision.justUpgraded
             ? "🎉 升级到 \(currentVersion)，稍后取本版发布说明"
@@ -238,9 +260,7 @@ private struct WhatsNewView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                            row(block)
-                        }
+                        ReleaseNotesBlocks(blocks: blocks)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -259,6 +279,17 @@ private struct WhatsNewView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
+        }
+    }
+}
+
+/// 发布说明的几种块怎么画。「更新内容」窗口和更新窗口共用。
+struct ReleaseNotesBlocks: View {
+    let blocks: [ReleaseNotesParser.Block]
+
+    var body: some View {
+        ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+            row(block)
         }
     }
 
