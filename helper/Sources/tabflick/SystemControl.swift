@@ -124,7 +124,7 @@ enum SystemControl {
     @MainActor private static func action(_ kind: Kind, keep: pid_t?) -> AppCommand.Action {
         switch kind {
         case .lock:        return .native { AppCommands.lockScreen() }
-        case .hideAll:     return .native { hideApps(except: nil) }
+        case .hideAll:     return .native { hideAllApps() }
         case .hideOthers:  return .native { hideApps(except: keep) }
         case .quitAll:     return .native { quitAllApps() }
         case .displayOff:  return .native { pmset("displaysleepnow") }
@@ -174,17 +174,77 @@ enum SystemControl {
 
     // MARK: - 做
 
-    /// 隐藏普通 App（同 ⌘H）。keep 留着不藏；TabFlick 自己、菜单栏工具（不是 regular）不动。
-    /// 窗口自己会动，成功不弹提示。
+    /// 隐藏其他 App（同 ⌥⌘H）：keep 是前台那个，它一直在前台，藏别的不会引起系统换前台，一次藏完就行。
+    /// TabFlick 自己、菜单栏工具（不是 regular）不动。窗口自己会动，成功不弹提示。
+    ///
+    /// `hide()` 是异步的，**返回 false 也照样会藏**（2026-11-25 实测：藏「计算器」回 false，0.8 秒后已藏好），
+    /// 别拿返回值数「藏了几个」。
     @MainActor static func hideApps(except keep: pid_t?) {
-        let own = getpid()
-        var hidden = 0
-        for app in NSWorkspace.shared.runningApplications
-        where app.activationPolicy == .regular && app.processIdentifier != own
-            && app.processIdentifier != keep && !app.isHidden && !app.isTerminated {
-            if app.hide() { hidden += 1 }
+        let targets = regularApps().filter { $0.processIdentifier != keep && !$0.isHidden }
+        targets.forEach { $0.hide() }
+        log("🖥 hide other apps (keep \(keep.map(String.init) ?? "none")) → requested \(targets.count)")
+    }
+
+    /// 隐藏所有窗口，只剩桌面。**分三步，顺序不能乱**（2026-11-25 用户报的「藏了又打开、访达是怎么回事」）：
+    /// 藏掉前台 App 时系统会自己激活下一个 App，所有 App 都藏了就激活访达，而激活一个藏着的 App 会把它
+    /// 连窗口一起显示回来。第一版一次把访达也藏了，结果系统在一串 App 之间来回激活，最后访达带着窗口回来。
+    /// ① 先藏既不在前台、也不是访达的；② 等它们藏好再藏前台那个，系统直接把前台交给访达；
+    /// ③ 访达到了前台再藏它：访达在前台时藏起来 = 只剩桌面（同在访达里按 ⌘H），系统不会再激活别的。
+    /// 每步最多等一会儿（有的 App 藏不掉，比如全屏的），到时间照样往下走。
+    @MainActor static func hideAllApps() {
+        let apps = regularApps()
+        let finder = apps.first { $0.bundleIdentifier == finderID }
+        let front = NSWorkspace.shared.frontmostApplication
+            .flatMap { app in apps.first { $0.processIdentifier == app.processIdentifier } }
+        let others = apps.filter {
+            $0.processIdentifier != finder?.processIdentifier && $0.processIdentifier != front?.processIdentifier && !$0.isHidden
         }
-        log("🖥 hide apps (keep \(keep.map(String.init) ?? "none")) → \(hidden)")
+        others.forEach { $0.hide() }
+        let started = Date()
+        waitUntil(timeout: 1.0, { others.allSatisfy { $0.isHidden || $0.isTerminated } }) {
+            if let front, front.processIdentifier != finder?.processIdentifier { front.hide() }
+            waitUntil(timeout: 1.5, { NSWorkspace.shared.frontmostApplication?.bundleIdentifier == finderID }) {
+                let finderFront = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == finderID
+                finder?.hide()
+                log("🖥 hide all → \(others.count + (front == nil ? 0 : 1)) app(s), finder front \(finderFront) "
+                    + "after \(Int(Date().timeIntervalSince(started) * 1000))ms")
+                watchAfterHideAll()
+            }
+        }
+    }
+
+    /// 藏完之后 3 秒里谁又被激活、显示回来了，记日志（「藏了又打开」再出现时直接看是谁）。
+    @MainActor private static func watchAfterHideAll() {
+        let center = NSWorkspace.shared.notificationCenter
+        let tokens = [NSWorkspace.didUnhideApplicationNotification, NSWorkspace.didActivateApplicationNotification].map { name in
+            center.addObserver(forName: name, object: nil, queue: .main) { note in
+                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                let what = name == NSWorkspace.didUnhideApplicationNotification ? "unhide" : "activate"
+                log("🖥 after hide all: \(what) \(app?.bundleIdentifier ?? "?")")
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { tokens.forEach(center.removeObserver) }
+    }
+
+    private static let finderID = "com.apple.finder"
+
+    /// 普通 App（有 Dock 图标的），TabFlick 自己不算。
+    @MainActor private static func regularApps() -> [NSRunningApplication] {
+        let own = getpid()
+        return NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular && $0.processIdentifier != own && !$0.isTerminated
+        }
+    }
+
+    /// 每 50ms 看一次条件，成立或到时间就接着做（在主线程上，不卡）。
+    @MainActor private static func waitUntil(timeout: TimeInterval, _ condition: @escaping @MainActor () -> Bool,
+                                             then next: @escaping @MainActor () -> Void) {
+        let deadline = Date().addingTimeInterval(timeout)
+        func poll() {
+            if condition() || Date() >= deadline { next(); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { MainActor.assumeIsolated { poll() } }
+        }
+        poll()
     }
 
     /// 一个个正常退出（同 ⌘Q，有没存的文档它自己会问）。访达、TabFlick、菜单栏工具不动。
@@ -193,7 +253,7 @@ enum SystemControl {
         let own = getpid()
         let targets = NSWorkspace.shared.runningApplications.filter {
             $0.activationPolicy == .regular && $0.processIdentifier != own && !$0.isTerminated
-                && $0.bundleIdentifier != "com.apple.finder"
+                && $0.bundleIdentifier != finderID
         }
         guard !targets.isEmpty else {
             Toast.show(L10n.t("没有要退出的 App", "No apps to quit"), kind: .info)
