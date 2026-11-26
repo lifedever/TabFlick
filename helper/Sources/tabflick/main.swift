@@ -1,5 +1,8 @@
 import Cocoa
 
+// 第一件事：摘掉启动我的那个会话（终端、Claude Code）留下的环境变量。
+// 之后经 TabFlick 打开的 App、起的子进程都继承这份环境，晚一步就带出去了。
+let inheritedSessionVariables = LaunchEnvironment.scrub()
 
 let kPort: UInt16 = 41573
 
@@ -29,6 +32,10 @@ MainActor.assumeIsolated {
     app.setActivationPolicy(.accessory)
 
     log("tabflick started — binary built \(binaryBuildTime())")
+    if !inheritedSessionVariables.isEmpty {
+        // 只记名字：值里有 token
+        log("🧹 cleared \(inheritedSessionVariables.count) inherited session variable(s): \(inheritedSessionVariables.joined(separator: " "))")
+    }
 
     // 权限要在装键盘钩子之前确认。打包成 .app 后没有终端，
     // 缺权限如果只往 stderr 打字，用户看到的就是「双击图标什么都没发生」。
