@@ -277,11 +277,6 @@
   "Show Package Contents": "パッケージの内容を表示",
   "Couldn't open Get Info": "情報ウインドウを開けません",
   "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "「システム設定 → プライバシーとセキュリティ → オートメーション」で TabFlick に Finder の制御を許可してください。",
-  "Start New Session": "新しいセッションを開始",
-  "End Current Session": "現在のセッションを終了",
-  "Session started": "セッションを開始しました",
-  "No session is running": "実行中のセッションはありません",
-  "Session ended": "セッションを終了しました",
   "Couldn't run “{0}”": "「{0}」を実行できませんでした",
   "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "「システム設定 → プライバシーとセキュリティ → オートメーション」で TabFlick に {0} の制御を許可してください。",
   "Lock Screen": "画面をロック",
@@ -379,7 +374,6 @@
   "Forward": "進む",
   "Calculator": "計算機",
   "Type a math expression in the search panel. The result shows on top; ↵ copies it.": "検索パネルに計算式を入力すると、一番上に結果が表示されます。↵ でコピーします。",
-  "App Actions": "App クイックアクション",
   "Window Management": "ウインドウ管理",
   "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.": "中央に配置、最大化、左右半分、次のディスプレイなど。検索パネルを開く前に使っていたウインドウが対象です。",
   "Kill Process": "プロセスを終了",
@@ -498,7 +492,6 @@
   "Sleep": "スリープ",
   "Some apps are still running": "まだ終了していないアプリがあります",
   "Start Screen Saver": "スクリーンセーバを開始",
-  "Start or end an Amphetamine session.": "Amphetamine のセッションを開始・終了します。",
   "System Control": "システム操作",
   "System Events": "System Events",
   "The Trash is empty": "ゴミ箱は空です",
@@ -506,5 +499,7 @@
   "Toggle Mute": "消音を切り替える",
   "Turn Off Display": "ディスプレイをオフにする",
   "Unmuted": "消音を解除しました",
-  "{0}. They may be waiting for you to save documents.": "{0}。書類の保存を待っている可能性があります。"
+  "{0}. They may be waiting for you to save documents.": "{0}。書類の保存を待っている可能性があります。",
+  "The plugin list's signature doesn't match, so it wasn't used": "プラグイン一覧の署名が一致しないため、使用しませんでした",
+  "{0} isn't installed": "{0} がインストールされていません"
 }

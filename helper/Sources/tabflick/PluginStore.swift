@@ -5,6 +5,7 @@ import CryptoKit
 ///
 /// 从哪拉：先 raw.githubusercontent.com（推了马上能拉到），拉不到再 jsDelivr（国内通常更快，但按分支缓存，
 /// 推完最长 12 小时才更新）。**一次安装的 index 和文件必须来自同一个地方**：两边版本可能不一样，混着拉 sha256 对不上。
+/// **目录要有发布者的签名**（index.json.sig，`StoreSignature`，2026-11-26）：对不上整份不认，换下一个地方拉。
 /// 开发时用 UserDefaults `pluginStoreBase` 指到本机仓库（file:///…/TabFlick/plugins/），没推也能走完整个流程。
 ///
 /// 安装：每个文件核对大小和 sha256 → 全部写进临时目录 → 校验 manifest（id、版本要和目录一致）→ 整个换进
@@ -67,6 +68,12 @@ final class PluginStore: ObservableObject {
             for base in Self.bases {
                 do {
                     let data = try await fetch(base.appendingPathComponent("index.json"), limit: 1 << 20)
+                    let signature = try await fetch(base.appendingPathComponent("index.json.sig"), limit: StoreSignature.maxBytes)
+                    guard StoreSignature.verify(data, signatureFile: signature) else {
+                        log("🧩 store: \(base.absoluteString) index signature doesn't match, ignored")
+                        lastError = L10n.t("插件列表的签名对不上，没有使用", "The plugin list's signature doesn't match, so it wasn't used")
+                        continue
+                    }
                     guard let parsed = StoreIndex.parse(data) else {
                         lastError = L10n.t("插件列表格式不对", "The plugin list is malformed")
                         continue

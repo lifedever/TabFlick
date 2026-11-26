@@ -7,10 +7,11 @@ TabFlick 的插件是一段 JavaScript，跑在 TabFlick 内嵌的 JavaScriptCor
 | 位置 | 怎么接 | 例子 |
 |---|---|---|
 | 搜索面板 | 一条命令（「股票…」），回车后列表换成插件给的行，打字交给插件去搜 | 股票、汇率、世界时钟 |
+| 搜索面板 | App 插件的几条命令，打字直接命中、挂在那个 App 名下，回车执行（见「App 插件」） | Amphetamine、CleanShot X |
 | 菜单栏 | 状态栏菜单里一个二级菜单，用户在设置里打开 | 自选股、常用币种 |
 | 设置页 | 下拉框、文本框、链接、「测试」按钮 | 天气的 API Key |
 
-这个目录里的 8 个官方插件就是最好的参考：`worldclock`（不联网、最简单）、`currency`（联网 + 菜单栏）、`weather`（要用户填 Key + 测试按钮）、`stocks`（最完整）。
+这个目录里的官方插件就是最好的参考：`worldclock`（不联网、最简单）、`currency`（联网 + 菜单栏）、`weather`（要用户填 Key + 测试按钮）、`stocks`（最完整）、`cleanshot`（App 插件，走 App 的网址接口）、`amphetamine`（App 插件，走 AppleScript）。
 
 ## 目录结构
 
@@ -87,7 +88,7 @@ tabflick.register({
    grep 🧩 ~/Library/Logs/TabFlick/tabflick.log
    ```
 
-`id` 不能和内置插件撞（`calculator`、`appCommands`、`processes`、`windowCommands`）。
+`id` 不能和内置插件撞（`calculator`、`systemControl`、`processes`、`windowCommands`、`recentFiles`）。
 
 ## manifest.json
 
@@ -107,6 +108,7 @@ tabflick.register({
 | `main` | | 入口脚本，默认 `main.js` |
 | `contributes` | | 往哪里加东西，见下面 |
 | `settings` | | 设置项，见下面 |
+| `app` | | App 插件对应的 App，见「App 插件」 |
 
 ### contributes
 
@@ -124,6 +126,46 @@ tabflick.register({
 
 - `list`：搜索面板里多一条命令「标题…」，回车进插件的列表。`keywords` 是除了名字之外也能搜到它的词（拼音首字母、英文别名），最多 20 个。`placeholder` 是列表里输入框的占位，`empty` 是列表空着时那句话。
 - `menu`：状态栏菜单里一个二级菜单，默认不显示，用户在设置 → 插件页里打开。
+- `commands`：App 插件的命令，见「App 插件」。
+
+## App 插件
+
+给某个第三方 App 加几条命令（CleanShot X 的截图、Amphetamine 的开始会话），在搜索面板里打字直接命中，菜单栏里点一下执行。只能做 App 自己公开的接口能做的事：它登记的网址（`cleanshot://…`），或者它的 AppleScript 命令。
+
+```json
+"app": {
+  "bundleId": "pl.maketheweb.cleanshotx",
+  "schemes": ["cleanshot"],
+  "scripts": { "start": "start new session" }
+},
+"contributes": {
+  "menu": true,
+  "commands": [
+    { "id": "capture-area", "title": { "zh-Hans": "截取区域", "en": "Capture Area" },
+      "keywords": ["截图", "screenshot"], "symbol": "viewfinder" }
+  ]
+}
+```
+
+```js
+tabflick.register({
+  async command(id) {
+    if (id === "capture-area") tabflick.app.open("cleanshot://capture-area", { activate: false })
+    if (id === "start") await tabflick.app.runScript("start")
+  },
+})
+```
+
+- `app.bundleId`：那个 App 的 bundle id。**苹果自己的 App（`com.apple.*`）不收**：访达、终端、系统事件这些能力太大，系统层面的事归 TabFlick 的内置插件。
+- `app.schemes`：能打开的网址 scheme，最多 4 个。`tabflick.app.open` 只认这里写的，打开时 TabFlick 还会核对它确实是那个 App 自己登记的，并且只交给那个 App。`http`、`file`、`mailto`、`x-apple…` 这些不收。
+- `app.scripts`：固定的 AppleScript，名字 → 正文，最多 20 段，每段最长 2000 个字。TabFlick 给正文包上 `tell application id "<bundleId>"` 再执行，所以**正文只写那个 App 自己的命令**和简单的流程（`if` / `return`）。插件只能按名字调（`tabflick.app.runScript("start")`），**不能在运行时拼脚本**。
+- 脚本里不许出现能跳出那个 App、碰本机、或者弹框骗用户输入的写法：`tell`、`application`、`me` / `my`、`do shell script`、`run` / `load` / `store script`、`path to`、`file`、`read` / `write`、`open location`、`display dialog`、原始事件 `«»`、竖线标识符 `|x|`、反斜杠，以及任何非 ASCII 字符。按词拦，字符串里的也算。完整的词表在 `helper/Sources/tabflick/PluginManifest.swift` 的 `PluginScriptPolicy`。
+- **有 `scripts` 的插件不能联网**：`hosts` 必须是空的，`tabflick.openURL` 也不能用。脚本从 App 里读到的东西没有出口。
+- `commands`：最多 30 条。`id` 小写字母开头，小写字母、数字、`-`，和插件 id 拼成 `<插件>.<命令>`，用户设的关键词、搜索记忆都按它存，**发布后别改**。`title` 多语言，`keywords` 是别的叫法（另一种语言、拼音首字母），`symbol` 是菜单和设置页那一行的 SF Symbol。
+- 命令挂在 App 名下：App 没装时搜索面板里不出现；行首画那个 App 的图标，副标题写 App 名，App 的 ⌘↩ 里也列。回车调插件的 `command(id)`。
+- 有 `commands` 又写了 `"menu": true` 的，菜单栏二级菜单就是这些命令，点一下调 `command(id)`，TabFlick 自己画，不调 `menu()`。
+- 插件装着且那个 App 也装着时，设置里和商店里画 App 自己的图标；`icon` 只在 App 没装时用（插件包里别放别人家的图标）。
+- 第一次跑脚本时系统会问「允许 TabFlick 控制 X」。用户拒绝过的，TabFlick 自己弹提示指路，`runScript` 以 `"not permitted"` 拒绝，插件不用再说一遍。
 
 ### settings
 
@@ -174,6 +216,7 @@ tabflick.register({
 | `menu()` | 用户打开状态栏菜单 | 菜单行的数组 |
 | `action(id)` | 用户点了菜单里带 `action` 的那一行 | 不用返回 |
 | `test()` | 设置页的「测试」按钮 | `{ok, title, detail}` |
+| `command(id)` | App 插件的命令：搜索面板里回车、菜单栏里点 | 不用返回 |
 
 抛异常、Promise 被拒绝、超时，TabFlick 都当「这次没取到」：列表留着上一次的行，菜单留着上次的内容并写「数据未更新」。
 
@@ -240,14 +283,16 @@ tabflick.register({
 | API | 说明 |
 |---|---|
 | `tabflick.locale` | 界面语言：`zh` `zh-Hant` `en` `ja` `ko` `es` `fr` `de` |
-| `tabflick.features` | 这个版本的 TabFlick 认哪些后来加的能力：`"enter"`（多层列表）、`"clock"`（行尾走秒的钟）。老版本没有这一项，用之前先判断 |
+| `tabflick.features` | 这个版本的 TabFlick 认哪些后来加的能力：`"enter"`（多层列表）、`"clock"`（行尾走秒的钟）、`"app"`（App 插件）。老版本没有这一项，用之前先判断 |
 | `tabflick.fetch(url, {method, headers, body, encoding})` | 返回 `Promise<{status, text}>`。只能去 `hosts` 里的主机（重定向也算），只走 https；`method` 只认 GET / POST；`encoding: "gbk"` 按 GBK 解码；`Host`、`Cookie` 头会被丢掉。单次请求 8 秒超时，响应最大 4 MB |
 | `tabflick.storage.get(key)` / `set(key, value)` / `remove(key)` | 插件自己的存储，按 JSON 的规则存（函数、`undefined` 存不进去），整份最多 1 MB。更新插件不丢，卸载时用户可以选择留着 |
 | `tabflick.settings.get(key)` | 读 manifest 里声明的设置项。文本框没填是空串 |
 | `tabflick.toast(text, detail)` | 屏幕底部的轻提示 |
 | `tabflick.copy(text)` | 拷贝到剪贴板 |
-| `tabflick.openURL(url)` | 用默认浏览器打开，只认 http(s) |
+| `tabflick.openURL(url)` | 用默认浏览器打开，只认 http(s)。有 `app.scripts` 的插件不能用 |
 | `tabflick.openSettings()` | 打开设置里这个插件的那一页（没填 Key 时引导用户去填） |
+| `tabflick.app.open(url, {activate})` | App 插件：把网址交给那个 App 打开，scheme 必须在 `app.schemes` 里。`activate` 默认 `true`；截图这类传 `false`，不然前台窗口在截图那一刻就失焦了。返回 `false` = 被拦下 |
+| `tabflick.app.runScript(name)` | App 插件：跑 `app.scripts` 里那一段，返回 `Promise<输出>`。没授权以 `"not permitted"` 拒绝，别的失败以 osascript 的报错拒绝 |
 | `console.log` / `console.error` | 写进 TabFlick 的日志 |
 | `setTimeout(fn, ms)` | 最长 60 秒 |
 
@@ -289,8 +334,12 @@ node plugins/hello/tests/hello.test.js
 商店目前只收官方插件，目录是这里的 `index.json`。
 
 1. 改了插件的任何文件，升 `version`。
-2. 重新生成目录：`python3 scripts/plugins/build-index.py`（会校验 manifest、入口、图标、文件大小，并记下每个文件的 sha256）。
-3. 发布前核对：`python3 scripts/plugins/build-index.py --check`。
-4. 和插件文件一起提交到 `main`。TabFlick 先从 raw.githubusercontent.com 拉，拉不到再走 jsDelivr（有最长 12 小时的缓存）；下载后逐个核对大小和 sha256，对不上不装。
+2. 重新生成目录：`python3 scripts/plugins/build-index.py`（会校验 manifest、入口、图标、文件大小、App 插件的脚本，记下每个文件的 sha256，再用发布者的私钥给目录签名，写出 `index.json.sig`）。
+3. 发布前核对：`python3 scripts/plugins/build-index.py --check`（目录和文件对得上、签名和编进 TabFlick 的公钥对得上）。
+4. 和插件文件、`index.json.sig` 一起提交到 `main`。TabFlick 先从 raw.githubusercontent.com 拉，拉不到再走 jsDelivr（有最长 12 小时的缓存）；**目录的签名对不上整份不认**，下载的文件逐个核对大小和 sha256，对不上不装。
+
+推上去之后清一下 jsDelivr 的缓存：它按文件分别缓存，目录、签名、插件文件可能一个新一个旧，走 jsDelivr 的用户会因为签名或 sha256 对不上装不了。对 `index.json`、`index.json.sig` 和这次改过的插件文件各请求一次 `https://purge.jsdelivr.net/gh/lifedever/TabFlick@main/plugins/<路径>`。
+
+签名私钥是发布者自己保管的一个文件，不进仓库：`build-index.py` 从环境变量 `TABFLICK_SIGNING_KEY`、或者 `scripts/plugins/signing-key.local`（不进仓库）里读它的路径。公钥编在 `helper/Sources/tabflick/PluginStoreIndex.swift` 的 `StoreSignature.publicKeys`。换钥匙要发新版 TabFlick：新旧公钥并存一版，等用户都升上来再去掉旧的。
 
 用到新版 TabFlick 才有的功能时写上 `minAppVersion`，旧版本的用户不会装上一个用不了的插件。

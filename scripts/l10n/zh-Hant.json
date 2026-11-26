@@ -277,11 +277,6 @@
   "Show Package Contents": "顯示套件內容",
   "Couldn't open Get Info": "打不開資訊視窗",
   "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制 Finder。",
-  "Start New Session": "開始新工作階段",
-  "End Current Session": "結束目前的工作階段",
-  "Session started": "已開始新工作階段",
-  "No session is running": "目前沒有進行中的工作階段",
-  "Session ended": "已結束工作階段",
   "Couldn't run “{0}”": "無法執行「{0}」",
   "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "在「系統設定 → 隱私權與安全性 → 自動化」裡允許 TabFlick 控制「{0}」。",
   "Lock Screen": "鎖定螢幕",
@@ -379,7 +374,6 @@
   "Forward": "前進",
   "Calculator": "計算機",
   "Type a math expression in the search panel. The result shows on top; ↵ copies it.": "在搜尋面板裡輸入算式，最上面一列顯示結果，按 ↵ 拷貝。",
-  "App Actions": "App 快捷動作",
   "Window Management": "視窗管理",
   "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.": "置中、最大化、左右半螢幕、移到下一個顯示器等，作用在打開搜尋面板前正在用的那個視窗。",
   "Kill Process": "結束處理程序",
@@ -498,7 +492,6 @@
   "Sleep": "睡眠",
   "Some apps are still running": "還有 App 沒結束",
   "Start Screen Saver": "開始螢幕保護程式",
-  "Start or end an Amphetamine session.": "Amphetamine 開始、結束工作階段。",
   "System Control": "系統控制",
   "System Events": "系統事件",
   "The Trash is empty": "垃圾桶是空的",
@@ -506,5 +499,7 @@
   "Toggle Mute": "切換靜音",
   "Turn Off Display": "關閉顯示器",
   "Unmuted": "已取消靜音",
-  "{0}. They may be waiting for you to save documents.": "{0}。可能在等你儲存文件。"
+  "{0}. They may be waiting for you to save documents.": "{0}。可能在等你儲存文件。",
+  "The plugin list's signature doesn't match, so it wasn't used": "外掛程式列表的簽章對不上，沒有使用",
+  "{0} isn't installed": "沒有安裝 {0}"
 }

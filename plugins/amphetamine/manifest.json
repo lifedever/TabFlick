@@ -1,0 +1,71 @@
+{
+  "id": "amphetamine",
+  "version": "1.0.0",
+  "name": "Amphetamine",
+  "summary": {
+    "zh-Hans": "开始、结束 Amphetamine 会话：在搜索面板里打「amp」或「结束」，也可以放进菜单栏。",
+    "zh-Hant": "開始、結束 Amphetamine 工作階段：在搜尋面板裡打「amp」或「結束」，也可以放進選單列。",
+    "en": "Start or end an Amphetamine session: type “amp” or “end” in the search panel, or put it in the menu bar."
+  },
+  "symbol": "pills.fill",
+  "tint": "orange",
+  "icon": "icon.svg",
+  "hosts": [],
+  "minAppVersion": "0.29.0",
+  "app": {
+    "bundleId": "com.if.Amphetamine",
+    "scripts": {
+      "start": "start new session",
+      "end": "if session is active then\nend session\nreturn \"ended\"\nend if\nreturn \"none\""
+    }
+  },
+  "contributes": {
+    "menu": true,
+    "commands": [
+      {
+        "id": "start",
+        "title": {
+          "zh-Hans": "开始新会话",
+          "en": "Start New Session",
+          "ja": "新しいセッションを開始",
+          "ko": "새 세션 시작",
+          "zh-Hant": "開始新工作階段",
+          "es": "Iniciar nueva sesión",
+          "fr": "Démarrer une nouvelle session",
+          "de": "Neue Sitzung starten"
+        },
+        "symbol": "play.fill",
+        "keywords": [
+          "start",
+          "开始",
+          "kaishi",
+          "Amphetamine",
+          "amp"
+        ]
+      },
+      {
+        "id": "end",
+        "title": {
+          "zh-Hans": "结束当前会话",
+          "en": "End Current Session",
+          "ja": "現在のセッションを終了",
+          "ko": "현재 세션 종료",
+          "zh-Hant": "結束目前的工作階段",
+          "es": "Finalizar sesión actual",
+          "fr": "Terminer la session en cours",
+          "de": "Aktuelle Sitzung beenden"
+        },
+        "symbol": "stop.fill",
+        "keywords": [
+          "end",
+          "stop",
+          "结束",
+          "結束",
+          "jieshu",
+          "Amphetamine",
+          "amp"
+        ]
+      }
+    ]
+  }
+}

@@ -1,15 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// 内置插件：原来写死在搜索面板里的四样，改成插件后能在设置里单独关（2026-11-06），后来加了最近文件（2026-11-13）、
-/// 系统控制（2026-11-25，锁屏从「App 快捷操作」挪了过去）。
-/// 各自的实现在各自的文件里（Calculator / AppCommands / SystemControl / WindowCommands / ProcessList / RecentFiles），
+/// 内置插件：原来写死在搜索面板里的几样，改成插件后能在设置里单独关（2026-11-06），后来加了最近文件（2026-11-13）、
+/// 系统控制（2026-11-25）。它们都靠系统接口（进程、辅助功能、Spotlight、私有接口锁屏），商店插件的沙箱碰不到，所以留内置。
+/// 第三方 App 的命令（Amphetamine、CleanShot X）2026-11-26 挪去了商店，每个 App 一个插件（见 plugins/README.md「App 插件」）。
+/// 各自的实现在各自的文件里（Calculator / SystemControl / WindowCommands / ProcessList / RecentFiles），
 /// 这里只是把它们接到插件协议上。
 enum BuiltinPlugins {
     /// 顺序 = 设置侧边栏里的顺序，也是命令在面板里同分时的先后（锁屏这些系统命令、结束进程、窗口命令，同插件化之前）。
     @MainActor static func all() -> [Plugin] {
-        [CalculatorPlugin(), AppCommandsPlugin(), SystemControlPlugin(), ProcessesPlugin(), WindowCommandsPlugin(),
-         RecentFilesPlugin()]
+        [CalculatorPlugin(), SystemControlPlugin(), ProcessesPlugin(), WindowCommandsPlugin(), RecentFilesPlugin()]
     }
 }
 
@@ -31,38 +31,6 @@ final class CalculatorPlugin: Plugin {
     func instantRows(_ query: String, _ context: PluginContext) -> [SearchRow] {
         guard let calculation = Calculator.evaluate(query) else { return [] }
         return [.calculation(calculation, pasteInto: context.windowTarget?.name)]
-    }
-}
-
-// MARK: - App 命令
-
-@MainActor
-final class AppCommandsPlugin: Plugin {
-    let id = "appCommands"
-    var title: String { L10n.t("App 快捷操作", "App Actions") }
-    var summary: String {
-        L10n.t("Amphetamine 开始、结束会话。", "Start or end an Amphetamine session.")
-    }
-    let symbol = "command"
-    var tint: Color { .orange }
-    var icon: NSImage? { BuiltinPluginIcons.appCommands }
-    let origin = PluginOrigin.builtin
-
-    var panelCommands: [PluginCommandInfo] {
-        AppCommands.all.map { command in
-            let title = command.bundleID.map { command.title + " · " + Self.appName($0) } ?? command.title
-            return PluginCommandInfo(id: command.id, title: title, symbol: command.symbol)
-        }
-    }
-
-    func commands(_ context: PluginContext) -> [AppCommand] { AppCommands.all }
-
-    private static func appName(_ bundleID: String) -> String {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
-        }
-        let name = FileManager.default.displayName(atPath: url.path)
-        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
     }
 }
 

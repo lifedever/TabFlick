@@ -24,3 +24,6 @@ assets/TabFlick.icns
 
 # 设计草稿(本地预览用,不进仓库)
 mockups/
+
+# 插件商店签名私钥的路径（发布者本机的，不进仓库）
+scripts/plugins/signing-key.local

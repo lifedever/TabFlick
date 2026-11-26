@@ -1237,7 +1237,9 @@ private struct PluginsPane: View {
         let hosts = entry.hosts.isEmpty
             ? L10n.t("不联网", "Works offline")
             : L10n.t("会访问 \(entry.hosts.joined(separator: L10n.listSeparator))", "Connects to \(entry.hosts.joined(separator: ", "))")
-        return PluginListRow(icon: store.icon(for: entry), symbol: entry.symbol, tint: PluginTint.color(entry.tint),
+        // App 插件：装着那个 App 就画它自己的图标（插件包里不带别人的图标）
+        let appIcon = entry.app.flatMap(PluginAppSupport.appURL).map { NSWorkspace.shared.icon(forFile: $0.path) }
+        return PluginListRow(icon: appIcon ?? store.icon(for: entry), symbol: entry.symbol, tint: PluginTint.color(entry.tint),
                              title: PluginManifest.pick(entry.names, language: language) ?? entry.id,
                              badge: entry.version,
                              summary: PluginManifest.pick(entry.summaries, language: language) ?? "",

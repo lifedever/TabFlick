@@ -22,15 +22,29 @@ enum PluginPaths {
 final class JSPlugin: Plugin {
     let manifest: PluginManifest
     let runtime: JSPluginRuntime
-    private lazy var jsMenu: JSPluginMenu? =
-        manifest.contributes.contains(.menu) ? JSPluginMenu(runtime: runtime) : nil
+    /// 菜单：App 插件有命令的，菜单就是这些命令（原生现画，不调 `menu()`）；别的调插件的 `menu()`
+    private lazy var pluginMenu: PluginMenu? = {
+        guard manifest.contributes.contains(.menu) else { return nil }
+        if manifest.app != nil, !manifest.commands.isEmpty { return PluginCommandMenu(plugin: self) }
+        return JSPluginMenu(runtime: runtime)
+    }()
 
-    let icon: NSImage?
+    /// manifest 里的图标。App 插件在 App 装着时画 App 自己的图标（`icon`）
+    private let manifestIcon: NSImage?
+    private var appIcon: NSImage?
 
     init(manifest: PluginManifest, runtime: JSPluginRuntime, icon: NSImage? = nil) {
         self.manifest = manifest
         self.runtime = runtime
-        self.icon = icon
+        self.manifestIcon = icon
+    }
+
+    var icon: NSImage? {
+        guard let app = manifest.app else { return manifestIcon }
+        if appIcon == nil, let url = PluginAppSupport.appURL(app.bundleID) {
+            appIcon = NSWorkspace.shared.icon(forFile: url.path)
+        }
+        return appIcon ?? manifestIcon
     }
 
     var id: String { manifest.id }
@@ -41,7 +55,7 @@ final class JSPlugin: Plugin {
     }
     var tint: Color { PluginTint.color(manifest.tint) }
     var origin: PluginOrigin { .official(version: manifest.version) }
-    var menu: PluginMenu? { jsMenu }
+    var menu: PluginMenu? { pluginMenu }
 
     private func pick(_ table: [String: String]) -> String? {
         PluginManifest.pick(table, language: L10n.current.rawValue)
@@ -60,9 +74,35 @@ final class JSPlugin: Plugin {
     var listPlaceholder: String? { pick(manifest.listPlaceholders) }
     var hasOwnSettings: Bool { !manifest.choices.isEmpty || !manifest.inputs.isEmpty || manifest.usesUpDownColors }
     var usesNetwork: Bool { !manifest.hosts.isEmpty }
-    /// 插件页「在搜索面板里」那一段：列表入口命令。
+    /// 插件页「在搜索面板里」那一段：列表入口命令，加 App 插件的命令（每条都能设关键词）。
     var panelCommands: [PluginCommandInfo] {
-        listCommand.map { [PluginCommandInfo(id: $0.id, title: $0.title, symbol: $0.symbol)] } ?? []
+        (listCommand.map { [PluginCommandInfo(id: $0.id, title: $0.title, symbol: $0.symbol)] } ?? [])
+            + manifest.commands.map { PluginCommandInfo(id: commandID($0), title: commandTitle($0), symbol: commandSymbol($0)) }
+    }
+
+    // MARK: App 插件的命令
+
+    /// 存关键词、搜索记忆按它：`<插件>.<命令>`（amphetamine.start，和挪到商店之前的内置命令同一个 id，用户设的关键词还在）
+    func commandID(_ command: PluginCommand) -> String { id + "." + command.id }
+    func commandTitle(_ command: PluginCommand) -> String { pick(command.titles) ?? command.id }
+    func commandSymbol(_ command: PluginCommand) -> String {
+        command.symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) == nil ? nil : $0 } ?? "command"
+    }
+
+    /// 搜索面板的命令：挂在声明的 App 下面（App 没装时面板不列，App 的 ⌘↩ 里也有），回车交给插件的 `command(id)`。
+    /// 关键词带上命令各语言的名字：界面是中文时打「capture」也要能找到。
+    func commands(_ context: PluginContext) -> [AppCommand] {
+        guard let app = manifest.app else { return [] }
+        return manifest.commands.map { command in
+            AppCommand(id: commandID(command), bundleID: app.bundleID, title: commandTitle(command),
+                       keywords: command.keywords + Array(command.titles.values), symbol: commandSymbol(command),
+                       action: .native { [weak self] in self?.runCommand(command.id) })
+        }
+    }
+
+    func runCommand(_ commandID: String) {
+        log("🧩 [\(id)] command \(commandID)")
+        runtime.call("command", [commandID]) { _ in }
     }
     var listEmptyText: String? { pick(manifest.listEmpty) }
 
@@ -244,6 +284,95 @@ final class JSPluginMenu: PluginMenu {
     }
 }
 
+/// App 插件的状态栏二级菜单：就是它的命令，点一下执行（同搜索面板里回车）。原生现画，不调插件、不用等。
+@MainActor
+final class PluginCommandMenu: PluginMenu {
+    private weak var plugin: JSPlugin?
+
+    init(plugin: JSPlugin) { self.plugin = plugin }
+
+    var snapshot: [PluginMenuRow]? { rows() }
+
+    func refresh(_ done: @escaping @MainActor ([PluginMenuRow]) -> Void) { done(rows()) }
+
+    private func rows() -> [PluginMenuRow] {
+        guard let plugin, let app = plugin.manifest.app else { return [] }
+        guard PluginAppSupport.appURL(app.bundleID) != nil else {
+            return [.note(L10n.t("没有安装 \(plugin.title)", "\(plugin.title) isn't installed"))]
+        }
+        return plugin.manifest.commands.map { command in
+            .item(PluginMenuItem(title: plugin.commandTitle(command), symbol: plugin.commandSymbol(command),
+                                 action: { [weak plugin] in plugin?.runCommand(command.id) }))
+        }
+    }
+}
+
+/// App 插件碰 App 的那几样：找到装着的那份、核对网址是它自己登记的、交给它打开、没授权时指路。
+@MainActor
+enum PluginAppSupport {
+    /// 装着的那份。同一个 bundle id 装了几份时（「下载」里留着旧副本）优先 /Applications、~/Applications 里的。
+    /// 记 30 秒：设置页、商店、菜单每画一次都要问，App 没装时每次都是一趟 Launch Services
+    static func appURL(_ bundleID: String) -> URL? {
+        if let cached = lookups[bundleID], Date().timeIntervalSince(cached.at) < 30 { return cached.url }
+        let all = NSWorkspace.shared.urlsForApplications(withBundleIdentifier: bundleID)
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let preferred = ["/Applications/", home + "/Applications/"]
+        let url = all.first { url in preferred.contains { url.path.hasPrefix($0) } } ?? all.first
+        lookups[bundleID] = (url, Date())
+        return url
+    }
+    private static var lookups: [String: (url: URL?, at: Date)] = [:]
+
+    /// App 自己在 Info.plist 里登记的网址 scheme（小写）。直接读文件：`Bundle(url:)` 按路径缓存，App 更新后读到旧的
+    static func registeredSchemes(_ appURL: URL) -> Set<String> {
+        let plist = appURL.appendingPathComponent("Contents/Info.plist")
+        guard let info = NSDictionary(contentsOf: plist) as? [String: Any],
+              let types = info["CFBundleURLTypes"] as? [[String: Any]] else { return [] }
+        return Set(types.flatMap { ($0["CFBundleURLSchemes"] as? [String]) ?? [] }.map { $0.lowercased() })
+    }
+
+    /// 把网址交给那个 App。scheme 不是它自己登记的不开（manifest 声明了别人家的 scheme，等于借它的名义开别的 App）。
+    /// 成功不弹 toast（截图框、窗口自己会出来），失败才说。
+    static func open(_ url: URL, in bundleID: String, activate: Bool) {
+        let name = appName(bundleID)
+        guard let appURL = appURL(bundleID) else {
+            Toast.show(L10n.t("没能执行「\(name)」", "Couldn't run “\(name)”"),
+                       detail: L10n.t("没有安装 \(name)", "\(name) isn't installed"), kind: .failure)
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), registeredSchemes(appURL).contains(scheme) else {
+            // 插件和 App 对不上（App 改了 scheme、或者插件写错了）：照实说没做成，不悄悄没反应
+            log("🧩 app.open refused: \(url.scheme ?? "?") isn't registered by \(bundleID)")
+            Toast.show(L10n.t("没能执行「\(name)」", "Couldn't run “\(name)”"), kind: .failure)
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = activate
+        NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
+            guard let error else { return }
+            log("🧩 app.open \(url.scheme ?? "?") in \(bundleID) failed: \(error.localizedDescription)")
+            Task { @MainActor in
+                Toast.show(L10n.t("没能执行「\(name)」", "Couldn't run “\(name)”"),
+                           detail: error.localizedDescription, kind: .failure)
+            }
+        }
+    }
+
+    static func reportScriptDenied(_ bundleID: String) {
+        let name = appName(bundleID)
+        Toast.show(L10n.t("没能执行「\(name)」", "Couldn't run “\(name)”"),
+                   detail: L10n.t("系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「\(name)」。",
+                                  "Allow TabFlick to control \(name) in System Settings → Privacy & Security → Automation."),
+                   kind: .failure)
+    }
+
+    static func appName(_ bundleID: String) -> String {
+        guard let url = appURL(bundleID) else { return bundleID }
+        let name = FileManager.default.displayName(atPath: url.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+}
+
 extension PluginRegistry {
     /// app 里用的这一份：内置插件在前，装了的 JS 插件按 id 排在后面。
     static let shared: PluginRegistry = {
@@ -301,7 +430,15 @@ enum JSPluginLoader {
                         NSPasteboard.general.setString(text, forType: .string)
                     },
                     openURL: { url in NSWorkspace.shared.open(url) },
-                    openSettings: { [id = manifest.id] in MainActor.assumeIsolated { PluginMenuHost.openSettings?(id) } }))
+                    openSettings: { [id = manifest.id] in MainActor.assumeIsolated { PluginMenuHost.openSettings?(id) } },
+                    openAppURL: { [app = manifest.app] url, activate in
+                        guard let app else { return }
+                        MainActor.assumeIsolated { PluginAppSupport.open(url, in: app.bundleID, activate: activate) }
+                    },
+                    scriptDenied: { [app = manifest.app] in
+                        guard let app else { return }
+                        MainActor.assumeIsolated { PluginAppSupport.reportScriptDenied(app.bundleID) }
+                    }))
             // 图标读不出来不影响插件本身，退回符号、写一行日志
             let icon = manifest.icon.flatMap { path -> NSImage? in
                 let image = PluginIconLoader.load(dir.appendingPathComponent(path))

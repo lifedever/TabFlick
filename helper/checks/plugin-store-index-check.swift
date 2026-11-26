@@ -4,6 +4,7 @@
 //   swiftc -parse-as-library Sources/tabflick/PluginStoreIndex.swift Sources/tabflick/PluginManifest.swift \
 //          checks/plugin-store-index-check.swift -o /tmp/indexcheck && /tmp/indexcheck ../plugins/index.json
 
+import CryptoKit
 import Foundation
 
 @main
@@ -64,6 +65,24 @@ struct PluginStoreIndexCheck {
             check("仓库里的 index.json 全部能解析", (real?.count ?? 0) >= 7, "\(real?.map(\.id) ?? [])")
             check("仓库里的插件都带图标", real?.allSatisfy { $0.icon != nil } == true, "\(real?.filter { $0.icon == nil }.map(\.id) ?? [])")
         }
+
+        // 目录签名（2026-11-26）：对不上整份不认
+        let signer = Curve25519.Signing.PrivateKey()
+        let publicKey = signer.publicKey.rawRepresentation.base64EncodedString()
+        let other = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString()
+        let index = Data(#"{"schema":1,"plugins":[]}"#.utf8)
+        let signature = Data(((try? signer.signature(for: index))?.base64EncodedString() ?? "").utf8 + [0x0a])
+        check("签名对得上", StoreSignature.verify(index, signatureFile: signature, keys: [publicKey]))
+        check("几把公钥里有一把对得上就行", StoreSignature.verify(index, signatureFile: signature, keys: [other, publicKey]))
+        var tampered = index
+        tampered[tampered.count - 2] = 0x20
+        check("目录改了一个字节不认", !StoreSignature.verify(tampered, signatureFile: signature, keys: [publicKey]))
+        check("别人的钥匙签的不认", !StoreSignature.verify(index, signatureFile: signature, keys: [other]))
+        check("没有公钥一律不认", !StoreSignature.verify(index, signatureFile: signature, keys: []))
+        check("签名不是 base64 不认", !StoreSignature.verify(index, signatureFile: Data("not a signature".utf8), keys: [publicKey]))
+        check("签名长度不对不认", !StoreSignature.verify(index, signatureFile: Data(Data(repeating: 1, count: 32).base64EncodedString().utf8), keys: [publicKey]))
+        check("签名文件太大不认", !StoreSignature.verify(index, signatureFile: signature + Data(repeating: 0x20, count: 2000), keys: [publicKey]))
+        check("坏公钥跳过", StoreSignature.verify(index, signatureFile: signature, keys: ["!!", publicKey]))
 
         if failures == 0 { print("全部通过") } else { fatalError("\(failures) 条没过") }
     }

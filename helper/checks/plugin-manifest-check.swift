@@ -188,6 +188,59 @@ struct PluginManifestCheck {
         check("通配照样不放 http", !allowsWild("http://abc.qweatherapi.com/"))
         check("通配照样不放端口", !allowsWild("https://abc.qweatherapi.com:8443/"))
 
+        // App 插件（2026-11-26）：app、commands、固定脚本。这些决定插件能指挥谁、能跑什么，写错了就是放进了病毒
+        let appGood = #"""
+        {"id":"amphetamine","version":"1.0.0","name":"Amphetamine","hosts":[],
+         "app":{"bundleId":"com.if.Amphetamine","schemes":["amphetamine"],
+                "scripts":{"start":"start new session","end":"if session is active then\nend session\nreturn \"ended\"\nend if\nreturn \"none\""}},
+         "contributes":{"menu":true,"commands":[
+           {"id":"start","title":{"zh-Hans":"开始新会话","en":"Start New Session"},"keywords":["start"," 开始 ","start"],"symbol":"play.fill"},
+           {"id":"end","title":"End Current Session"}]}}
+        """#
+        if case .success(let m) = parse(appGood) {
+            check("app bundleId", m.app?.bundleID == "com.if.Amphetamine")
+            check("app schemes", m.app?.schemes == ["amphetamine"])
+            check("app scripts", m.app?.scripts["start"] == "start new session" && m.app?.scripts.count == 2)
+            check("commands 顺序", m.commands.map(\.id) == ["start", "end"])
+            check("命令关键词去空白去重", m.commands.first?.keywords == ["start", "开始"], "\(m.commands.first?.keywords ?? [])")
+            check("commands 记进 contributes", m.contributes.contains(.commands) && m.contributes.contains(.menu))
+            check("命令标题只给字符串当英文", m.commands.last?.titles == ["en": "End Current Session"])
+        } else {
+            check("App 插件 manifest 解析", false, "\(parse(appGood))")
+        }
+        func withApp(_ app: String, commands: String = #"[{"id":"a","title":"A"}]"#, hosts: String = "[]") -> String {
+            #"{"id":"ab","version":"1","name":"x","hosts":\#(hosts),"app":\#(app),"contributes":{"commands":\#(commands)}}"#
+        }
+        func script(_ body: String) -> String { withApp(#"{"bundleId":"com.x.y","scripts":{"s":"\#(body)"}}"#) }
+        check("命令要有 app", problem(#"{"id":"ab","version":"1","name":"x","contributes":{"commands":[{"id":"a","title":"A"}]}}"#)
+              == .badCommand("commands need an app"))
+        check("commands 不是数组拦下", problem(#"{"id":"ab","version":"1","name":"x","app":{"bundleId":"com.x.y"},"contributes":{"commands":true}}"#) != nil)
+        check("苹果自己的 App 拦下", problem(withApp(#"{"bundleId":"com.apple.Terminal"}"#)) != nil)
+        check("苹果自己的 App 不分大小写", problem(withApp(#"{"bundleId":"COM.APPLE.systemevents"}"#)) != nil)
+        check("bundleId 带引号拦下", problem(withApp(#"{"bundleId":"com.x\"y"}"#)) != nil)
+        check("bundleId 只有一段拦下", problem(withApp(#"{"bundleId":"xyz"}"#)) != nil)
+        check("file scheme 拦下", problem(withApp(#"{"bundleId":"com.x.y","schemes":["file"]}"#)) != nil)
+        check("http scheme 拦下", problem(withApp(#"{"bundleId":"com.x.y","schemes":["https"]}"#)) != nil)
+        check("系统设置 scheme 拦下", problem(withApp(#"{"bundleId":"com.x.y","schemes":["x-apple.systempreferences"]}"#)) != nil)
+        check("大写 scheme 拦下", problem(withApp(#"{"bundleId":"com.x.y","schemes":["CleanShot"]}"#)) != nil)
+        check("命令 id 重复拦下", problem(withApp(#"{"bundleId":"com.x.y"}"#, commands: #"[{"id":"a","title":"A"},{"id":"a","title":"B"}]"#)) != nil)
+        check("命令没标题拦下", problem(withApp(#"{"bundleId":"com.x.y"}"#, commands: #"[{"id":"a"}]"#)) != nil)
+        check("命令 id 带点拦下", problem(withApp(#"{"bundleId":"com.x.y"}"#, commands: #"[{"id":"a.b","title":"A"}]"#)) != nil)
+        check("能跑脚本的插件不许联网", problem(withApp(#"{"bundleId":"com.x.y","scripts":{"s":"start"}}"#, hosts: #"["a.com"]"#)) != nil)
+        check("不跑脚本的 App 插件可以联网", problem(withApp(#"{"bundleId":"com.x.y"}"#, hosts: #"["a.com"]"#)) == nil)
+        check("正常脚本放行", problem(script("start new session")) == nil)
+        for (name, body) in [("do shell script", "do shell script \\\"ls\\\""), ("tell 别的 App", "tell application \\\"Finder\\\""),
+                             ("run script", "run script \\\"x\\\""), ("原始事件", "«event sysoexec»"),
+                             ("竖线标识符", "|tell| x"), ("反斜杠", "a \\\\ b"), ("全角伪装", "ｔｅｌｌ x"),
+                             ("弹框", "display dialog \\\"pw\\\""), ("me", "me"), ("path to", "path to desktop"),
+                             ("字符串里的也拦", "return \\\"shell\\\""), ("大写也拦", "DO SHELL SCRIPT"), ("空脚本", "  ")] {
+            check("脚本拦下：\(name)", problem(script(body)) != nil, body)
+        }
+        check("脚本超长拦下", problem(script(String(repeating: "a ", count: 1001))) != nil)
+        check("脚本名不合规拦下", problem(withApp(#"{"bundleId":"com.x.y","scripts":{"a b":"start"}}"#)) != nil)
+        check("包脚本：外面套 tell application id", PluginScriptPolicy.wrapped("a\nb", bundleID: "com.x.y")
+              == ["tell application id \"com.x.y\"", "a", "b", "end tell"])
+
         if failures == 0 { print("全部通过") } else { fatalError("\(failures) 条没过") }
     }
 }

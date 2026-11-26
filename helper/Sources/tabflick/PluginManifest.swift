@@ -15,6 +15,8 @@ struct PluginManifest: Equatable {
         case mode
         /// 搜索面板里一个命令，回车进插件自己的列表（同「结束进程…」）
         case list
+        /// App 插件的命令（`"commands": [...]`，数组，单独解析到 `commands`）
+        case commands
     }
 
     enum Problem: Error, Equatable {
@@ -26,6 +28,11 @@ struct PluginManifest: Equatable {
         case noName
         case unknownContribution(String)
         case badIcon(String)
+        /// `app` 不对：bundle id 不合规、是苹果自己的 App、scheme 不合规
+        case badApp(String)
+        case badCommand(String)
+        /// 固定脚本不合规（名字、长度、或者出现了跳出那个 App 的写法，见 `PluginScriptPolicy`）
+        case badScript(String)
     }
 
     let id: String
@@ -58,6 +65,10 @@ struct PluginManifest: Equatable {
     var inputs: [PluginInput] = []
     /// 设置页里的链接（`"settings": {"links": [...]}`：去哪注册、拿 Key），只许 https
     var links: [PluginLink] = []
+    /// App 插件（2026-11-26）：插件对应的第三方 App。声明了才能有命令、打开它的网址、跑固定脚本
+    var app: PluginApp? = nil
+    /// 搜索面板里的命令（挂在 `app` 下面，App 没装不出现），也是菜单栏二级菜单的内容
+    var commands: [PluginCommand] = []
 
     /// id：小写字母开头，小写字母、数字、连字符，2–40 个。当目录名和存盘的键用，不能带路径字符。
     nonisolated static func isValidID(_ id: String) -> Bool {
@@ -119,9 +130,16 @@ struct PluginManifest: Equatable {
         }
         var contributes = Set<Contribution>()
         var listInfo: [String: Any] = [:]
+        var commandList: [Any] = []
         if let declared = json["contributes"] as? [String: Any] {
             for (key, value) in declared {
                 guard let point = Contribution(rawValue: key) else { return .failure(.unknownContribution(key)) }
+                if point == .commands {
+                    guard let list = value as? [Any] else { return .failure(.badCommand("commands must be an array")) }
+                    commandList = list
+                    contributes.insert(point)
+                    continue
+                }
                 // 值是 true，或者是带细节的对象（list 的名字、关键词…）
                 if (value as? Bool) == true { contributes.insert(point) }
                 if let detail = value as? [String: Any] {
@@ -148,6 +166,24 @@ struct PluginManifest: Equatable {
         let choices = PluginChoice.parse(settings?["choices"])
         // 文字输入和下拉框共用 settings.get 的键，撞了的话插件读到的是哪个说不清，文字那个丢掉
         let inputs = PluginInput.parse(settings?["inputs"]).filter { input in !choices.contains { $0.key == input.key } }
+        // App 插件：app 和 commands 只要有一处写错就整份不认（写错了的命令、脚本悄悄丢掉，插件作者看不出来）
+        var app: PluginApp?
+        if let value = json["app"] {
+            switch PluginApp.parse(value) {
+            case .success(let parsed): app = parsed
+            case .failure(let problem): return .failure(problem)
+            }
+        }
+        // 能跑脚本的插件不许联网：脚本从 App 里读到的东西（或者用户在 App 里打的字）没有出口
+        if let app, !app.scripts.isEmpty, !hosts.isEmpty { return .failure(.badScript("a plugin with scripts can't have hosts")) }
+        var commands: [PluginCommand] = []
+        if !commandList.isEmpty {
+            guard app != nil else { return .failure(.badCommand("commands need an app")) }
+            switch PluginCommand.parse(commandList) {
+            case .success(let parsed): commands = parsed
+            case .failure(let problem): return .failure(problem)
+            }
+        }
         return .success(PluginManifest(
             id: id, version: version, names: names, summaries: localized(json["summary"]),
             symbol: (json["symbol"] as? String) ?? "puzzlepiece.fill",
@@ -156,7 +192,8 @@ struct PluginManifest: Equatable {
             listTitles: localized(listInfo["title"]), listKeywords: keywords,
             listPlaceholders: localized(listInfo["placeholder"]), listEmpty: localized(listInfo["empty"]),
             usesUpDownColors: (settings?["upDownColors"] as? Bool) == true,
-            choices: choices, inputs: inputs, links: PluginLink.parse(settings?["links"])))
+            choices: choices, inputs: inputs, links: PluginLink.parse(settings?["links"]),
+            app: app, commands: commands))
     }
 
     /// `{"zh-Hans": "股票", "en": "Stocks"}` → 键统一成 `L10n.Language` 的写法；只给了一个字符串当英文。
@@ -261,6 +298,145 @@ struct PluginLink: Equatable {
             out.append(PluginLink(titles: title, url: url))
         }
         return out
+    }
+}
+
+/// App 插件对应的那个 App（manifest 的 `"app": {"bundleId", "schemes", "scripts"}`）。外部输入，每一项都要验：
+/// 它决定了插件能指挥谁、能打开什么、能跑什么脚本。
+///
+/// 安全边界（用户 2026-11-26：「商店里面的插件一定要保证安全，防止病毒」）：
+/// - 只能是第三方 App：苹果自己的（访达、终端、系统事件…）能力太大，系统层面的事归内置插件。
+/// - 网址只认这里声明的 scheme，运行时还要核对确实是那个 App 自己登记的，并且交给它打开。
+/// - AppleScript 只能是这里写死的几段（跟着 manifest 一起过 sha256），插件的 JS 只能按名字调，不能现拼；
+///   TabFlick 自己包上 `tell application id "<bundleId>"`，正文里不许出现跳出这个 App 的写法（`PluginScriptPolicy`）。
+struct PluginApp: Equatable {
+    let bundleID: String
+    let schemes: [String]
+    /// 名字 → 正文（不含外面那层 tell）
+    let scripts: [String: String]
+
+    nonisolated static let maxSchemes = 4
+    nonisolated static let maxScripts = 20
+
+    /// bundle id：字母、数字、连字符，用点分成至少两段，最长 155。苹果自己的（com.apple.）不收。
+    nonisolated static func isValidBundleID(_ id: String) -> Bool {
+        let parts = id.split(separator: ".", omittingEmptySubsequences: false)
+        guard (3...155).contains(id.count), parts.count >= 2,
+              !id.lowercased().hasPrefix("com.apple.") else { return false }
+        return parts.allSatisfy { part in
+            !part.isEmpty && part.unicodeScalars.allSatisfy {
+                ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0) || $0 == "-" }
+        }
+    }
+
+    /// 网址 scheme：小写字母开头，小写字母、数字、+ . -，最长 32。网页、本机文件、系统设置这些不收：
+    /// 网页有 `tabflick.openURL`，后两样交给哪个 App 都不该由插件来开。
+    nonisolated static func isValidScheme(_ scheme: String) -> Bool {
+        guard (2...32).contains(scheme.count), let first = scheme.unicodeScalars.first, ("a"..."z").contains(first),
+              scheme.unicodeScalars.allSatisfy({ ("a"..."z").contains($0) || ("0"..."9").contains($0) || "+.-".unicodeScalars.contains($0) })
+        else { return false }
+        let denied = ["http", "https", "file", "ftp", "sftp", "smb", "afp", "nfs", "vnc", "ssh", "telnet", "data", "javascript",
+                      "mailto", "tel", "sms", "facetime", "itms", "macappstore"]
+        return !denied.contains(scheme) && !scheme.hasPrefix("x-apple") && !scheme.hasPrefix("com.apple")
+    }
+
+    nonisolated static func parse(_ value: Any) -> Result<PluginApp, PluginManifest.Problem> {
+        guard let json = value as? [String: Any], let id = json["bundleId"] as? String, isValidBundleID(id) else {
+            return .failure(.badApp(String(describing: (value as? [String: Any])?["bundleId"] ?? value).prefix(80).description))
+        }
+        var schemes: [String] = []
+        for item in (json["schemes"] as? [Any]) ?? [] {
+            guard let scheme = item as? String, isValidScheme(scheme), schemes.count < maxSchemes else {
+                return .failure(.badApp("scheme \(String(describing: item).prefix(40))"))
+            }
+            if !schemes.contains(scheme) { schemes.append(scheme) }
+        }
+        var scripts: [String: String] = [:]
+        if let raw = json["scripts"] {
+            guard let table = raw as? [String: Any], table.count <= maxScripts else { return .failure(.badScript("scripts")) }
+            for (name, body) in table {
+                guard PluginChoice.isValidKey(name), let text = body as? String, PluginScriptPolicy.allows(text) else {
+                    return .failure(.badScript(name))
+                }
+                scripts[name] = text
+            }
+        }
+        return .success(PluginApp(bundleID: id, schemes: schemes, scripts: scripts))
+    }
+}
+
+/// App 插件的一条命令：搜索面板里打字命中、回车执行（交给插件的 `command(id)`），菜单栏二级菜单里点一下执行。
+struct PluginCommand: Equatable {
+    let id: String
+    let titles: [String: String]
+    /// 搜它用的词（另一种语言的叫法、别名、拼音首字母），最多 20 个、每个最多 30 个字
+    let keywords: [String]
+    /// 菜单和设置页里那一行的 SF Symbol（实心的那一版）；nil 画通用的
+    let symbol: String?
+
+    nonisolated static let maxCommands = 30
+
+    /// id：小写字母开头，小写字母、数字、连字符，1–40 个（和插件 id 拼成 `<插件>.<命令>`，存关键词、搜索记忆用）。
+    nonisolated static func isValidID(_ id: String) -> Bool {
+        guard (1...40).contains(id.count), let first = id.unicodeScalars.first, ("a"..."z").contains(first) else { return false }
+        return id.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "-" }
+    }
+
+    nonisolated static func parse(_ list: [Any]) -> Result<[PluginCommand], PluginManifest.Problem> {
+        guard list.count <= maxCommands else { return .failure(.badCommand("more than \(maxCommands)")) }
+        var out: [PluginCommand] = []
+        for item in list {
+            guard let json = item as? [String: Any], let id = json["id"] as? String, isValidID(id),
+                  !out.contains(where: { $0.id == id }) else {
+                return .failure(.badCommand(String(describing: (item as? [String: Any])?["id"] ?? "?").prefix(40).description))
+            }
+            guard let titles = PluginChoice.titles(json["title"]) else { return .failure(.badCommand(id)) }
+            var keywords: [String] = []
+            for case let word as String in (json["keywords"] as? [Any]) ?? [] {
+                let trimmed = String(word.trimmingCharacters(in: .whitespaces).prefix(30))
+                if !trimmed.isEmpty, !keywords.contains(trimmed), keywords.count < 20 { keywords.append(trimmed) }
+            }
+            let symbol = (json["symbol"] as? String).flatMap { $0.isEmpty || $0.count > 60 ? nil : $0 }
+            out.append(PluginCommand(id: id, titles: titles, keywords: keywords, symbol: symbol))
+        }
+        return .success(out)
+    }
+}
+
+/// App 插件的固定脚本能写什么（manifest 解析、`build-index.py`、执行前三处都按它拦）。
+///
+/// TabFlick 给正文包上 `tell application id "<声明的 App>"` 再交给 osascript，所以正文只该是那个 App 自己的命令和
+/// 简单的流程（if / return）。拦的是能跳出这个 App 的写法：换目标（tell、application、me / my、using terms from、
+/// 原始事件「«»」）、在本机执行东西（do shell script、run / load / store script）、碰文件和系统（file、path to、
+/// read / write、system attribute、open location）。按词拦，字符串里的也算（宁可误拦）。
+/// 能跑脚本的插件不许联网（manifest 解析时拦 `hosts`，运行时 `openURL` 也不给）：脚本读到的东西没有出口。
+/// 这是白名单之外的第二道：商店只收官方插件、目录有签名和 sha256。
+enum PluginScriptPolicy {
+    nonisolated static let maxLength = 2000
+
+    nonisolated static let forbiddenWords: Set<String> = [
+        "tell", "application", "app", "current", "me", "my", "using", "terms", "from",
+        "script", "scripts", "shell", "do", "run", "load", "store", "osascript", "osax",
+        "system", "path", "posix", "file", "files", "folder", "folders", "alias", "disk", "volume",
+        "read", "write", "access", "open", "location", "event", "events", "considering", "ignoring",
+        "keystroke", "key", "click", "delete", "remove", "move", "duplicate", "quit", "clipboard",
+        // 弹框：假冒「输入密码」的对话框，把用户打的字交回给插件
+        "display", "dialog", "alert", "choose", "answer", "password", "hidden",
+    ]
+
+    nonisolated static func allows(_ text: String) -> Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= maxLength else { return false }
+        // 原始事件码、竖线标识符（|tell| 能把关键字当标识符藏起来）、反斜杠转义（字符串里拼出别的东西）
+        guard !text.contains(where: { "«»|\\".contains($0) }) else { return false }
+        // 只收 ASCII：全角、同形字母能把关键字伪装成别的字（ｔｅｌｌ）
+        guard text.unicodeScalars.allSatisfy({ $0.isASCII }) else { return false }
+        let words = text.lowercased().split { !($0.isLetter || $0.isNumber || $0 == "_") }
+        return !words.contains { forbiddenWords.contains(String($0)) }
+    }
+
+    /// 交给 osascript 的完整脚本（一行一个元素，逐行 -e）
+    nonisolated static func wrapped(_ body: String, bundleID: String) -> [String] {
+        ["tell application id \"\(bundleID)\""] + body.components(separatedBy: .newlines) + ["end tell"]
     }
 }
 

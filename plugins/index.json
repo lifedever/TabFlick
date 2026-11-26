@@ -2,6 +2,72 @@
  "schema": 1,
  "plugins": [
   {
+   "id": "amphetamine",
+   "version": "1.0.0",
+   "name": "Amphetamine",
+   "summary": {
+    "zh-Hans": "开始、结束 Amphetamine 会话：在搜索面板里打「amp」或「结束」，也可以放进菜单栏。",
+    "zh-Hant": "開始、結束 Amphetamine 工作階段：在搜尋面板裡打「amp」或「結束」，也可以放進選單列。",
+    "en": "Start or end an Amphetamine session: type “amp” or “end” in the search panel, or put it in the menu bar."
+   },
+   "symbol": "pills.fill",
+   "tint": "orange",
+   "icon": "icon.svg",
+   "hosts": [],
+   "minAppVersion": "0.29.0",
+   "app": "com.if.Amphetamine",
+   "files": [
+    {
+     "path": "icon.svg",
+     "size": 261,
+     "sha256": "e76effe1c82e14ca1735c51d913ca4b3f0149bbc569b9441456df22d005d612a"
+    },
+    {
+     "path": "main.js",
+     "size": 2953,
+     "sha256": "ac0c0f3b625bd8c6607d584c2b0b4402df5da9b90ef6767cc4992901eb451db0"
+    },
+    {
+     "path": "manifest.json",
+     "size": 2078,
+     "sha256": "0bb8d10684dd6ae924f4184b951c1e85d39fd1bc4249a5446c1201108e876682"
+    }
+   ]
+  },
+  {
+   "id": "cleanshot",
+   "version": "1.0.0",
+   "name": "CleanShot X",
+   "summary": {
+    "zh-Hans": "CleanShot X 的截图、录屏、识别文字：在搜索面板里打「截图」「录屏」「ocr」，也可以放进菜单栏。",
+    "zh-Hant": "CleanShot X 的截圖、錄製螢幕、辨識文字：在搜尋面板裡打「截圖」「錄影」「ocr」，也可以放進選單列。",
+    "en": "Capture, record and grab text with CleanShot X: type “capture”, “record” or “ocr” in the search panel, or put it in the menu bar."
+   },
+   "symbol": "camera.viewfinder",
+   "tint": "blue",
+   "icon": "icon.svg",
+   "hosts": [],
+   "minAppVersion": "0.29.0",
+   "app": "pl.maketheweb.cleanshotx",
+   "files": [
+    {
+     "path": "icon.svg",
+     "size": 305,
+     "sha256": "06e2fbb9c82defa221a52be7e5ad2e7488a51dea82fd0cb827a920ff44d717a8"
+    },
+    {
+     "path": "main.js",
+     "size": 1161,
+     "sha256": "29eaf99ee89faf3ee7b1ec4c94f73ef065d3ec903f2bed863bea9d8f7ac327aa"
+    },
+    {
+     "path": "manifest.json",
+     "size": 7694,
+     "sha256": "50ec6c52248d5dc354052ed69a3fc4878db56f562a4d6f2d3fad5fc5f828841f"
+    }
+   ]
+  },
+  {
    "id": "currency",
    "version": "1.0.2",
    "name": {

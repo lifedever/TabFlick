@@ -277,11 +277,6 @@
   "Show Package Contents": "패키지 내용 보기",
   "Couldn't open Get Info": "정보 윈도우를 열 수 없음",
   "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 Finder를 제어하도록 허용하세요.",
-  "Start New Session": "새 세션 시작",
-  "End Current Session": "현재 세션 종료",
-  "Session started": "세션을 시작했습니다",
-  "No session is running": "진행 중인 세션이 없습니다",
-  "Session ended": "세션을 종료했습니다",
   "Couldn't run “{0}”": "‘{0}’ 실행할 수 없음",
   "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "시스템 설정 → 개인정보 보호 및 보안 → 자동화에서 TabFlick이 {0}을(를) 제어하도록 허용하세요.",
   "Lock Screen": "화면 잠금",
@@ -379,7 +374,6 @@
   "Forward": "앞으로",
   "Calculator": "계산기",
   "Type a math expression in the search panel. The result shows on top; ↵ copies it.": "검색 패널에 수식을 입력하면 맨 위에 결과가 나옵니다. ↵ 키로 복사합니다.",
-  "App Actions": "앱 빠른 작업",
   "Window Management": "윈도우 관리",
   "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.": "가운데, 최대화, 왼쪽·오른쪽 절반, 다음 디스플레이 등. 검색 패널을 열기 전에 쓰던 윈도우에 적용됩니다.",
   "Kill Process": "프로세스 종료",
@@ -498,7 +492,6 @@
   "Sleep": "잠자기",
   "Some apps are still running": "아직 종료되지 않은 앱이 있습니다",
   "Start Screen Saver": "화면 보호기 시작",
-  "Start or end an Amphetamine session.": "Amphetamine 세션을 시작하거나 종료합니다.",
   "System Control": "시스템 제어",
   "System Events": "System Events",
   "The Trash is empty": "휴지통이 비어 있습니다",
@@ -506,5 +499,7 @@
   "Toggle Mute": "음소거 전환",
   "Turn Off Display": "디스플레이 끄기",
   "Unmuted": "음소거를 해제했습니다",
-  "{0}. They may be waiting for you to save documents.": "{0}. 문서 저장을 기다리고 있을 수 있습니다."
+  "{0}. They may be waiting for you to save documents.": "{0}. 문서 저장을 기다리고 있을 수 있습니다.",
+  "The plugin list's signature doesn't match, so it wasn't used": "플러그인 목록의 서명이 일치하지 않아 사용하지 않았습니다",
+  "{0} isn't installed": "{0}이(가) 설치되어 있지 않음"
 }

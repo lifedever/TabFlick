@@ -1,59 +1,28 @@
 [
  {
-  "key": "Start New Session",
-  "zh": "开始新会话",
-  "refs": [
-   "AppCommands.swift:67"
-  ]
- },
- {
-  "key": "Session started",
-  "zh": "已开始新会话",
-  "refs": [
-   "AppCommands.swift:71"
-  ]
- },
- {
-  "key": "End Current Session",
-  "zh": "结束当前会话",
-  "refs": [
-   "AppCommands.swift:74"
-  ]
- },
- {
-  "key": "No session is running",
-  "zh": "现在没有进行中的会话",
-  "refs": [
-   "AppCommands.swift:86"
-  ]
- },
- {
-  "key": "Session ended",
-  "zh": "已结束会话",
-  "refs": [
-   "AppCommands.swift:87"
-  ]
- },
- {
   "key": "Couldn't run “{0}”",
   "zh": "没能执行「{0}」",
   "refs": [
-   "AppCommands.swift:168",
-   "AppCommands.swift:173"
+   "AppCommands.swift:134",
+   "AppCommands.swift:139",
+   "JSPlugin.swift:334",
+   "JSPlugin.swift:348",
+   "JSPlugin.swift:356"
   ]
  },
  {
   "key": "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.",
   "zh": "系统设置 → 隐私与安全性 → 自动化里允许 TabFlick 控制「{0}」。",
   "refs": [
-   "AppCommands.swift:169"
+   "AppCommands.swift:135",
+   "JSPlugin.swift:357"
   ]
  },
  {
   "key": "Open With…",
   "zh": "打开方式…",
   "refs": [
-   "AppCommands.swift:189",
+   "AppCommands.swift:155",
    "SettingsWindow.swift:919",
    "TabSearchPanel.swift:454"
   ]
@@ -62,7 +31,7 @@
   "key": "Finder",
   "zh": "访达",
   "refs": [
-   "AppCommands.swift:192",
+   "AppCommands.swift:158",
    "SystemControl.swift:118"
   ]
  },
@@ -70,21 +39,21 @@
   "key": "Kill Process…",
   "zh": "结束进程…",
   "refs": [
-   "AppCommands.swift:203"
+   "AppCommands.swift:169"
   ]
  },
  {
   "key": "Recent Files",
   "zh": "最近文件",
   "refs": [
-   "AppCommands.swift:223"
+   "AppCommands.swift:189"
   ]
  },
  {
   "key": "Recent Files…",
   "zh": "最近文件…",
   "refs": [
-   "AppCommands.swift:224"
+   "AppCommands.swift:190"
   ]
  },
  {
@@ -330,73 +299,59 @@
   ]
  },
  {
-  "key": "App Actions",
-  "zh": "App 快捷操作",
-  "refs": [
-   "BuiltinPlugins.swift:42"
-  ]
- },
- {
-  "key": "Start or end an Amphetamine session.",
-  "zh": "Amphetamine 开始、结束会话。",
-  "refs": [
-   "BuiltinPlugins.swift:44"
-  ]
- },
- {
   "key": "Window Management",
   "zh": "窗口管理",
   "refs": [
-   "BuiltinPlugins.swift:74"
+   "BuiltinPlugins.swift:42"
   ]
  },
  {
   "key": "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.",
   "zh": "居中、最大化、左右半屏、移到下一个显示器等，动的是打开搜索面板前在用的那个窗口。",
   "refs": [
-   "BuiltinPlugins.swift:76"
+   "BuiltinPlugins.swift:44"
   ]
  },
  {
   "key": "Kill Process",
   "zh": "结束进程",
   "refs": [
-   "BuiltinPlugins.swift:96"
+   "BuiltinPlugins.swift:64"
   ]
  },
  {
   "key": "Find a process by name or port and kill it after confirming.",
   "zh": "按名字或端口找进程，确认后结束。",
   "refs": [
-   "BuiltinPlugins.swift:98"
+   "BuiltinPlugins.swift:66"
   ]
  },
  {
   "key": "Lists files opened in the last 30 days, same as Recents in Finder. Files opened directly in a terminal or editor aren't included.",
   "zh": "列出 30 天内打开过的文件，和访达的「最近使用」一样。终端、编辑器里直接打开的不算。",
   "refs": [
-   "BuiltinPlugins.swift:128"
+   "BuiltinPlugins.swift:96"
   ]
  },
  {
   "key": "Top CPU",
   "zh": "CPU 占用最高",
   "refs": [
-   "BuiltinPlugins.swift:195"
+   "BuiltinPlugins.swift:163"
   ]
  },
  {
   "key": "Top Memory",
   "zh": "内存占用最高",
   "refs": [
-   "BuiltinPlugins.swift:196"
+   "BuiltinPlugins.swift:164"
   ]
  },
  {
   "key": "No processes to kill",
   "zh": "没有可以结束的进程",
   "refs": [
-   "BuiltinPlugins.swift:210",
+   "BuiltinPlugins.swift:178",
    "TabSearchPanel.swift:2995"
   ]
  },
@@ -404,7 +359,7 @@
   "key": "Open in Quick Search",
   "zh": "在快捷搜索里打开",
   "refs": [
-   "BuiltinPlugins.swift:212",
+   "BuiltinPlugins.swift:180",
    "Plugins.swift:448"
   ]
  },
@@ -412,21 +367,21 @@
   "key": "Quit “{0}”?",
   "zh": "退出「{0}」？",
   "refs": [
-   "BuiltinPlugins.swift:226"
+   "BuiltinPlugins.swift:194"
   ]
  },
  {
   "key": "Kill “{0}”?",
   "zh": "结束「{0}」？",
   "refs": [
-   "BuiltinPlugins.swift:227"
+   "BuiltinPlugins.swift:195"
   ]
  },
  {
   "key": "Port {0}",
   "zh": "端口 {0}",
   "refs": [
-   "BuiltinPlugins.swift:231",
+   "BuiltinPlugins.swift:199",
    "TabSearchPanel.swift:3990"
   ]
  },
@@ -434,17 +389,17 @@
   "key": "Quit",
   "zh": "退出",
   "refs": [
-   "BuiltinPlugins.swift:235",
+   "BuiltinPlugins.swift:203",
    "TabSearchPanel.swift:248",
    "TabSearchPanel.swift:442",
-   "main.swift:17"
+   "main.swift:20"
   ]
  },
  {
   "key": "Kill",
   "zh": "结束",
   "refs": [
-   "BuiltinPlugins.swift:235",
+   "BuiltinPlugins.swift:203",
    "TabSearchPanel.swift:248"
   ]
  },
@@ -452,7 +407,7 @@
   "key": "Force Quit",
   "zh": "强制退出",
   "refs": [
-   "BuiltinPlugins.swift:236",
+   "BuiltinPlugins.swift:204",
    "TabSearchPanel.swift:445"
   ]
  },
@@ -460,7 +415,7 @@
   "key": "Force Kill",
   "zh": "强制结束",
   "refs": [
-   "BuiltinPlugins.swift:236",
+   "BuiltinPlugins.swift:204",
    "TabSearchPanel.swift:444"
   ]
  },
@@ -468,9 +423,9 @@
   "key": "Cancel",
   "zh": "取消",
   "refs": [
-   "BuiltinPlugins.swift:238",
+   "BuiltinPlugins.swift:206",
    "SettingsWindow.swift:1219",
-   "SystemControl.swift:332",
+   "SystemControl.swift:429",
    "UpdateDialog.swift:197"
   ]
  },
@@ -478,28 +433,28 @@
   "key": "“{0}” has quit",
   "zh": "已退出「{0}」",
   "refs": [
-   "BuiltinPlugins.swift:258"
+   "BuiltinPlugins.swift:226"
   ]
  },
  {
   "key": "It may be waiting for you to save a document.",
   "zh": "可能在等你保存文档。",
   "refs": [
-   "BuiltinPlugins.swift:265"
+   "BuiltinPlugins.swift:233"
   ]
  },
  {
   "key": "Try again with Force Kill.",
   "zh": "再结束一次时选「强制结束」。",
   "refs": [
-   "BuiltinPlugins.swift:267"
+   "BuiltinPlugins.swift:235"
   ]
  },
  {
   "key": "“{0}” is still running",
   "zh": "「{0}」还没退出",
   "refs": [
-   "BuiltinPlugins.swift:269",
+   "BuiltinPlugins.swift:237",
    "TabSearchPanel.swift:4187"
   ]
  },
@@ -507,14 +462,14 @@
   "key": "“{0}” had already quit",
   "zh": "「{0}」已经退出了",
   "refs": [
-   "BuiltinPlugins.swift:273"
+   "BuiltinPlugins.swift:241"
   ]
  },
  {
   "key": "No permission to kill “{0}”",
   "zh": "没有权限结束「{0}」",
   "refs": [
-   "BuiltinPlugins.swift:275",
+   "BuiltinPlugins.swift:243",
    "TabSearchPanel.swift:4193"
   ]
  },
@@ -522,7 +477,7 @@
   "key": "Couldn't kill “{0}”",
   "zh": "没能结束「{0}」",
   "refs": [
-   "BuiltinPlugins.swift:277",
+   "BuiltinPlugins.swift:245",
    "TabSearchPanel.swift:4195"
   ]
  },
@@ -709,6 +664,14 @@
   "refs": [
    "GitHubReleases.swift:41",
    "GitHubReleases.swift:72"
+  ]
+ },
+ {
+  "key": "{0} isn't installed",
+  "zh": "没有安装 {0}",
+  "refs": [
+   "JSPlugin.swift:301",
+   "JSPlugin.swift:335"
   ]
  },
  {
@@ -1017,63 +980,70 @@
   "key": "Couldn't load the plugin list",
   "zh": "取不到插件列表",
   "refs": [
-   "PluginStore.swift:66"
+   "PluginStore.swift:67"
+  ]
+ },
+ {
+  "key": "The plugin list's signature doesn't match, so it wasn't used",
+  "zh": "插件列表的签名对不上，没有使用",
+  "refs": [
+   "PluginStore.swift:74"
   ]
  },
  {
   "key": "The plugin list is malformed",
   "zh": "插件列表格式不对",
   "refs": [
-   "PluginStore.swift:71"
+   "PluginStore.swift:78"
   ]
  },
  {
   "key": "Updated “{0}”",
   "zh": "已更新「{0}」",
   "refs": [
-   "PluginStore.swift:155"
+   "PluginStore.swift:162"
   ]
  },
  {
   "key": "Installed “{0}”",
   "zh": "已安装「{0}」",
   "refs": [
-   "PluginStore.swift:155"
+   "PluginStore.swift:162"
   ]
  },
  {
   "key": "Couldn't install “{0}”",
   "zh": "没能安装「{0}」",
   "refs": [
-   "PluginStore.swift:160"
+   "PluginStore.swift:167"
   ]
  },
  {
   "key": "Removed “{0}”",
   "zh": "已卸载「{0}」",
   "refs": [
-   "PluginStore.swift:181"
+   "PluginStore.swift:188"
   ]
  },
  {
   "key": "Couldn't remove “{0}”",
   "zh": "没能卸载「{0}」",
   "refs": [
-   "PluginStore.swift:183"
+   "PluginStore.swift:190"
   ]
  },
  {
   "key": "File check failed: {0}",
   "zh": "文件校验没通过：{0}",
   "refs": [
-   "PluginStore.swift:193"
+   "PluginStore.swift:200"
   ]
  },
  {
   "key": "The plugin's manifest doesn't match",
   "zh": "插件信息不对",
   "refs": [
-   "PluginStore.swift:194"
+   "PluginStore.swift:201"
   ]
  },
  {
@@ -1111,7 +1081,7 @@
   "zh": "已更新到 {0}",
   "refs": [
    "ReleaseNotes.swift:137",
-   "main.swift:113"
+   "main.swift:120"
   ]
  },
  {
@@ -1145,9 +1115,9 @@
    "SettingsWindow.swift:148",
    "UpdateChecker.swift:370",
    "UpdateChecker.swift:379",
-   "main.swift:304",
-   "main.swift:523",
-   "main.swift:548"
+   "main.swift:311",
+   "main.swift:530",
+   "main.swift:555"
   ]
  },
  {
@@ -1603,7 +1573,7 @@
   "zh": "在菜单栏显示",
   "refs": [
    "SettingsWindow.swift:600",
-   "SettingsWindow.swift:1389"
+   "SettingsWindow.swift:1391"
   ]
  },
  {
@@ -1618,7 +1588,7 @@
   "zh": "{0} 个",
   "refs": [
    "SettingsWindow.swift:611",
-   "SettingsWindow.swift:1607"
+   "SettingsWindow.swift:1609"
   ]
  },
  {
@@ -1640,7 +1610,7 @@
   "zh": "菜单栏",
   "refs": [
    "SettingsWindow.swift:624",
-   "SettingsWindow.swift:1403"
+   "SettingsWindow.swift:1405"
   ]
  },
  {
@@ -2002,161 +1972,161 @@
   "key": "Needs TabFlick {0}",
   "zh": "需要 TabFlick {0}",
   "refs": [
-   "SettingsWindow.swift:1246"
+   "SettingsWindow.swift:1248"
   ]
  },
  {
   "key": "Install",
   "zh": "安装",
   "refs": [
-   "SettingsWindow.swift:1252"
+   "SettingsWindow.swift:1254"
   ]
  },
  {
   "key": "Turned off. Turn it on in Plugins for these settings to take effect.",
   "zh": "已关闭。在「插件」页打开后这里的设置才生效。",
   "refs": [
-   "SettingsWindow.swift:1341"
+   "SettingsWindow.swift:1343"
   ]
  },
  {
   "key": "In the Search Panel",
   "zh": "在搜索面板里",
   "refs": [
-   "SettingsWindow.swift:1354"
+   "SettingsWindow.swift:1356"
   ]
  },
  {
   "key": "Adds “{0}” to the menu bar menu; hover it to see the contents.",
   "zh": "状态栏菜单里多一行「{0}」，展开看内容。",
   "refs": [
-   "SettingsWindow.swift:1398"
+   "SettingsWindow.swift:1400"
   ]
  },
  {
   "key": "Type a keyword and this item comes first; ↩ runs it. Separate keywords with spaces. Leave it empty to search by name.",
   "zh": "打出关键词，这一项排在最前，回车就执行。多个关键词用空格分开，不填就按名字搜。",
   "refs": [
-   "SettingsWindow.swift:1439"
+   "SettingsWindow.swift:1441"
   ]
  },
  {
   "key": "Test",
   "zh": "测试",
   "refs": [
-   "SettingsWindow.swift:1485"
+   "SettingsWindow.swift:1487"
   ]
  },
  {
   "key": "Testing…",
   "zh": "正在测试…",
   "refs": [
-   "SettingsWindow.swift:1497"
+   "SettingsWindow.swift:1499"
   ]
  },
  {
   "key": "Couldn't run the test",
   "zh": "没能测试",
   "refs": [
-   "SettingsWindow.swift:1524"
+   "SettingsWindow.swift:1526"
   ]
  },
  {
   "key": "No response",
   "zh": "没有回应",
   "refs": [
-   "SettingsWindow.swift:1529"
+   "SettingsWindow.swift:1531"
   ]
  },
  {
   "key": "Try again in a moment.",
   "zh": "过一会儿再试。",
   "refs": [
-   "SettingsWindow.swift:1530"
+   "SettingsWindow.swift:1532"
   ]
  },
  {
   "key": "Up and down colors",
   "zh": "涨跌颜色",
   "refs": [
-   "SettingsWindow.swift:1592"
+   "SettingsWindow.swift:1594"
   ]
  },
  {
   "key": "Red up, green down",
   "zh": "红涨绿跌",
   "refs": [
-   "SettingsWindow.swift:1593"
+   "SettingsWindow.swift:1595"
   ]
  },
  {
   "key": "Green up, red down",
   "zh": "绿涨红跌",
   "refs": [
-   "SettingsWindow.swift:1594"
+   "SettingsWindow.swift:1596"
   ]
  },
  {
   "key": "Show",
   "zh": "列几个",
   "refs": [
-   "SettingsWindow.swift:1605"
+   "SettingsWindow.swift:1607"
   ]
  },
  {
   "key": "Sort by",
   "zh": "排序",
   "refs": [
-   "SettingsWindow.swift:1610"
+   "SettingsWindow.swift:1612"
   ]
  },
  {
   "key": "Version {0}",
   "zh": "版本 {0}",
   "refs": [
-   "SettingsWindow.swift:1635"
+   "SettingsWindow.swift:1637"
   ]
  },
  {
   "key": "What's New",
   "zh": "本版更新内容",
   "refs": [
-   "SettingsWindow.swift:1640"
+   "SettingsWindow.swift:1642"
   ]
  },
  {
   "key": "MRU tab switching, plus tab management and pins that persist.",
   "zh": "按最近使用顺序切换标签，外加标签管理和置顶常驻。",
   "refs": [
-   "SettingsWindow.swift:1647"
+   "SettingsWindow.swift:1649"
   ]
  },
  {
   "key": "Sponsor",
   "zh": "赞助开发",
   "refs": [
-   "SettingsWindow.swift:1661"
+   "SettingsWindow.swift:1663"
   ]
  },
  {
   "key": "Website",
   "zh": "官网",
   "refs": [
-   "SettingsWindow.swift:1666"
+   "SettingsWindow.swift:1668"
   ]
  },
  {
   "key": "Report an Issue",
   "zh": "反馈问题",
   "refs": [
-   "SettingsWindow.swift:1670"
+   "SettingsWindow.swift:1672"
   ]
  },
  {
   "key": "Installing…",
   "zh": "安装中…",
   "refs": [
-   "SettingsWindow.swift:1689",
+   "SettingsWindow.swift:1691",
    "UpdateDialog.swift:185"
   ]
  },
@@ -2164,28 +2134,28 @@
   "key": "Downloading…",
   "zh": "下载中…",
   "refs": [
-   "SettingsWindow.swift:1691"
+   "SettingsWindow.swift:1693"
   ]
  },
  {
   "key": "Update to {0}…",
   "zh": "更新到 {0}…",
   "refs": [
-   "SettingsWindow.swift:1693"
+   "SettingsWindow.swift:1695"
   ]
  },
  {
   "key": "Checking…",
   "zh": "检查中…",
   "refs": [
-   "SettingsWindow.swift:1702"
+   "SettingsWindow.swift:1704"
   ]
  },
  {
   "key": "Check for Updates",
   "zh": "检查更新",
   "refs": [
-   "SettingsWindow.swift:1704"
+   "SettingsWindow.swift:1706"
   ]
  },
  {
@@ -2428,7 +2398,7 @@
   "zh": "重新启动",
   "refs": [
    "SystemControl.swift:45",
-   "SystemControl.swift:313"
+   "SystemControl.swift:410"
   ]
  },
  {
@@ -2436,7 +2406,7 @@
   "zh": "关机",
   "refs": [
    "SystemControl.swift:46",
-   "SystemControl.swift:317"
+   "SystemControl.swift:414"
   ]
  },
  {
@@ -2444,7 +2414,7 @@
   "zh": "退出登录",
   "refs": [
    "SystemControl.swift:47",
-   "SystemControl.swift:321"
+   "SystemControl.swift:418"
   ]
  },
  {
@@ -2521,149 +2491,149 @@
   "key": "No apps to quit",
   "zh": "没有要退出的 App",
   "refs": [
-   "SystemControl.swift:199"
+   "SystemControl.swift:296"
   ]
  },
  {
   "key": "All apps have quit",
   "zh": "已退出所有 App",
   "refs": [
-   "SystemControl.swift:208"
+   "SystemControl.swift:305"
   ]
  },
  {
   "key": "Some apps are still running",
   "zh": "还有 App 没退出",
   "refs": [
-   "SystemControl.swift:212"
+   "SystemControl.swift:309"
   ]
  },
  {
   "key": "{0}. They may be waiting for you to save documents.",
   "zh": "{0}。可能在等你保存文档。",
   "refs": [
-   "SystemControl.swift:213"
+   "SystemControl.swift:310"
   ]
  },
  {
   "key": "Couldn't start the screen saver",
   "zh": "没能开始屏幕保护程序",
   "refs": [
-   "SystemControl.swift:244"
+   "SystemControl.swift:341"
   ]
  },
  {
   "key": "No disks to eject",
   "zh": "没有可以推出的磁盘",
   "refs": [
-   "SystemControl.swift:269"
+   "SystemControl.swift:366"
   ]
  },
  {
   "key": "Ejected all disks",
   "zh": "已推出所有磁盘",
   "refs": [
-   "SystemControl.swift:271"
+   "SystemControl.swift:368"
   ]
  },
  {
   "key": "Couldn't eject {0}",
   "zh": "没能推出「{0}」",
   "refs": [
-   "SystemControl.swift:274"
+   "SystemControl.swift:371"
   ]
  },
  {
   "key": "An app may be using it.",
   "zh": "可能有 App 正在用它。",
   "refs": [
-   "SystemControl.swift:276"
+   "SystemControl.swift:373"
   ]
  },
  {
   "key": "Quit all apps?",
   "zh": "退出所有 App？",
   "refs": [
-   "SystemControl.swift:306"
+   "SystemControl.swift:403"
   ]
  },
  {
   "key": "Apps with unsaved documents ask first. Finder and menu bar tools keep running.",
   "zh": "没保存的文档会先问你。访达和菜单栏工具不退。",
   "refs": [
-   "SystemControl.swift:307"
+   "SystemControl.swift:404"
   ]
  },
  {
   "key": "Quit All",
   "zh": "全部退出",
   "refs": [
-   "SystemControl.swift:309"
+   "SystemControl.swift:406"
   ]
  },
  {
   "key": "Restart now?",
   "zh": "现在重新启动？",
   "refs": [
-   "SystemControl.swift:311"
+   "SystemControl.swift:408"
   ]
  },
  {
   "key": "Apps with unsaved documents ask first.",
   "zh": "没保存的文档会先问你。",
   "refs": [
-   "SystemControl.swift:312",
-   "SystemControl.swift:316",
-   "SystemControl.swift:320"
+   "SystemControl.swift:409",
+   "SystemControl.swift:413",
+   "SystemControl.swift:417"
   ]
  },
  {
   "key": "Shut down now?",
   "zh": "现在关机？",
   "refs": [
-   "SystemControl.swift:315"
+   "SystemControl.swift:412"
   ]
  },
  {
   "key": "Log out now?",
   "zh": "现在退出登录？",
   "refs": [
-   "SystemControl.swift:319"
+   "SystemControl.swift:416"
   ]
  },
  {
   "key": "Empty the Trash?",
   "zh": "清空废纸篓？",
   "refs": [
-   "SystemControl.swift:323"
+   "SystemControl.swift:420"
   ]
  },
  {
   "key": "Items in the Trash are deleted permanently. This can't be undone.",
   "zh": "废纸篓里的东西会永久删除，不能撤销。",
   "refs": [
-   "SystemControl.swift:324"
+   "SystemControl.swift:421"
   ]
  },
  {
   "key": "Empty",
   "zh": "清空",
   "refs": [
-   "SystemControl.swift:326"
+   "SystemControl.swift:423"
   ]
  },
  {
   "key": "System Control",
   "zh": "系统控制",
   "refs": [
-   "SystemControl.swift:348"
+   "SystemControl.swift:445"
   ]
  },
  {
   "key": "Lock, sleep, restart, shut down, hide all windows, toggle dark mode, eject disks, empty the Trash and more. Quitting all apps, restarting and the like need ↩ twice.",
   "zh": "锁屏、睡眠、重启、关机、隐藏所有窗口、切换深色模式、推出磁盘、清空废纸篓等。退出所有 App、重启、关机这类要按两次回车。",
   "refs": [
-   "SystemControl.swift:350"
+   "SystemControl.swift:447"
   ]
  },
  {
@@ -3178,7 +3148,7 @@
   "zh": "扩展需要更新",
   "refs": [
    "TabSearchPanel.swift:3035",
-   "main.swift:442"
+   "main.swift:449"
   ]
  },
  {
@@ -3394,8 +3364,8 @@
   "refs": [
    "UpdateChecker.swift:392",
    "UpdateDialog.swift:205",
-   "main.swift:290",
-   "main.swift:448"
+   "main.swift:297",
+   "main.swift:455"
   ]
  },
  {
@@ -3536,141 +3506,141 @@
   "key": "Extension update needed: {0}",
   "zh": "扩展需要更新：{0}",
   "refs": [
-   "main.swift:151"
+   "main.swift:158"
   ]
  },
  {
   "key": "Removed “{0}” from favorites",
   "zh": "已取消收藏「{0}」",
   "refs": [
-   "main.swift:214",
-   "main.swift:235"
+   "main.swift:221",
+   "main.swift:242"
   ]
  },
  {
   "key": "Added “{0}” to favorites",
   "zh": "已收藏「{0}」",
   "refs": [
-   "main.swift:259"
+   "main.swift:266"
   ]
  },
  {
   "key": "“{0}” is already a favorite — moved to front",
   "zh": "「{0}」已在收藏里，移到最前",
   "refs": [
-   "main.swift:264"
+   "main.swift:271"
   ]
  },
  {
   "key": "Automation permission needed",
   "zh": "需要「自动化」权限",
   "refs": [
-   "main.swift:284"
+   "main.swift:291"
   ]
  },
  {
   "key": "To favorite the current Finder folder, TabFlick asks Finder which folder its front window shows.\n\nAllow TabFlick to control Finder under System Settings → Privacy & Security → Automation.",
   "zh": "收藏当前 Finder 目录需要询问 Finder 前面的窗口在看哪个文件夹。\n\n请在 系统设置 → 隐私与安全性 → 自动化 中允许 TabFlick 控制「访达」。",
   "refs": [
-   "main.swift:286"
+   "main.swift:293"
   ]
  },
  {
   "key": "Open System Settings",
   "zh": "打开系统设置",
   "refs": [
-   "main.swift:289"
+   "main.swift:296"
   ]
  },
  {
   "key": "No Finder window to add",
   "zh": "没有可收藏的 Finder 窗口",
   "refs": [
-   "main.swift:299"
+   "main.swift:306"
   ]
  },
  {
   "key": "Open the folder in Finder first, then use this item.",
   "zh": "先在 Finder 里打开想收藏的文件夹，再点这一项。",
   "refs": [
-   "main.swift:301"
+   "main.swift:308"
   ]
  },
  {
   "key": "{0} no longer excluded",
   "zh": "已取消排除 {0}",
   "refs": [
-   "main.swift:326"
+   "main.swift:333"
   ]
  },
  {
   "key": "{0} excluded",
   "zh": "已排除 {0}",
   "refs": [
-   "main.swift:329"
+   "main.swift:336"
   ]
  },
  {
   "key": "Extension v{0} is installed, but this app version needs extension v{1} or newer (the protocol changed; older extensions lose features).\n\nDownload the new extension package, replace your folder, then reload it in chrome://extensions.",
   "zh": "当前扩展 v{0}，本版应用需要 v{1} 或更新的扩展（协议有变化，旧扩展部分功能会失效）。\n\n请下载新的扩展包替换原文件夹后，在 chrome://extensions 重新加载。",
   "refs": [
-   "main.swift:443"
+   "main.swift:450"
   ]
  },
  {
   "key": "Open Upgrade Guide",
   "zh": "查看升级说明",
   "refs": [
-   "main.swift:447"
+   "main.swift:454"
   ]
  },
  {
   "key": "TabFlick could not start",
   "zh": "TabFlick 无法启动",
   "refs": [
-   "main.swift:479"
+   "main.swift:486"
   ]
  },
  {
   "key": "Port {0} is already in use. Another copy of TabFlick may already be running — check the menu bar.",
   "zh": "端口 {0} 已被占用。可能已经有一个 TabFlick 在运行了 —— 看看菜单栏。",
   "refs": [
-   "main.swift:480"
+   "main.swift:487"
   ]
  },
  {
   "key": "TabFlick stopped intercepting the shortcut",
   "zh": "TabFlick 已停止拦截快捷键",
   "refs": [
-   "main.swift:505"
+   "main.swift:512"
   ]
  },
  {
   "key": "The keyboard hook was repeatedly disabled by the system, so TabFlick turned it off rather than risk interfering with your typing. ⌃⇥ now falls back to Chrome's built-in switching.\n\nRestarting TabFlick restores it. If this keeps happening, please report it on GitHub.",
   "zh": "键盘钩子被系统反复禁用，为避免影响你正常打字，TabFlick 已主动停用它。\n⌃⇥ 现在回落到 Chrome 自带的切换方式。\n\n重启 TabFlick 可以恢复。反复出现的话去 GitHub 反馈。",
   "refs": [
-   "main.swift:507"
+   "main.swift:514"
   ]
  },
  {
   "key": "Accessibility permission was removed",
   "zh": "辅助功能权限已被移除",
   "refs": [
-   "main.swift:534"
+   "main.swift:541"
   ]
  },
  {
   "key": "TabFlick disabled its keyboard hook immediately, so your typing is unaffected. ⌃⇥ falls back to Chrome's built-in switching.\n\nAfter granting the permission again, quit and reopen TabFlick — macOS only reads this permission when a process starts.",
   "zh": "TabFlick 已经停用键盘钩子，不影响你正常打字。⌃⇥ 回落到 Chrome 自带的切换方式。\n\n重新授予权限后，需要退出并重新打开 TabFlick 才会生效 —— macOS 只在进程启动时读取这项权限。",
   "refs": [
-   "main.swift:536"
+   "main.swift:543"
   ]
  },
  {
   "key": "TabFlick could not install its keyboard hook",
   "zh": "TabFlick 无法安装键盘钩子",
   "refs": [
-   "main.swift:558"
+   "main.swift:565"
   ]
  }
 ]

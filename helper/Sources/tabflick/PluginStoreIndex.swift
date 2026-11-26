@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // 插件商店的目录（plugins/index.json，scripts/plugins/build-index.py 生成）。纯逻辑，checks/plugin-store-index-check.swift 校验。
@@ -23,6 +24,8 @@ struct StoreEntry: Equatable, Identifiable {
     let files: [File]
     /// 图标在 files 里的哪一个（没装的插件在商店里也画它的图标）。nil = 用 symbol + tint
     var icon: File? = nil
+    /// App 插件对应的 App（bundle id）：装着那个 App 时商店里画它自己的图标
+    var app: String? = nil
 }
 
 enum StoreIndex {
@@ -80,7 +83,8 @@ enum StoreIndex {
                 icon: (item["icon"] as? String).flatMap { path in
                     guard PluginManifest.isValidIcon(path) else { return nil }
                     return files.first { $0.path == path && $0.size <= maxIconBytes }
-                }))
+                },
+                app: (item["app"] as? String).flatMap { PluginApp.isValidBundleID($0) ? $0 : nil }))
         }
         return out
     }
@@ -92,5 +96,30 @@ enum StoreIndex {
             out[key == "zh-Hans" ? "zh" : key] = text
         }
         return out
+    }
+}
+
+/// 商店目录的签名（2026-11-26，用户：「商店里面的插件一定要保证安全，防止病毒」）。
+///
+/// sha256 只能证明「文件和目录对得上」，目录本身和文件从同一个地方拉：仓库或 CDN 被人改了，两样一起改就对上了。
+/// 所以目录（index.json）要用发布者的 Ed25519 私钥签名（index.json.sig，base64），TabFlick 用这里编进去的公钥核对，
+/// 对不上整份不认。插件文件按目录里的 sha256 核对，整条链都在签名底下。私钥是发布者自己保管的一个文件，不进仓库
+///（scripts/plugins/build-index.py 签、`--check` 核）。
+enum StoreSignature {
+    /// 认的公钥（Ed25519 原始 32 字节，base64）。换钥匙时新旧两把并存一个版本，等用户都升上来再删旧的。
+    nonisolated static let publicKeys: [String] = ["lMJVqZ4Ax9q7IeuC4C8lUeCwRGsQgrQq1D5jcZh3w4w="]
+
+    /// 签名文件最大多大（base64 的 64 字节签名 + 换行，留点余地）
+    nonisolated static let maxBytes = 1024
+
+    nonisolated static func verify(_ data: Data, signatureFile: Data, keys: [String] = publicKeys) -> Bool {
+        guard signatureFile.count <= maxBytes,
+              let text = String(data: signatureFile, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let signature = Data(base64Encoded: text), signature.count == 64 else { return false }
+        return keys.contains { key in
+            guard let raw = Data(base64Encoded: key), raw.count == 32,
+                  let publicKey = try? Curve25519.Signing.PublicKey(rawRepresentation: raw) else { return false }
+            return publicKey.isValidSignature(signature, for: data)
+        }
     }
 }

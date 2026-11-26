@@ -277,11 +277,6 @@
   "Show Package Contents": "Paketinhalt zeigen",
   "Couldn't open Get Info": "Informationen konnten nicht geöffnet werden",
   "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, den Finder zu steuern.",
-  "Start New Session": "Neue Sitzung starten",
-  "End Current Session": "Aktuelle Sitzung beenden",
-  "Session started": "Sitzung gestartet",
-  "No session is running": "Keine Sitzung aktiv",
-  "Session ended": "Sitzung beendet",
   "Couldn't run “{0}”": "„{0}“ konnte nicht ausgeführt werden",
   "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Erlaube TabFlick in Systemeinstellungen → Datenschutz & Sicherheit → Automation, {0} zu steuern.",
   "Lock Screen": "Bildschirm sperren",
@@ -379,7 +374,6 @@
   "Forward": "Vorwärts",
   "Calculator": "Rechner",
   "Type a math expression in the search panel. The result shows on top; ↵ copies it.": "Gib im Suchfenster eine Rechnung ein. Das Ergebnis steht oben; ↵ kopiert es.",
-  "App Actions": "App-Schnellaktionen",
   "Window Management": "Fensterverwaltung",
   "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.": "Zentrieren, maximieren, linke oder rechte Hälfte, nächster Bildschirm und mehr – für das Fenster, das vor dem Öffnen des Suchfensters aktiv war.",
   "Kill Process": "Prozess beenden",
@@ -498,7 +492,6 @@
   "Sleep": "Ruhezustand",
   "Some apps are still running": "Einige Apps laufen noch",
   "Start Screen Saver": "Bildschirmschoner starten",
-  "Start or end an Amphetamine session.": "Eine Amphetamine-Sitzung starten oder beenden.",
   "System Control": "Systemsteuerung",
   "System Events": "System Events",
   "The Trash is empty": "Der Papierkorb ist leer",
@@ -506,5 +499,7 @@
   "Toggle Mute": "Ton aus/ein",
   "Turn Off Display": "Display ausschalten",
   "Unmuted": "Ton an",
-  "{0}. They may be waiting for you to save documents.": "{0}. Möglicherweise warten sie darauf, dass Dokumente gesichert werden."
+  "{0}. They may be waiting for you to save documents.": "{0}. Möglicherweise warten sie darauf, dass Dokumente gesichert werden.",
+  "The plugin list's signature doesn't match, so it wasn't used": "Die Signatur der Plug-in-Liste stimmt nicht, daher wurde sie nicht verwendet",
+  "{0} isn't installed": "{0} ist nicht installiert"
 }

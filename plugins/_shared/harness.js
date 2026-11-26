@@ -15,10 +15,29 @@ const plain = (x) => JSON.parse(JSON.stringify(x))
  * 返回沙箱（能直接调顶层函数）、注册的 handlers、发过的请求、打开过的网址、拷贝过的文字、toast、存储。
  */
 // features：这个版本的 TabFlick 认哪些后来加的能力（同 JSPluginRuntime.features）；传 null 模拟没有这一项的老版本
-function load(dir, { locale = "zh", stored = {}, routes = null, settings = {}, features = ["enter", "clock"] } = {}) {
+// script(name)：App 插件的 tabflick.app.runScript 怎么回（返回输出、抛错）；不给 = 一律当没授权（"not permitted"）
+function load(dir, { locale = "zh", stored = {}, routes = null, settings = {}, features = ["enter", "clock", "app"], script = null } = {}) {
   const source = fs.readFileSync(path.join(dir, "main.js"), "utf8")
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"))
-  const out = { requests: [], opened: [], copied: [], toasts: [], settingsOpened: 0, storage: { ...stored }, handlers: null }
+  const out = { requests: [], opened: [], copied: [], toasts: [], settingsOpened: 0, storage: { ...stored }, handlers: null,
+    appOpened: [], scripts: [] }
+  // 同 JSPluginRuntime.appAPI：只有声明了 app 的插件有；网址的 scheme 必须是声明过的，脚本必须是 manifest 里写死的
+  const app = manifest.app ? {
+    bundleId: manifest.app.bundleId,
+    open: (url, options) => {
+      const scheme = String(url).split(":")[0].toLowerCase()
+      if (!(manifest.app.schemes || []).includes(scheme)) return false
+      const activate = options && typeof options.activate === "boolean" ? options.activate : true
+      out.appOpened.push({ url, activate })
+      return true
+    },
+    runScript: async (name) => {
+      if (!(manifest.app.scripts || {})[name]) throw new Error("blocked: no such script")
+      out.scripts.push(name)
+      if (!script) throw "not permitted"
+      return script(name)
+    },
+  } : undefined
   const sandbox = {
     tabflick: {
       locale,
@@ -43,6 +62,7 @@ function load(dir, { locale = "zh", stored = {}, routes = null, settings = {}, f
       openSettings: () => { out.settingsOpened++ },
       copy: (text) => { out.copied.push(text) },
       toast: (text, detail) => { out.toasts.push(detail ? text + " / " + detail : text) },
+      ...(app ? { app } : {}),
     },
   }
   vm.createContext(sandbox)

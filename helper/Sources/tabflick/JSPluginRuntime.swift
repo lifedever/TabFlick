@@ -3,8 +3,8 @@ import JavaScriptCore
 
 // JS 插件的运行时（2026-11-06）：每个插件一个 JSContext，跑在自己的串行队列上，用到时才建（不用不占内存）。
 //
-// 插件能用的只有 `tabflick` 这个对象上的几样（register / fetch / storage / settings / toast / copy / openURL / openSettings / locale）
-// 加 console 和 setTimeout。界面上的副作用（toast、拷贝、打开网址）由外面注入（`Bridge`），这个文件只依赖
+// 插件能用的只有 `tabflick` 这个对象上的几样（register / fetch / storage / settings / toast / copy / openURL / openSettings / locale），
+// 声明了 App 的插件多一个 `tabflick.app`（open / runScript，见下面），加 console 和 setTimeout。界面上的副作用（toast、拷贝、打开网址）由外面注入（`Bridge`），这个文件只依赖
 // Foundation 和 JavaScriptCore，校验程序能单独编它（checks/plugin-runtime-check.swift）。
 //
 // 联网只放行 manifest 里声明的主机（`PluginNetPolicy`），**重定向也要再过一遍**：URLSession 默认自动跟随
@@ -21,6 +21,10 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
         var openURL: (_ url: URL) -> Void = { _ in }
         /// 打开设置里这个插件的那一页（天气还没填 Key 时，列表里那一行回车去填）
         var openSettings: () -> Void = {}
+        /// App 插件：把网址交给声明的那个 App 打开（scheme 已经核对过是 manifest 里声明的；外面还要核对是那个 App 自己登记的）
+        var openAppURL: (_ url: URL, _ activate: Bool) -> Void = { _, _ in }
+        /// App 插件的脚本没拿到「自动化」授权（-1743）：外面弹 toast 指路
+        var scriptDenied: () -> Void = {}
     }
 
     let manifest: PluginManifest
@@ -40,6 +44,9 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
     private var pending = 0
     private var lastUse = Date.distantPast
     private var idleCheckScheduled = false
+    /// 正在跑的脚本（只在 queue 上碰）。同时最多 `maxConcurrentScripts` 个：插件写错了循环调，不至于开出一堆 osascript
+    private var runningScripts = 0
+    static let maxConcurrentScripts = 2
     /// context 现在在不在（校验程序用）
     var isLoaded: Bool { queue.sync { context != nil } }
     private lazy var session: URLSession = {
@@ -52,7 +59,8 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
         return URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }()
 
-    static let features = ["enter", "clock"]
+    /// app = 认 manifest 的 `app` 和 `contributes.commands`、有 `tabflick.app`（2026-11-26）
+    static let features = ["enter", "clock", "app"]
 
     /// 一次同步执行最多跑多久（秒）。异步等网络不算在内。
     static let executionLimit: Double = 2
@@ -233,9 +241,11 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
         let copy: @convention(block) (String) -> Void = { text in
             DispatchQueue.main.async { bridge.copy(text) }
         }
+        // 能跑脚本的插件不给打开网页：网址能把脚本读到的东西带出去（同 manifest 里不许它有 hosts）
+        let canOpenWeb = manifest.app?.scripts.isEmpty ?? true
         let openURL: @convention(block) (String) -> Bool = { address in
             // 打开网页是用户看得见的动作，不限主机；但只认 http(s)，不让插件拉起别的 App 或读本机文件
-            guard let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
+            guard canOpenWeb, let url = URL(string: address), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return false }
             DispatchQueue.main.async { bridge.openURL(url) }
             return true
         }
@@ -244,6 +254,7 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
         api.setObject(openURL, forKeyedSubscript: "openURL" as NSString)
         let openSettings: @convention(block) () -> Void = { DispatchQueue.main.async { bridge.openSettings() } }
         api.setObject(openSettings, forKeyedSubscript: "openSettings" as NSString)
+        if let app = manifest.app { api.setObject(appAPI(context, app), forKeyedSubscript: "app" as NSString) }
         context.setObject(api, forKeyedSubscript: "tabflick" as NSString)
 
         let id = manifest.id
@@ -265,6 +276,104 @@ final class JSPluginRuntime: NSObject, @unchecked Sendable {
             }
         }
         context.setObject(setTimeout, forKeyedSubscript: "setTimeout" as NSString)
+    }
+
+    // MARK: - App 插件
+
+    /// `tabflick.app`：只有声明了 App 的插件有。
+    /// - `bundleId`
+    /// - `open(url, {activate})`：网址的 scheme 必须是 manifest 里声明的，交给那个 App 打开；activate 默认 true，
+    ///   截图这类要传 false（激活了 App，前台窗口在截图那一刻就失焦了）。返回 false = 被拦下
+    /// - `runScript(name)` → Promise<输出>：跑 manifest 里写死的那段脚本，外面包一层 `tell application id`。
+    ///   没授权时 TabFlick 自己弹 toast 指路，Promise 以 "not permitted" 拒绝；别的失败以 osascript 的报错拒绝
+    private func appAPI(_ context: JSContext, _ app: PluginApp) -> JSValue {
+        let object = JSValue(newObjectIn: context)!
+        let id = manifest.id
+        let bridge = self.bridge
+        object.setObject(app.bundleID, forKeyedSubscript: "bundleId" as NSString)
+        let open: @convention(block) (String, JSValue?) -> Bool = { address, options in
+            guard let url = URL(string: address), let scheme = url.scheme?.lowercased(), app.schemes.contains(scheme) else {
+                log("🧩 [\(id)] app.open blocked: \(address.prefix(80))")
+                return false
+            }
+            // 没传、或者传了别的类型，都按默认（激活）。在 undefined 上 toBool 是 false，不能直接读
+            var activate = true
+            if let options, options.isObject, let value = options.objectForKeyedSubscript("activate"), value.isBoolean {
+                activate = value.toBool()
+            }
+            DispatchQueue.main.async { bridge.openAppURL(url, activate) }
+            return true
+        }
+        object.setObject(open, forKeyedSubscript: "open" as NSString)
+        let runScript: @convention(block) (String) -> JSValue? = { [weak self] name in self?.runScript(name, app) }
+        object.setObject(runScript, forKeyedSubscript: "runScript" as NSString)
+        return object
+    }
+
+    private func runScript(_ name: String, _ app: PluginApp) -> JSValue? {
+        guard let context = JSContext.current() else { return nil }
+        let id = manifest.id
+        let bridge = self.bridge
+        return JSValue(newPromiseIn: context) { [weak self] resolve, reject in
+            guard let self else { return }
+            // 执行前再按规则核对一遍（manifest 解析时核过；这里是第二道，防以后改了解析忘了这条）
+            guard let body = app.scripts[name], PluginScriptPolicy.allows(body) else {
+                log("🧩 [\(id)] runScript blocked: \(name.prefix(40))")
+                reject?.call(withArguments: ["blocked: no such script"])
+                return
+            }
+            guard self.runningScripts < Self.maxConcurrentScripts else {
+                log("🧩 [\(id)] runScript refused: \(Self.maxConcurrentScripts) already running")
+                reject?.call(withArguments: ["busy"])
+                return
+            }
+            self.runningScripts += 1
+            let lines = PluginScriptPolicy.wrapped(body, bundleID: app.bundleID)
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let result = Self.osascript(lines)
+                log("🧩 [\(id)] script \(name) → exit \(result.status)\(result.error.isEmpty ? "" : ", \(result.error.prefix(160))")")
+                guard let self else { return }
+                self.queue.async {
+                    self.runningScripts -= 1
+                    if result.status == 0 {
+                        resolve?.call(withArguments: [result.output])
+                    } else if result.error.contains("-1743") {
+                        // errAEEventNotPermitted：用户在授权框里点了「不允许」，或者之前拒过
+                        DispatchQueue.main.async { bridge.scriptDenied() }
+                        reject?.call(withArguments: ["not permitted"])
+                    } else {
+                        reject?.call(withArguments: [String(result.error.prefix(300))])
+                    }
+                }
+            }
+        }
+    }
+
+    /// 跑 osascript（一行一个 -e）。App 没运行时 `tell application id` 会先把它拉起来；第一次会弹「自动化」授权框，
+    /// 用户可能对着它想一会儿，所以放宽到一分钟才掐。
+    nonisolated static func osascript(_ lines: [String]) -> (status: Int32, output: String, error: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = lines.flatMap { ["-e", $0] }
+        let output = Pipe()
+        let errors = Pipe()
+        process.standardOutput = output
+        process.standardError = errors
+        do {
+            try process.run()
+        } catch {
+            return (-1, "", "can't launch osascript: \(error.localizedDescription)")
+        }
+        let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: watchdog)
+        let out = output.fileHandleForReading.readDataToEndOfFile()
+        let err = errors.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        watchdog.cancel()
+        let text = { (data: Data) in
+            String(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).prefix(10_000))
+        }
+        return (process.terminationStatus, text(out), text(err))
     }
 
     // MARK: - fetch

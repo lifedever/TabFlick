@@ -277,11 +277,6 @@
   "Show Package Contents": "Mostrar contenido del paquete",
   "Couldn't open Get Info": "No se pudo abrir la información",
   "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "Permite que TabFlick controle Finder en Ajustes del Sistema → Privacidad y seguridad → Automatización.",
-  "Start New Session": "Iniciar nueva sesión",
-  "End Current Session": "Finalizar sesión actual",
-  "Session started": "Sesión iniciada",
-  "No session is running": "No hay ninguna sesión en curso",
-  "Session ended": "Sesión finalizada",
   "Couldn't run “{0}”": "No se pudo ejecutar “{0}”",
   "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Permite que TabFlick controle {0} en Ajustes del Sistema → Privacidad y seguridad → Automatización.",
   "Lock Screen": "Bloquear pantalla",
@@ -379,7 +374,6 @@
   "Forward": "Adelante",
   "Calculator": "Calculadora",
   "Type a math expression in the search panel. The result shows on top; ↵ copies it.": "Escribe una operación en el panel de búsqueda. El resultado aparece arriba; ↵ lo copia.",
-  "App Actions": "Acciones rápidas de apps",
   "Window Management": "Gestión de ventanas",
   "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.": "Centrar, maximizar, mitad izquierda o derecha, siguiente pantalla y más, sobre la ventana que usabas antes de abrir el panel de búsqueda.",
   "Kill Process": "Finalizar proceso",
@@ -498,7 +492,6 @@
   "Sleep": "Reposo",
   "Some apps are still running": "Algunas apps siguen abiertas",
   "Start Screen Saver": "Iniciar salvapantallas",
-  "Start or end an Amphetamine session.": "Iniciar o terminar una sesión de Amphetamine.",
   "System Control": "Control del sistema",
   "System Events": "System Events",
   "The Trash is empty": "La Papelera está vacía",
@@ -506,5 +499,7 @@
   "Toggle Mute": "Activar o desactivar silencio",
   "Turn Off Display": "Apagar pantalla",
   "Unmuted": "Sonido activado",
-  "{0}. They may be waiting for you to save documents.": "{0}. Puede que esperen a que guardes documentos."
+  "{0}. They may be waiting for you to save documents.": "{0}. Puede que esperen a que guardes documentos.",
+  "The plugin list's signature doesn't match, so it wasn't used": "La firma de la lista de complementos no coincide, así que no se usó",
+  "{0} isn't installed": "{0} no está instalado"
 }

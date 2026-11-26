@@ -277,11 +277,6 @@
   "Show Package Contents": "Afficher le contenu du paquet",
   "Couldn't open Get Info": "Impossible d’ouvrir les informations",
   "Allow TabFlick to control Finder in System Settings → Privacy & Security → Automation.": "Autorisez TabFlick à contrôler le Finder dans Réglages Système → Confidentialité et sécurité → Automatisation.",
-  "Start New Session": "Démarrer une nouvelle session",
-  "End Current Session": "Terminer la session en cours",
-  "Session started": "Session démarrée",
-  "No session is running": "Aucune session en cours",
-  "Session ended": "Session terminée",
   "Couldn't run “{0}”": "Impossible d’exécuter « {0} »",
   "Allow TabFlick to control {0} in System Settings → Privacy & Security → Automation.": "Autorisez TabFlick à contrôler {0} dans Réglages Système → Confidentialité et sécurité → Automatisation.",
   "Lock Screen": "Verrouiller l’écran",
@@ -379,7 +374,6 @@
   "Forward": "Suivant",
   "Calculator": "Calculette",
   "Type a math expression in the search panel. The result shows on top; ↵ copies it.": "Tapez un calcul dans le panneau de recherche. Le résultat s'affiche en haut ; ↵ le copie.",
-  "App Actions": "Actions rapides d'apps",
   "Window Management": "Gestion des fenêtres",
   "Center, maximize, left or right half, next display and more, for the window you were using before opening the search panel.": "Centrer, agrandir, moitié gauche ou droite, écran suivant et plus, pour la fenêtre utilisée avant d'ouvrir le panneau de recherche.",
   "Kill Process": "Arrêter un processus",
@@ -498,7 +492,6 @@
   "Sleep": "Suspendre",
   "Some apps are still running": "Certaines apps sont encore ouvertes",
   "Start Screen Saver": "Lancer l'économiseur d'écran",
-  "Start or end an Amphetamine session.": "Démarrer ou terminer une session Amphetamine.",
   "System Control": "Contrôle du système",
   "System Events": "System Events",
   "The Trash is empty": "La corbeille est vide",
@@ -506,5 +499,7 @@
   "Toggle Mute": "Couper ou rétablir le son",
   "Turn Off Display": "Éteindre l'écran",
   "Unmuted": "Son rétabli",
-  "{0}. They may be waiting for you to save documents.": "{0}. Elles attendent peut-être que vous enregistriez des documents."
+  "{0}. They may be waiting for you to save documents.": "{0}. Elles attendent peut-être que vous enregistriez des documents.",
+  "The plugin list's signature doesn't match, so it wasn't used": "La signature de la liste des plug-ins ne correspond pas, elle n’a donc pas été utilisée",
+  "{0} isn't installed": "{0} n’est pas installé"
 }

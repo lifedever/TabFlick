@@ -1,0 +1,272 @@
+{
+  "id": "cleanshot",
+  "version": "1.0.0",
+  "name": "CleanShot X",
+  "summary": {
+    "zh-Hans": "CleanShot X 的截图、录屏、识别文字：在搜索面板里打「截图」「录屏」「ocr」，也可以放进菜单栏。",
+    "zh-Hant": "CleanShot X 的截圖、錄製螢幕、辨識文字：在搜尋面板裡打「截圖」「錄影」「ocr」，也可以放進選單列。",
+    "en": "Capture, record and grab text with CleanShot X: type “capture”, “record” or “ocr” in the search panel, or put it in the menu bar."
+  },
+  "symbol": "camera.viewfinder",
+  "tint": "blue",
+  "icon": "icon.svg",
+  "hosts": [],
+  "minAppVersion": "0.29.0",
+  "app": {
+    "bundleId": "pl.maketheweb.cleanshotx",
+    "schemes": [
+      "cleanshot"
+    ]
+  },
+  "contributes": {
+    "menu": true,
+    "commands": [
+      {
+        "id": "capture-area",
+        "title": {
+          "zh-Hans": "截取区域",
+          "en": "Capture Area",
+          "ja": "範囲をキャプチャ",
+          "ko": "영역 캡처",
+          "zh-Hant": "擷取區域",
+          "es": "Capturar área",
+          "fr": "Capturer une zone",
+          "de": "Bereich erfassen"
+        },
+        "symbol": "viewfinder",
+        "keywords": [
+          "区域截图",
+          "截图",
+          "截圖",
+          "screenshot",
+          "jietu"
+        ]
+      },
+      {
+        "id": "capture-fullscreen",
+        "title": {
+          "zh-Hans": "截取全屏",
+          "en": "Capture Fullscreen",
+          "ja": "全画面をキャプチャ",
+          "ko": "전체 화면 캡처",
+          "zh-Hant": "擷取全螢幕",
+          "es": "Capturar pantalla completa",
+          "fr": "Capturer tout l'écran",
+          "de": "Ganzen Bildschirm erfassen"
+        },
+        "symbol": "display",
+        "keywords": [
+          "全屏截图",
+          "截图",
+          "截圖",
+          "screenshot",
+          "jietu"
+        ]
+      },
+      {
+        "id": "capture-window",
+        "title": {
+          "zh-Hans": "截取窗口",
+          "en": "Capture Window",
+          "ja": "ウインドウをキャプチャ",
+          "ko": "윈도우 캡처",
+          "zh-Hant": "擷取視窗",
+          "es": "Capturar ventana",
+          "fr": "Capturer une fenêtre",
+          "de": "Fenster erfassen"
+        },
+        "symbol": "macwindow",
+        "keywords": [
+          "窗口截图",
+          "截图",
+          "截圖",
+          "screenshot",
+          "jietu"
+        ]
+      },
+      {
+        "id": "capture-previous-area",
+        "title": {
+          "zh-Hans": "截取上次区域",
+          "en": "Capture Previous Area",
+          "ja": "前回の範囲をキャプチャ",
+          "ko": "이전 영역 캡처",
+          "zh-Hant": "擷取上次區域",
+          "es": "Capturar el área anterior",
+          "fr": "Capturer la zone précédente",
+          "de": "Vorherigen Bereich erfassen"
+        },
+        "symbol": "arrow.counterclockwise",
+        "keywords": [
+          "上次区域",
+          "截图",
+          "截圖",
+          "screenshot",
+          "jietu"
+        ]
+      },
+      {
+        "id": "scrolling-capture",
+        "title": {
+          "zh-Hans": "滚动截图",
+          "en": "Scrolling Capture",
+          "ja": "スクロールキャプチャ",
+          "ko": "스크롤 캡처",
+          "zh-Hant": "捲動截圖",
+          "es": "Captura con desplazamiento",
+          "fr": "Capture défilante",
+          "de": "Scrollende Erfassung"
+        },
+        "symbol": "arrow.up.and.down.square",
+        "keywords": [
+          "长截图",
+          "截图",
+          "截圖",
+          "screenshot",
+          "scroll"
+        ]
+      },
+      {
+        "id": "self-timer",
+        "title": {
+          "zh-Hans": "延时截图",
+          "en": "Self-Timer",
+          "ja": "セルフタイマー",
+          "ko": "셀프 타이머",
+          "zh-Hant": "延時截圖",
+          "es": "Temporizador",
+          "fr": "Retardateur",
+          "de": "Selbstauslöser"
+        },
+        "symbol": "timer",
+        "keywords": [
+          "定时截图",
+          "倒计时",
+          "timer",
+          "截图",
+          "截圖",
+          "screenshot"
+        ]
+      },
+      {
+        "id": "capture-text",
+        "title": {
+          "zh-Hans": "识别文字",
+          "en": "Capture Text",
+          "ja": "テキストを認識",
+          "ko": "텍스트 인식",
+          "zh-Hant": "辨識文字",
+          "es": "Reconocer texto",
+          "fr": "Reconnaître le texte",
+          "de": "Text erkennen"
+        },
+        "symbol": "text.viewfinder",
+        "keywords": [
+          "文字识别",
+          "提取文字",
+          "OCR"
+        ]
+      },
+      {
+        "id": "record-screen",
+        "title": {
+          "zh-Hans": "录制屏幕",
+          "en": "Record Screen",
+          "ja": "画面を収録",
+          "ko": "화면 기록",
+          "zh-Hant": "錄製螢幕",
+          "es": "Grabar pantalla",
+          "fr": "Enregistrer l'écran",
+          "de": "Bildschirm aufnehmen"
+        },
+        "symbol": "record.circle",
+        "keywords": [
+          "录屏",
+          "屏幕录制",
+          "錄影",
+          "record",
+          "video",
+          "GIF",
+          "luping"
+        ]
+      },
+      {
+        "id": "all-in-one",
+        "title": {
+          "zh-Hans": "多合一",
+          "en": "All-In-One",
+          "ja": "オールインワン",
+          "ko": "올인원",
+          "zh-Hant": "多合一",
+          "es": "Todo en uno",
+          "fr": "Tout-en-un",
+          "de": "All-in-One"
+        },
+        "symbol": "square.grid.2x2",
+        "keywords": [
+          "截图",
+          "截圖",
+          "screenshot"
+        ]
+      },
+      {
+        "id": "open-history",
+        "title": {
+          "zh-Hans": "打开截图历史",
+          "en": "Open Capture History",
+          "ja": "キャプチャ履歴を開く",
+          "ko": "캡처 기록 열기",
+          "zh-Hant": "打開截圖歷史",
+          "es": "Abrir historial de capturas",
+          "fr": "Ouvrir l'historique des captures",
+          "de": "Erfassungsverlauf öffnen"
+        },
+        "symbol": "clock.arrow.circlepath",
+        "keywords": [
+          "Open History",
+          "截图历史",
+          "history"
+        ]
+      },
+      {
+        "id": "toggle-desktop-icons",
+        "title": {
+          "zh-Hans": "显示/隐藏桌面图标",
+          "en": "Toggle Desktop Icons",
+          "ja": "デスクトップアイコンを表示/非表示",
+          "ko": "데스크탑 아이콘 보기/가리기",
+          "zh-Hant": "顯示/隱藏桌面圖像",
+          "es": "Mostrar u ocultar iconos del escritorio",
+          "fr": "Afficher ou masquer les icônes du bureau",
+          "de": "Schreibtischsymbole ein-/ausblenden"
+        },
+        "symbol": "eye.slash",
+        "keywords": [
+          "桌面图标",
+          "隐藏桌面图标",
+          "desktop icons"
+        ]
+      },
+      {
+        "id": "open-from-clipboard",
+        "title": {
+          "zh-Hans": "从剪贴板打开",
+          "en": "Open from Clipboard",
+          "ja": "クリップボードから開く",
+          "ko": "클립보드에서 열기",
+          "zh-Hant": "從剪貼簿打開",
+          "es": "Abrir desde el portapapeles",
+          "fr": "Ouvrir depuis le presse-papiers",
+          "de": "Aus der Zwischenablage öffnen"
+        },
+        "symbol": "doc.on.clipboard",
+        "keywords": [
+          "剪贴板",
+          "clipboard",
+          "标注",
+          "annotate"
+        ]
+      }
+    ]
+  }
+}

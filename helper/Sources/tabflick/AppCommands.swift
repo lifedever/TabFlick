@@ -2,25 +2,22 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// 内置命令：按 App 写死的几条高频操作（2026-09-28 用户定的「内置扩展」）。搜索面板里有输入且
-/// 命中时列在「插件」段、副标题写 App 名（一级；2026-11-23 起不再跟在 App 下面），App 的 ⌘↩ 里也列（二级）。只列装了的 App 的。
-///
-/// 为什么写死：试过读别的 App 的菜单当命令，用户看了实物说不是要的 —— 菜单里名字五花八门
-///（Amphetamine 的「无限期」「5分钟」），搜不准；要的是 Raycast 扩展那种挑过的两三条。
-/// 走 App 公开的 AppleScript 接口：`tell application id` 在 App 没运行时会先把它拉起来再执行，
-/// 和 Raycast 的 Amphetamine 扩展同一条路。第一次用时系统会问「允许 TabFlick 控制 X」。
-///
-/// 加一个 App = 在 `all` 里加几条。没有脚本接口（`sdef <App路径>` 查不到命令）的 App 做不了。
+/// 搜索面板里的命令（一级命中时列在「插件」段，App 的命令也在 App 的 ⌘↩ 里）。都经插件进面板（`PluginRegistry.commands`）。
 ///
 /// 系统命令（`bundleID` 为 nil：锁屏、睡眠、关机这些，见 `SystemControl`；窗口命令，见 `WindowCommands`）不挂在任何
-/// App 下面：一级命中时列在「插件」段（经插件进面板），画 SF Symbol、副标题写「macOS」（窗口命令写「App 名 的窗口」），
-/// 二级里没有。
+/// App 下面：画 SF Symbol、副标题写「macOS」（窗口命令写「App 名 的窗口」），二级里没有。
+/// 挂在第三方 App 下面的（`bundleID` 是那个 App：Amphetamine、CleanShot X）来自商店的 App 插件
+///（2026-11-26 从内置的「App 快捷操作」挪过去，见 plugins/README.md「App 插件」）：只在那个 App 装着时出现，
+/// 画那个 App 的图标、副标题写 App 名，二级里也有。
+///
+/// 为什么不读别的 App 的菜单当命令：试过，用户看了实物说不是要的 —— 菜单里名字五花八门
+///（Amphetamine 的「无限期」「5分钟」），搜不准；要的是 Raycast 扩展那种挑过的几条。
 struct AppCommand: Identifiable {
     enum Action {
         /// AppleScript 源码，一行一个元素（逐行交给 osascript 的 -e）；脚本的返回值 → 回响（nil = 不弹：
         /// 切深色模式、重启这类结果自己看得见）
         case appleScript([String], report: @MainActor (_ output: String) -> (text: String, kind: Toast.Kind)?)
-        /// 在本进程里直接做（系统命令）
+        /// 在本进程里直接做（系统命令；商店 App 插件的命令也走这里，交给插件的 `command(id)`）
         case native(@MainActor () -> Void)
         /// 调整前台 App 的窗口（`WindowCommands`）
         case window(WindowAction, WindowTarget)
@@ -59,37 +56,6 @@ struct AppCommand: Identifiable {
 }
 
 enum AppCommands {
-    @MainActor static var all: [AppCommand] {
-        let amphetamine = "com.if.Amphetamine"
-        return [
-            AppCommand(
-                id: "amphetamine.start", bundleID: amphetamine,
-                title: L10n.t("开始新会话", "Start New Session"),
-                keywords: ["Start New Session", "开始新会话", "start"],
-                // 时长、是否允许显示器睡眠都用 Amphetamine 设置里的默认值（它的脚本接口不传参数时就是这样）
-                action: .appleScript(["tell application id \"\(amphetamine)\" to start new session"],
-                                     report: { _ in (L10n.t("已开始新会话", "Session started"), .success) })),
-            AppCommand(
-                id: "amphetamine.end", bundleID: amphetamine,
-                title: L10n.t("结束当前会话", "End Current Session"),
-                keywords: ["End Current Session", "结束当前会话", "end", "stop"],
-                // 先问有没有会话：没有也照结束的话，回响「已结束」是在说假话
-                action: .appleScript(["tell application id \"\(amphetamine)\"",
-                                      "if session is active then",
-                                      "end session",
-                                      "return \"ended\"",
-                                      "end if",
-                                      "return \"none\"",
-                                      "end tell"],
-                                     report: { output in
-                                         output == "none"
-                                             ? (L10n.t("现在没有进行中的会话", "No session is running"), .info)
-                                             : (L10n.t("已结束会话", "Session ended"), .success)
-                                     })),
-            // 锁屏 2026-11-25 挪到「系统控制」插件（SystemControl.swift），「结束进程…」归它自己的插件（ProcessesPlugin）
-        ]
-    }
-
     /// 锁屏，和 ⌃⌘Q 一样立刻锁。走 login.framework 的私有接口 `SACLockScreenImmediate`，
     /// 运行时 dlsym 查（同 WindowShadow 的做法，链接期不依赖它）；查不到（哪天系统把它挪了）
     /// 就发一次 ⌃⌘Q —— 有辅助功能权限，CGEvent 发得出去。

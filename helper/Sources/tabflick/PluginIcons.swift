@@ -118,10 +118,6 @@ enum BuiltinPluginIcons {
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g stroke="#ff9500" stroke-width="4.6" stroke-linecap="round" fill="none"><path d="M21 15v12M15 21h12"/><path d="M37 21h12"/><path d="M16.8 38.8l8.4 8.4M25.2 38.8l-8.4 8.4"/></g>
 <circle cx="43" cy="43" r="10" fill="#ff9500"/><path d="M38 40.3h10M38 45.7h10" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/></svg>
 """#)
-    static let appCommands = image(svg: #"""
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g stroke="#ff9500" stroke-width="5" stroke-linecap="round" fill="none"><path d="M25 18.5V45.5M39 18.5V45.5M18.5 25H45.5M18.5 39H45.5"/>
-<path d="M25 18.5A6.5 6.5 0 1 0 18.5 25"/><path d="M39 18.5A6.5 6.5 0 1 1 45.5 25"/><path d="M25 45.5A6.5 6.5 0 1 1 18.5 39"/><path d="M39 45.5A6.5 6.5 0 1 0 45.5 39"/></g></svg>
-"""#)
     static let processes = image(svg: #"""
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M40.4 11.7L52.3 23.6V40.4L40.4 52.3H23.6L11.7 40.4V23.6L23.6 11.7Z" fill="#ff3b30" stroke="#ff3b30" stroke-width="3" stroke-linejoin="round"/>
 <path d="M25 25l14 14M39 25l-14 14" stroke="#fff" stroke-width="5" stroke-linecap="round"/></svg>

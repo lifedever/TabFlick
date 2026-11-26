@@ -65,7 +65,7 @@ struct PluginRuntimeCheck {
         check("异常之后还能接着调", (call(basic, "add", [1, 1]).value as? NSNumber)?.intValue == 2)
         check("locale", call(basic, "locale").value as? String == "zh")
         // 插件靠它判断能不能给多层列表、走秒的钟（老版本没有这一项）
-        check("features", call(basic, "features").value as? String == "enter,clock")
+        check("features", call(basic, "features").value as? String == "enter,clock,app")
         check("setTimeout", call(basic, "wait").value as? String == "done")
 
         // 加载失败
@@ -153,6 +153,45 @@ struct PluginRuntimeCheck {
             let status = (call(live, "redirect", timeout: 15).value as? NSNumber)?.intValue
             check("跳到别的主机的重定向不跟", status.map { (300..<400).contains($0) } == true, "status \(String(describing: status))")
         }
+
+        // App 插件的 tabflick.app（2026-11-26）
+        func appRuntime(_ script: String, app: String, hosts: String = "[]", bridge: JSPluginRuntime.Bridge = .init()) -> JSPluginRuntime {
+            let dir = root.appendingPathComponent(UUID().uuidString)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? script.write(to: dir.appendingPathComponent("main.js"), atomically: true, encoding: .utf8)
+            let manifest = try! PluginManifest.parse(Data(#"{"id":"apptest","version":"1.0.0","name":"T","hosts":\#(hosts),"app":\#(app)}"#.utf8)).get()
+            return JSPluginRuntime(manifest: manifest, directory: dir, storageFile: nil, language: "zh", bridge: bridge)
+        }
+        let probe = """
+            tabflick.register({
+              has: () => typeof tabflick.app,
+              open: (url, opts) => tabflick.app.open(url, opts),
+              web: (url) => tabflick.openURL(url),
+              script: (name) => tabflick.app.runScript(name).then(() => "ran", (e) => "rejected:" + e),
+            })
+            """
+        check("没声明 App 的插件没有 tabflick.app", call(runtime(probe), "has").value as? String == "undefined")
+        var opened: [(URL, Bool)] = []
+        var webOpened: [URL] = []
+        var bridge = JSPluginRuntime.Bridge()
+        bridge.openAppURL = { url, activate in opened.append((url, activate)) }
+        bridge.openURL = { url in webOpened.append(url) }
+        let clean = appRuntime(probe, app: #"{"bundleId":"pl.maketheweb.cleanshotx","schemes":["cleanshot"]}"#, bridge: bridge)
+        check("声明了 App 的有 tabflick.app", call(clean, "has").value as? String == "object")
+        check("声明过的 scheme 放行", (call(clean, "open", ["cleanshot://capture-window", ["activate": false]]).value as? Bool) == true)
+        check("没声明的 scheme 拦下", (call(clean, "open", ["slack://open"]).value as? Bool) == false)
+        check("http 不走 app.open", (call(clean, "open", ["https://example.com"]).value as? Bool) == false)
+        check("file 不走 app.open", (call(clean, "open", ["file:///etc/passwd"]).value as? Bool) == false)
+        _ = call(clean, "open", ["cleanshot://open-history"])
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        check("activate 传了照传、没传默认激活", opened.map(\.1) == [false, true], "\(opened)")
+        check("交出去的是原网址", opened.first?.0.absoluteString == "cleanshot://capture-window")
+        check("不跑脚本的 App 插件能打开网页", (call(clean, "web", ["https://example.com"]).value as? Bool) == true)
+        let amp = appRuntime(probe, app: #"{"bundleId":"com.if.Amphetamine","scripts":{"start":"start new session"}}"#, bridge: bridge)
+        check("能跑脚本的插件不给打开网页", (call(amp, "web", ["https://example.com/?leak=1"]).value as? Bool) == false)
+        check("没写死的脚本名拒绝（不会去跑）", (call(amp, "script", ["nope"]).value as? String)?.hasPrefix("rejected:blocked") == true)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        check("拦下的网页没交出去", webOpened.map(\.absoluteString) == ["https://example.com"], "\(webOpened)")
 
         if failures == 0 { print("全部通过") } else { fatalError("\(failures) 条没过") }
     }
